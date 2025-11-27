@@ -64,6 +64,9 @@ include_directories(${CMAKE_SOURCE_DIR}/src/lib)
 
 set(SOURCES
     src/main.c
+    src/scene/scene.c
+    src/scene/entity.c
+    src/renderer/mesh.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

@@ -1,80 +1,71 @@
 #include "raylib.h"
-#include "nuklear_raylib.h"
+#include "scene/scene.h"
+#include "renderer/mesh.h"
+#include "utils/math_types.h"
 #include <string.h>
 #include <stdlib.h>
-
-#define MAX_TEXT_LENGTH 256
+#include <stdio.h>
 
 int main() {
-    const int screenWidth = 800;
-    const int screenHeight = 450;
+    const int screenWidth = 1280;
+    const int screenHeight = 720;
     
-    InitWindow(screenWidth, screenHeight, "PULSE engine TEST");
+    InitWindow(screenWidth, screenHeight, "RayFlow 3D Engine");
     SetTargetFPS(60);
     
-    // Change working directory to project root
-    ChangeDirectory("/Users/shifty/projects/raylib-test");
+    // Create scene
+    Scene* main_scene = scene_create("Main Scene");
     
-    // Load range of characters including Cyrillic
-    // 0x0020-0x007F - basic Latin
-    // 0x0400-0x04FF - Cyrillic
-    int codepointCount = 0;
-    int *codepoints = LoadCodepoints("АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", &codepointCount);
+    // Add some objects to the scene
+    // 1. Ground plane
+    MeshData* plane = mesh_create_plane((Vector2){10.0f, 10.0f}, GRAY);
+    EntityTransform plane_transform = transform_identity();
+    plane_transform.position = (Vector3){0.0f, 0.0f, 0.0f};
+    scene_add_entity(main_scene, plane, plane_transform);
     
-    Font font = LoadFontEx("src/static/fonts/Inter_18pt-Regular.ttf", 20, codepoints, codepointCount);
-    UnloadCodepoints(codepoints);
+    // 2. Red cube
+    MeshData* cube1 = mesh_create_cube((Vector3){1.0f, 1.0f, 1.0f}, RED);
+    EntityTransform cube1_transform = transform_identity();
+    cube1_transform.position = (Vector3){-2.0f, 0.5f, 0.0f};
+    scene_add_entity(main_scene, cube1, cube1_transform);
     
-    if (font.texture.id == 0) {
-        font = GetFontDefault();
-    }
+    // 3. Blue sphere
+    MeshData* sphere1 = mesh_create_sphere(0.75f, 16, 16, BLUE);
+    EntityTransform sphere1_transform = transform_identity();
+    sphere1_transform.position = (Vector3){2.0f, 0.75f, 0.0f};
+    scene_add_entity(main_scene, sphere1, sphere1_transform);
     
-    nk_raylib_init();
+    // 4. Green cube
+    MeshData* cube2 = mesh_create_cube((Vector3){0.8f, 1.5f, 0.8f}, GREEN);
+    EntityTransform cube2_transform = transform_identity();
+    cube2_transform.position = (Vector3){0.0f, 0.75f, -2.0f};
+    scene_add_entity(main_scene, cube2, cube2_transform);
     
-    static char text_buffer[MAX_TEXT_LENGTH] = "Привет! Hello!";
-    int text_len = strlen(text_buffer);
-    static struct nk_colorf text_color = {0.2f, 0.2f, 0.2f, 1.0f};
+    printf("Scene initialized with %d entities\n", main_scene->entity_count);
     
     while (!WindowShouldClose()) {
-        nk_raylib_handle_input();
+        float delta_time = GetFrameTime();
         
-        if (nk_begin(&nk_raylib.ctx, "Text Editor", nk_rect(50, 50, 400, 250),
-            NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-            NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)) {
-            
-            nk_layout_row_dynamic(&nk_raylib.ctx, 30, 1);
-            nk_label(&nk_raylib.ctx, "Enter text:", NK_TEXT_LEFT);
-            
-            nk_layout_row_dynamic(&nk_raylib.ctx, 30, 1);
-            nk_edit_string(&nk_raylib.ctx, NK_EDIT_FIELD, text_buffer, &text_len, MAX_TEXT_LENGTH, nk_filter_default);
-            text_buffer[text_len] = '\0';
-            
-            nk_layout_row_dynamic(&nk_raylib.ctx, 30, 1);
-            nk_label(&nk_raylib.ctx, "Text Color:", NK_TEXT_LEFT);
-            
-            nk_layout_row_dynamic(&nk_raylib.ctx, 120, 1);
-            text_color = nk_color_picker(&nk_raylib.ctx, text_color, NK_RGBA);
-        }
-        nk_end(&nk_raylib.ctx);
+        // Update scene
+        scene_update(main_scene, delta_time);
         
+        // Render
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground((Color){135, 206, 235, 255}); // Sky blue
         
-        Color raylib_color = {
-            (unsigned char)(text_color.r * 255),
-            (unsigned char)(text_color.g * 255),
-            (unsigned char)(text_color.b * 255),
-            (unsigned char)(text_color.a * 255)
-        };
-        DrawTextEx(font, text_buffer, (Vector2){190, 300}, 20, 1, raylib_color);
-        DrawFPS(10, 10);
+        // Render scene
+        scene_render(main_scene);
         
-        nk_raylib_render();
+        // Draw UI
+        DrawText("RayFlow 3D Engine", 10, 10, 20, BLACK);
+        DrawText("Use mouse to rotate camera", 10, 40, 16, DARKGRAY);
+        DrawFPS(10, screenHeight - 30);
         
         EndDrawing();
     }
     
-    nk_raylib_shutdown();
-    UnloadFont(font);
+    // Cleanup
+    scene_destroy(main_scene);
     CloseWindow();
     
     return 0;

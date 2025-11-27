@@ -30,7 +30,8 @@
             "stdarg.h": "c",
             "raylib.h": "c",
             "stdlib.h": "c",
-            "nuklear.h": "c"
+            "nuklear.h": "c",
+            "mesh.h": "c"
         }
     }
 }
