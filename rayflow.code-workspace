@@ -23,6 +23,14 @@
             "cmake_install.cmake": true,
             "Makefile": true,
             "build/": false
+        },
+        "files.associations": {
+            "nuklear_raylib.h": "c",
+            "string.h": "c",
+            "stdarg.h": "c",
+            "raylib.h": "c",
+            "stdlib.h": "c",
+            "nuklear.h": "c"
         }
     }
 }

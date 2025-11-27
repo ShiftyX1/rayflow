@@ -10,8 +10,12 @@
 #define NK_INCLUDE_DEFAULT_FONT
 #define NK_IMPLEMENTATION
 #define NK_RAYLIB_IMPLEMENTATION
+#define STBRP_STATIC
+#define STBTT_STATIC
+#define STB_RECT_PACK_IMPLEMENTATION
+#define STB_TRUETYPE_IMPLEMENTATION
 
-#include "lib/nuklear.h"
+#include "include/nuklear.h"
 #include "raylib.h"
 #include <string.h>
 
