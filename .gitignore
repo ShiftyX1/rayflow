@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.a
+
+# Executables
+low_pulse
+*.exe
+*.out
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Libraries
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Other
+*.class
+*~
+.DS_Store

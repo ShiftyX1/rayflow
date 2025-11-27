@@ -1,0 +1,28 @@
+{
+    "folders": [
+        {
+            "name": "Source",
+            "path": "src/"
+        },
+        {
+            "name": "Project Root",
+            "path": ".",
+            "exclude": [
+                "build/"
+            ]
+        },
+        {
+            "name": "Build",
+            "path": "build/"
+        }
+    ],
+    "settings": {
+        "files.exclude": {
+            "CMakeCache.txt": true,
+            "CMakeFiles/": true,
+            "cmake_install.cmake": true,
+            "Makefile": true,
+            "build/": false
+        }
+    }
+}
