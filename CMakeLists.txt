@@ -71,6 +71,7 @@ set(SOURCES
     src/voxel/world.c
     src/voxel/texture_atlas.c
     src/voxel/block_registry.c
+    src/scene/player.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
