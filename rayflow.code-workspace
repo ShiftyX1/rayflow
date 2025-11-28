@@ -31,7 +31,8 @@
             "raylib.h": "c",
             "stdlib.h": "c",
             "nuklear.h": "c",
-            "mesh.h": "c"
+            "mesh.h": "c",
+            "math_types.h": "c"
         }
     }
 }

@@ -67,6 +67,10 @@ set(SOURCES
     src/scene/scene.c
     src/scene/entity.c
     src/renderer/mesh.c
+    src/voxel/voxel.c
+    src/voxel/world.c
+    src/voxel/texture_atlas.c
+    src/voxel/block_registry.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
