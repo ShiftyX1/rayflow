@@ -34,15 +34,12 @@ Player* player_create(Vector3 spawn_position) {
     player->position = spawn_position;
     player->velocity = (Vector3){0.0f, 0.0f, 0.0f};
     
-    // Initialize camera
-    Vector3 cam_pos = (Vector3){
+    // Initialize camera - camera IS the player's view, not following it
+    player->camera.position = (Vector3){
         spawn_position.x,
         spawn_position.y + PLAYER_EYE_HEIGHT,
         spawn_position.z
     };
-    
-    player->camera.position = cam_pos;
-    player->camera_smooth_pos = cam_pos;
     player->camera.target = (Vector3){
         spawn_position.x,
         spawn_position.y + PLAYER_EYE_HEIGHT,
@@ -169,11 +166,6 @@ void player_handle_input(Player* player, float delta_time) {
         player_toggle_creative_mode(player);
         printf("Creative mode: %s\n", player->in_creative_mode ? "ON" : "OFF");
     }
-    
-    // Update camera target
-    player->camera.target.x = player->camera.position.x + direction.x;
-    player->camera.target.y = player->camera.position.y + direction.y;
-    player->camera.target.z = player->camera.position.z + direction.z;
 }
 
 void player_apply_gravity(Player* player, float delta_time) {
@@ -233,6 +225,7 @@ void player_resolve_collisions(Player* player, World* world) {
         player->velocity.x = 0.0f;
     } else {
         player->position.x = new_position.x;
+        player->camera.position.x = new_position.x;
     }
     
     // Y axis
@@ -245,6 +238,7 @@ void player_resolve_collisions(Player* player, World* world) {
         player->velocity.y = 0.0f;
     } else {
         player->position.y = new_position.y;
+        player->camera.position.y = new_position.y + player->eye_height;
         player->on_ground = false;
     }
     
@@ -255,25 +249,8 @@ void player_resolve_collisions(Player* player, World* world) {
         player->velocity.z = 0.0f;
     } else {
         player->position.z = new_position.z;
+        player->camera.position.z = new_position.z;
     }
-    
-    // Update camera position with smooth interpolation to reduce jitter
-    Vector3 target_cam_pos = (Vector3){
-        player->position.x,
-        player->position.y + player->eye_height,
-        player->position.z
-    };
-    
-    // Smooth camera interpolation (lerp) - reduces bobbing and jitter
-    float smoothing = 15.0f; // Higher = more responsive, lower = smoother
-    float dt = GetFrameTime();
-    float lerp_factor = 1.0f - expf(-smoothing * dt);
-    
-    player->camera_smooth_pos.x += (target_cam_pos.x - player->camera_smooth_pos.x) * lerp_factor;
-    player->camera_smooth_pos.y += (target_cam_pos.y - player->camera_smooth_pos.y) * lerp_factor;
-    player->camera_smooth_pos.z += (target_cam_pos.z - player->camera_smooth_pos.z) * lerp_factor;
-    
-    player->camera.position = player->camera_smooth_pos;
 }
 
 void player_update(Player* player, World* world, float delta_time) {
@@ -285,6 +262,16 @@ void player_update(Player* player, World* world, float delta_time) {
     
     // Resolve collisions and update position
     player_resolve_collisions(player, world);
+    
+    // Update camera target based on yaw/pitch AFTER position is finalized
+    Vector3 direction;
+    direction.x = cosf(player->yaw * DEG2RAD) * cosf(player->pitch * DEG2RAD);
+    direction.y = sinf(player->pitch * DEG2RAD);
+    direction.z = sinf(player->yaw * DEG2RAD) * cosf(player->pitch * DEG2RAD);
+    
+    player->camera.target.x = player->camera.position.x + direction.x;
+    player->camera.target.y = player->camera.position.y + direction.y;
+    player->camera.target.z = player->camera.position.z + direction.z;
 }
 
 Camera3D player_get_camera(Player* player) {

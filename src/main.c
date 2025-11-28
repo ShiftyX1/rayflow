@@ -14,6 +14,7 @@ int main() {
     
     InitWindow(screenWidth, screenHeight, "RayFlow 3D Engine");
     SetTargetFPS(60);
+    SetExitKey(KEY_NULL); // Disable ESC as default exit key
     
     // Инициализация реестра блоков с текстурным атласом
     // ВАЖНО: Поместите ваш атлас текстур в папку src/static/textures/blocks_atlas.png
@@ -52,8 +53,16 @@ int main() {
     printf("  C - Toggle creative mode\n");
     printf("  ESC - Exit\n");
     
-    while (!WindowShouldClose()) {
+    bool should_exit = false;
+    
+    while (!WindowShouldClose() && !should_exit) {
         float delta_time = GetFrameTime();
+        
+        // Check for ESC key to exit
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            should_exit = true;
+            break;
+        }
         
         // Update player (handles input, physics, and collisions)
         player_update(player, world, delta_time);

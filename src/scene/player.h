@@ -22,7 +22,6 @@ typedef struct {
     
     // Camera
     Camera3D camera;           // First-person camera
-    Vector3 camera_smooth_pos; // Smoothed camera position
     float yaw;                 // Horizontal rotation
     float pitch;               // Vertical rotation
     float camera_sensitivity;  // Mouse sensitivity
