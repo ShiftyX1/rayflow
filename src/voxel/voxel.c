@@ -81,7 +81,6 @@ typedef struct {
 TexCoords get_voxel_tex_coords(VoxelType type, int face) {
     TexCoords coords;
     
-    // Получаем UV-координаты из реестра блоков
     TextureUV uv = block_registry_get_texture_uv((BlockType)type, face);
     
     coords.u1 = uv.u_min;
@@ -98,11 +97,10 @@ void chunk_generate_mesh(Chunk* chunk) {
     
     // Free old mesh if exists
     if (chunk->has_mesh) {
-        UnloadMesh(chunk->mesh);
+        chunk->has_mesh = false;
         UnloadModel(chunk->model);
     }
     
-    // Count visible faces
     int face_count = 0;
     for (int x = 0; x < CHUNK_WIDTH; x++) {
         for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -110,7 +108,7 @@ void chunk_generate_mesh(Chunk* chunk) {
                 Voxel voxel = voxel_get(chunk, x, y, z);
                 if (voxel == BLOCK_AIR) continue;
                 
-                // Check each face
+                // Check each face if it should be rendered
                 if (voxel_is_transparent(voxel_get(chunk, x, y + 1, z))) face_count++; // Top
                 if (voxel_is_transparent(voxel_get(chunk, x, y - 1, z))) face_count++; // Bottom
                 if (voxel_is_transparent(voxel_get(chunk, x, y, z + 1))) face_count++; // Front
@@ -320,7 +318,7 @@ void chunk_generate_mesh(Chunk* chunk) {
     chunk->mesh = mesh;
     chunk->model = LoadModelFromMesh(mesh);
     
-    // Получаем текстуру из глобального реестра блоков
+    // Get texture from the global block registry
     if (g_block_registry.atlas) {
         chunk->model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = g_block_registry.atlas->texture;
     }

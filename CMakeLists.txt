@@ -71,6 +71,7 @@ set(SOURCES
     src/voxel/world.c
     src/voxel/texture_atlas.c
     src/voxel/block_registry.c
+    src/voxel/block_interaction.c
     src/scene/player.c
 )
 

@@ -5,7 +5,29 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Типы блоков (ID)
+// Instrument types
+typedef enum {
+    TOOL_NONE = 0,      // Hand or any tool
+    TOOL_PICKAXE,       // Pickaxe (stone, ore)
+    TOOL_AXE,           // Axe (wood)
+    TOOL_SHOVEL,        // Shovel (dirt, sand, gravel)
+    TOOL_HOE,           // Hoe (for tilling soil)
+    TOOL_SWORD,         // Sword (breaks cobwebs faster, etc.)
+    TOOL_SHEARS,        // Shears (leaves, wool)
+    TOOL_COUNT
+} ToolType;
+
+// Tool levels (material)
+typedef enum {
+    TOOL_LEVEL_HAND = 0,    // Hand
+    TOOL_LEVEL_WOOD = 1,    // Wood
+    TOOL_LEVEL_STONE = 2,   // Stone
+    TOOL_LEVEL_IRON = 3,    // Iron
+    TOOL_LEVEL_DIAMOND = 4, // Diamond
+    TOOL_LEVEL_NETHERITE = 5 // Netherite
+} ToolLevel;
+
+// Block types (ID)
 typedef enum {
     BLOCK_AIR = 0,
     BLOCK_GRASS,
@@ -22,65 +44,89 @@ typedef enum {
     BLOCK_COUNT
 } BlockType;
 
-// Индексы текстур для разных сторон блока
+// Texture indices for different block sides
 typedef struct {
-    int top;      // Верхняя грань
-    int bottom;   // Нижняя грань
-    int side;     // Боковые грани (north, south, east, west)
-    int north;    // Северная грань (опционально, если отличается от side)
-    int south;    // Южная грань
-    int east;     // Восточная грань
-    int west;     // Западная грань
-    bool use_individual_sides; // Использовать индивидуальные текстуры для сторон
+    int top;      // Top face
+    int bottom;   // Bottom face
+    int side;     // Side faces (north, south, east, west)
+    int north;    // North face (optional, if different from side)
+    int south;    // South face
+    int east;     // East face
+    int west;     // West face
+    bool use_individual_sides; // Use individual textures for sides
 } BlockTextures;
 
-// Свойства блока
+// Block break properties
+typedef struct {
+    float hardness;           // Block hardness (seconds to break by hand, -1 = unbreakable)
+    ToolType required_tool;   // Required tool type to obtain drop
+    ToolLevel required_level; // Minimum tool level
+    float tool_multiplier;    // Speed multiplier when using the correct tool
+    bool instant_break;       // Instant break (flowers, grass)
+} BlockBreakProperties;
+
+// Block properties
 typedef struct {
     BlockType type;
     const char* name;
-    bool is_solid;        // Твердый блок (коллизия)
-    bool is_transparent;  // Прозрачный блок
-    bool is_opaque;       // Непрозрачный (блокирует свет)
-    bool is_liquid;       // Жидкость
-    float light_emission; // Излучение света (0.0 - 1.0)
-    BlockTextures textures; // Индексы текстур в атласе
+    bool is_solid;        // Solid block (collision)
+    bool is_transparent;  // Transparent block (does not block light)
+    bool is_opaque;       // Opaque block (blocks light)
+    bool is_liquid;       // Liquid
+    float light_emission; // Light emission (0.0 - 1.0)
+    BlockTextures textures; // Texture indices in the atlas
+    BlockBreakProperties break_props; // Break properties
 } BlockProperties;
 
-// Реестр блоков
+// Block registry
 typedef struct {
     BlockProperties blocks[BLOCK_COUNT];
     TextureAtlas* atlas;
     bool is_initialized;
 } BlockRegistry;
 
-// Глобальный реестр блоков
+// Global block registry instance
 extern BlockRegistry g_block_registry;
 
-// Инициализация реестра блоков
+// Block registry initialization
 bool block_registry_init(const char* atlas_path);
 
-// Регистрация блока
+// Block registration
 void block_registry_register(BlockType type, const char* name, 
                              bool is_solid, bool is_transparent, bool is_opaque,
                              bool is_liquid, float light_emission,
-                             BlockTextures textures);
+                             BlockTextures textures, BlockBreakProperties break_props);
 
-// Получить свойства блока по типу
+// Helper functions for creating break properties
+BlockBreakProperties block_break_default(float hardness);  // Default block
+BlockBreakProperties block_break_pickaxe(float hardness, ToolLevel min_level);  // Requires pickaxe
+BlockBreakProperties block_break_axe(float hardness);      // Requires axe
+BlockBreakProperties block_break_shovel(float hardness);   // Requires shovel
+BlockBreakProperties block_break_instant(void);            // Instant break
+BlockBreakProperties block_break_unbreakable(void);        // Unbreakable
+
+// Calculate block break time
+float block_calculate_break_time(BlockType type, ToolType tool, ToolLevel level);
+
+// Get break texture (stages 0-9)
+TextureUV block_get_break_texture_uv(int stage);
+
+// Get block properties by type
 BlockProperties* block_registry_get(BlockType type);
 
-// Получить UV-координаты для конкретной стороны блока
+// Get UV coordinates for a specific block face
 TextureUV block_registry_get_texture_uv(BlockType type, int face_index);
 
-// Освобождение ресурсов реестра
+// Release registry resources
 void block_registry_destroy(void);
 
-// Вспомогательная функция для создания текстур с одной текстурой для всех сторон
+// Helper function to create textures with the same texture for all sides
 BlockTextures block_textures_all(int texture_index);
 
-// Вспомогательная функция для создания текстур с разными top/bottom/side
+// Helper function to create textures with different top/bottom/side
 BlockTextures block_textures_top_bottom_side(int top, int bottom, int side);
 
-// Вспомогательная функция для создания текстур со всеми индивидуальными сторонами
+// Helper function to create textures with all individual sides
 BlockTextures block_textures_individual(int top, int bottom, int north, int south, int east, int west);
 
 #endif // BLOCK_REGISTRY_H
