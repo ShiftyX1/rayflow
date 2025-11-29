@@ -64,8 +64,8 @@ void chunk_destroy(Chunk* chunk) {
     if (!chunk) return;
     
     if (chunk->has_mesh) {
-        UnloadMesh(chunk->mesh);
         UnloadModel(chunk->model);
+        chunk->has_mesh = false;
     }
     
     free(chunk);

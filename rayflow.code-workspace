@@ -25,6 +25,7 @@
             "build/": false
         },
         "files.associations": {
+            "*.dbclient-js": "javascript",
             "nuklear_raylib.h": "c",
             "string.h": "c",
             "stdarg.h": "c",
@@ -32,7 +33,10 @@
             "stdlib.h": "c",
             "nuklear.h": "c",
             "mesh.h": "c",
-            "math_types.h": "c"
+            "math_types.h": "c",
+            "time.h": "c",
+            "player.h": "c",
+            "world.h": "c"
         }
     }
 }
