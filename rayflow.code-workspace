@@ -36,7 +36,10 @@
             "math_types.h": "c",
             "time.h": "c",
             "player.h": "c",
-            "world.h": "c"
+            "world.h": "c",
+            "block_registry.h": "c",
+            "math.h": "c",
+            "block_interaction.h": "c"
         }
     }
 }
