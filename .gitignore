@@ -35,3 +35,6 @@ Makefile
 .ninja_deps
 .ninja_log
 build.ninja
+
+compile_commands.json
+_deps/

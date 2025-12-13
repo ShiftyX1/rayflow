@@ -1,19 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 
-if(WIN32 AND NOT DEFINED CMAKE_C_COMPILER)
-    if(EXISTS "C:/msys64/mingw64/bin/gcc.exe")
-        set(CMAKE_C_COMPILER "C:/msys64/mingw64/bin/gcc.exe")
-        set(CMAKE_MAKE_PROGRAM "C:/msys64/mingw64/bin/mingw32-make.exe")
-    endif()
-endif()
+project(low_pulse CXX)
 
-project(low_pulse C)
-
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 
+include(FetchContent)
+FetchContent_Declare(
+    entt
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG v3.13.2
+)
+FetchContent_MakeAvailable(entt)
+
+# Find raylib
 find_package(raylib QUIET)
 
 if (NOT raylib_FOUND)
@@ -59,35 +62,74 @@ if (NOT raylib_FOUND)
     endif()
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${CMAKE_SOURCE_DIR}/src/lib)
+include_directories(${CMAKE_SOURCE_DIR}/client)
+include_directories(${CMAKE_SOURCE_DIR}/shared)
+include_directories(${CMAKE_SOURCE_DIR}/server)
 
-set(SOURCES
-    src/main.c
-    src/scene/scene.c
-    src/scene/entity.c
-    src/renderer/mesh.c
-    src/voxel/voxel.c
-    src/voxel/world.c
-    src/voxel/texture_atlas.c
-    src/voxel/block_registry.c
-    src/scene/player.c
+add_library(shared_lib STATIC
+    shared/transport/local_transport.cpp
 )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+target_include_directories(shared_lib PUBLIC ${CMAKE_SOURCE_DIR}/shared)
+
+add_library(server_lib STATIC
+    server/core/server.cpp
+    server/voxel/terrain.cpp
+)
+
+target_include_directories(server_lib PUBLIC ${CMAKE_SOURCE_DIR}/server ${CMAKE_SOURCE_DIR}/shared)
+target_link_libraries(server_lib PUBLIC shared_lib)
+
+add_library(client_lib STATIC
+    client/core/game.cpp
+    client/core/config.cpp
+    client/core/logger.cpp
+    client/net/client_session.cpp
+    client/ecs/components.cpp
+    client/ecs/systems/physics_system.cpp
+    client/ecs/systems/render_system.cpp
+    client/ecs/systems/input_system.cpp
+    client/ecs/systems/player_system.cpp
+    client/voxel/world.cpp
+    client/voxel/chunk.cpp
+    client/voxel/block_registry.cpp
+    client/voxel/block_interaction.cpp
+    client/voxel/texture_atlas.cpp
+    client/renderer/mesh.cpp
+)
+
+target_include_directories(client_lib PUBLIC ${CMAKE_SOURCE_DIR}/client ${CMAKE_SOURCE_DIR}/shared)
+target_link_libraries(client_lib PUBLIC shared_lib)
+
+# client_lib needs EnTT and raylib headers during compilation
+target_link_libraries(client_lib PUBLIC EnTT::EnTT)
 
 if (raylib_FOUND)
-    target_link_libraries(${PROJECT_NAME} raylib)
+    target_link_libraries(client_lib PUBLIC raylib)
 else()
-    target_link_libraries(${PROJECT_NAME} ${RAYLIB_LIBRARY})
+    target_link_libraries(client_lib PUBLIC ${RAYLIB_LIBRARY})
+endif()
+
+add_executable(${PROJECT_NAME}
+    app/main.cpp
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE client_lib server_lib shared_lib)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE EnTT::EnTT)
+
+if (raylib_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${RAYLIB_LIBRARY})
 endif()
 
 if (APPLE)
-    target_link_libraries(${PROJECT_NAME} "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 elseif (WIN32)
     if (CYGWIN)
-        target_link_libraries(${PROJECT_NAME} winmm gdi32 opengl32 user32)
+        target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32 user32)
     else()
-        target_link_libraries(${PROJECT_NAME} winmm gdi32)
+        target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32)
     endif()
 endif()
