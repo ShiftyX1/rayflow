@@ -30,6 +30,38 @@ Terrain::Terrain(std::uint32_t seed)
     init_perlin_();
 }
 
+shared::voxel::BlockType Terrain::get_base_block_(int x, int y, int z) const {
+    using shared::voxel::BlockType;
+
+    if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
+        return BlockType::Air;
+    }
+
+    const float world_x = static_cast<float>(x);
+    const float world_z = static_cast<float>(z);
+
+    const float noise = octave_perlin_(world_x * 0.02f, world_z * 0.02f, 4, 0.5f);
+    const int height = static_cast<int>(60 + noise * 20);
+
+    if (y == 0) {
+        return BlockType::Bedrock;
+    }
+
+    if (y < height - 4) {
+        return BlockType::Stone;
+    }
+
+    if (y < height - 1) {
+        return BlockType::Dirt;
+    }
+
+    if (y == height - 1) {
+        return BlockType::Grass;
+    }
+
+    return BlockType::Air;
+}
+
 void Terrain::init_perlin_() const {
     if (perm_initialized_) return;
 
@@ -87,35 +119,35 @@ float Terrain::octave_perlin_(float x, float y, int octaves, float persistence) 
 }
 
 shared::voxel::BlockType Terrain::get_block(int x, int y, int z) const {
-    using shared::voxel::BlockType;
+    if (!overrides_.empty()) {
+        const BlockKey key{x, y, z};
+        const auto it = overrides_.find(key);
+        if (it != overrides_.end()) {
+            return it->second;
+        }
+    }
 
+    return get_base_block_(x, y, z);
+}
+
+void Terrain::set_block(int x, int y, int z, shared::voxel::BlockType type) {
+    // Ignore out-of-range edits.
     if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
-        return BlockType::Air;
+        return;
     }
 
-    const float world_x = static_cast<float>(x);
-    const float world_z = static_cast<float>(z);
+    const BlockKey key{x, y, z};
+    const auto base = get_base_block_(x, y, z);
 
-    const float noise = octave_perlin_(world_x * 0.02f, world_z * 0.02f, 4, 0.5f);
-    const int height = static_cast<int>(60 + noise * 20);
-
-    if (y == 0) {
-        return BlockType::Bedrock;
+    // If the requested type matches the base terrain, we can drop the override.
+    if (type == base) {
+        if (!overrides_.empty()) {
+            overrides_.erase(key);
+        }
+        return;
     }
 
-    if (y < height - 4) {
-        return BlockType::Stone;
-    }
-
-    if (y < height - 1) {
-        return BlockType::Dirt;
-    }
-
-    if (y == height - 1) {
-        return BlockType::Grass;
-    }
-
-    return BlockType::Air;
+    overrides_[key] = type;
 }
 
 } // namespace server::voxel

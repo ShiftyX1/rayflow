@@ -4,6 +4,8 @@
 #include <string>
 #include <variant>
 
+#include "../voxel/block.hpp"
+
 namespace shared::proto {
 
 using ProtocolVersion = std::uint32_t;
@@ -48,12 +50,45 @@ struct InputFrame {
     bool sprint{false};
 };
 
+// Client -> Server: block intents (authoritative server validates/applies)
+struct TryPlaceBlock {
+    std::uint32_t seq{0};
+    int x{0};
+    int y{0};
+    int z{0};
+    shared::voxel::BlockType blockType{shared::voxel::BlockType::Air};
+};
+
+struct TryBreakBlock {
+    std::uint32_t seq{0};
+    int x{0};
+    int y{0};
+    int z{0};
+};
+
 struct StateSnapshot {
     std::uint64_t serverTick{0};
     PlayerId playerId{0};
     float px{0.0f};
     float py{0.0f};
     float pz{0.0f};
+    float vx{0.0f};
+    float vy{0.0f};
+    float vz{0.0f};
+};
+
+// Server -> Client: authoritative block results
+struct BlockPlaced {
+    int x{0};
+    int y{0};
+    int z{0};
+    shared::voxel::BlockType blockType{shared::voxel::BlockType::Air};
+};
+
+struct BlockBroken {
+    int x{0};
+    int y{0};
+    int z{0};
 };
 
 struct ActionRejected {
@@ -67,7 +102,11 @@ using Message = std::variant<
     JoinMatch,
     JoinAck,
     InputFrame,
+    TryPlaceBlock,
+    TryBreakBlock,
     StateSnapshot,
+    BlockPlaced,
+    BlockBroken,
     ActionRejected
 >;
 

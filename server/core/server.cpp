@@ -274,11 +274,26 @@ void Server::tick_once_() {
         snap.px = px_;
         snap.py = py_;
         snap.pz = pz_;
+        snap.vx = vx_;
+        snap.vy = vy_;
+        snap.vz = vz_;
         endpoint_->send(std::move(snap));
     }
 }
 
 void Server::handle_message_(shared::proto::Message& msg) {
+    const auto is_in_block_reach = [this](int bx, int by, int bz) -> bool {
+        // Keep in sync with client voxel::BlockInteraction::MAX_REACH_DISTANCE (with small fudge).
+        constexpr float kMaxReach = 6.0f;
+        const float cx = static_cast<float>(bx) + 0.5f;
+        const float cy = static_cast<float>(by) + 0.5f;
+        const float cz = static_cast<float>(bz) + 0.5f;
+        const float dx = cx - px_;
+        const float dy = cy - (py_ + 1.62f);
+        const float dz = cz - pz_;
+        return (dx * dx + dy * dy + dz * dz) <= (kMaxReach * kMaxReach);
+    };
+
     if (std::holds_alternative<shared::proto::ClientHello>(msg)) {
         const auto& hello = std::get<shared::proto::ClientHello>(msg);
 
@@ -325,6 +340,125 @@ void Server::handle_message_(shared::proto::Message& msg) {
              lastInput_.pitch,
              lastInput_.jump ? 1 : 0,
              lastInput_.sprint ? 1 : 0);
+        return;
+    }
+
+    if (std::holds_alternative<shared::proto::TryBreakBlock>(msg)) {
+        const auto& req = std::get<shared::proto::TryBreakBlock>(msg);
+        logf(serverTick_, "rx", "TryBreakBlock seq=%u pos=(%d,%d,%d)", req.seq, req.x, req.y, req.z);
+
+        if (!joined_) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::NotAllowed;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (!is_in_block_reach(req.x, req.y, req.z)) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::OutOfRange;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        const auto cur = terrain_->get_block(req.x, req.y, req.z);
+        if (cur == shared::voxel::BlockType::Air) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (cur == shared::voxel::BlockType::Bedrock) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::ProtectedBlock;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        terrain_->set_block(req.x, req.y, req.z, shared::voxel::BlockType::Air);
+
+        shared::proto::BlockBroken ev;
+        ev.x = req.x;
+        ev.y = req.y;
+        ev.z = req.z;
+        logf(serverTick_, "tx", "BlockBroken pos=(%d,%d,%d)", ev.x, ev.y, ev.z);
+        endpoint_->send(std::move(ev));
+        return;
+    }
+
+    if (std::holds_alternative<shared::proto::TryPlaceBlock>(msg)) {
+        const auto& req = std::get<shared::proto::TryPlaceBlock>(msg);
+        logf(serverTick_, "rx", "TryPlaceBlock seq=%u pos=(%d,%d,%d) type=%u",
+             req.seq,
+             req.x,
+             req.y,
+             req.z,
+             static_cast<unsigned>(req.blockType));
+
+        if (!joined_) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::NotAllowed;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (!is_in_block_reach(req.x, req.y, req.z)) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::OutOfRange;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (req.blockType == shared::voxel::BlockType::Air) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (req.blockType == shared::voxel::BlockType::Bedrock) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::NotAllowed;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        const auto cur = terrain_->get_block(req.x, req.y, req.z);
+        if (cur != shared::voxel::BlockType::Air) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        terrain_->set_block(req.x, req.y, req.z, req.blockType);
+
+        shared::proto::BlockPlaced ev;
+        ev.x = req.x;
+        ev.y = req.y;
+        ev.z = req.z;
+        ev.blockType = req.blockType;
+        logf(serverTick_, "tx", "BlockPlaced pos=(%d,%d,%d) type=%u", ev.x, ev.y, ev.z, static_cast<unsigned>(ev.blockType));
+        endpoint_->send(std::move(ev));
         return;
     }
 }

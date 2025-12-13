@@ -29,6 +29,25 @@ void ClientSession::send_input(float moveX, float moveY, float yaw, float pitch,
     endpoint_->send(std::move(frame));
 }
 
+void ClientSession::send_try_break_block(int x, int y, int z) {
+    shared::proto::TryBreakBlock req;
+    req.seq = ++actionSeq_;
+    req.x = x;
+    req.y = y;
+    req.z = z;
+    endpoint_->send(std::move(req));
+}
+
+void ClientSession::send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType) {
+    shared::proto::TryPlaceBlock req;
+    req.seq = ++actionSeq_;
+    req.x = x;
+    req.y = y;
+    req.z = z;
+    req.blockType = blockType;
+    endpoint_->send(std::move(req));
+}
+
 void ClientSession::poll() {
     shared::proto::Message msg;
     while (endpoint_->try_recv(msg)) {
@@ -40,6 +59,12 @@ void ClientSession::poll() {
             TraceLog(LOG_INFO, "[net] JoinAck: playerId=%u", joinAck_->playerId);
         } else if (std::holds_alternative<shared::proto::StateSnapshot>(msg)) {
             latestSnapshot_ = std::get<shared::proto::StateSnapshot>(msg);
+        } else if (std::holds_alternative<shared::proto::BlockPlaced>(msg)) {
+            const auto& ev = std::get<shared::proto::BlockPlaced>(msg);
+            if (onBlockPlaced_) onBlockPlaced_(ev);
+        } else if (std::holds_alternative<shared::proto::BlockBroken>(msg)) {
+            const auto& ev = std::get<shared::proto::BlockBroken>(msg);
+            if (onBlockBroken_) onBlockBroken_(ev);
         } else if (std::holds_alternative<shared::proto::ActionRejected>(msg)) {
             const auto& rej = std::get<shared::proto::ActionRejected>(msg);
             TraceLog(LOG_WARNING, "[net] ActionRejected: seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));

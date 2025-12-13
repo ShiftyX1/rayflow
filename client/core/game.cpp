@@ -44,6 +44,17 @@ bool Game::init(int width, int height, const char* title) {
     // Create world
     unsigned int seed = static_cast<unsigned int>(std::time(nullptr));
     world_ = std::make_unique<voxel::World>(seed);
+
+    if (session_) {
+        session_->set_on_block_placed([this](const shared::proto::BlockPlaced& ev) {
+            if (!world_) return;
+            world_->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(ev.blockType));
+        });
+        session_->set_on_block_broken([this](const shared::proto::BlockBroken& ev) {
+            if (!world_) return;
+            world_->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(voxel::BlockType::Air));
+        });
+    }
     
     // Create block interaction
     block_interaction_ = std::make_unique<voxel::BlockInteraction>();
@@ -182,10 +193,10 @@ void Game::update(float delta_time) {
             transform.position.y = transform.position.y + (targetY - transform.position.y) * alpha;
             transform.position.z = transform.position.z + (targetZ - transform.position.z) * alpha;
 
-            // Ensure client-side physics doesn't accumulate stale velocity.
+            // Replicate authoritative velocity for UI/debug display.
             if (registry_.all_of<ecs::Velocity>(player_entity_)) {
                 auto& vel = registry_.get<ecs::Velocity>(player_entity_);
-                vel.linear = {0.0f, 0.0f, 0.0f};
+                vel.linear = {snap.vx, snap.vy, snap.vz};
             }
         }
     }
@@ -200,8 +211,17 @@ void Game::update(float delta_time) {
     };
     
     // Update block interaction
-    block_interaction_->update(*world_, camera.position, camera_dir, 
-                                tool, input.primary_action, delta_time);
+    block_interaction_->update(*world_, camera.position, camera_dir,
+                                tool, input.primary_action, input.secondary_action, delta_time);
+
+    if (session_) {
+        if (auto req = block_interaction_->consume_break_request(); req.has_value()) {
+            session_->send_try_break_block(req->x, req->y, req->z);
+        }
+        if (auto req = block_interaction_->consume_place_request(); req.has_value()) {
+            session_->send_try_place_block(req->x, req->y, req->z, req->block_type);
+        }
+    }
     
     // Update world (chunk loading/unloading)
     world_->update(transform.position);
