@@ -11,6 +11,14 @@ Done when:
 - Implement server loop: tick, command queue, snapshot/event output.
 - Server owns `World/Rules`.
 
+Current bridge (allowed during Stage B):
+- Seed-synced procedural terrain may be used temporarily so server collisions match client rendering.
+- Server must be the source of the seed (`ServerHello.worldSeed`).
+
+Target direction (post-bridge):
+- Replace procedural terrain with map templates/prefabs owned by the server.
+- Client should ultimately render from replication (snapshots/events/chunk deltas), not generate authoritative terrain.
+
 Done when:
 - Basic actions (move, place/break blocks, buy) work through server even in one process (`LocalTransport`).
 
