@@ -1,6 +1,10 @@
 {
     "folders": [
         {
+            "name": "🚀 Entry Point app",
+            "path": "app/"
+        },
+        {
             "name": "🧑🏻‍💻 Client",
             "path": "client/"
         },

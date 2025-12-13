@@ -12,7 +12,7 @@ int main() {
     Game game;
     game.set_transport_endpoint(pair.client);
 
-    if (!game.init(1280, 720, "RayFlow 3D Engine - ECS Architecture")) {
+    if (!game.init(1280, 720, "Rayflow (bed wars)")) {
         server.stop();
         return -1;
     }
