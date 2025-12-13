@@ -39,8 +39,8 @@ void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
 }
 
 void RenderSystem::render_ui(entt::registry& registry, int screen_width, int screen_height) {
+    (void)registry;
     render_crosshair(screen_width, screen_height);
-    render_player_info(registry);
 }
 
 void RenderSystem::render_crosshair(int screen_width, int screen_height) {

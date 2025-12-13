@@ -11,6 +11,7 @@
 #include "../voxel/block_interaction.hpp"
 #include <cstdio>
 #include <ctime>
+#include <utility>
 
 Game::Game() = default;
 Game::~Game() = default;
@@ -30,6 +31,8 @@ bool Game::init(int width, int height, const char* title) {
     // Load client config from rayflow.conf (optional; defaults apply if missing)
     core::Config::instance().load_from_file("rayflow.conf");
     core::Logger::instance().init(core::Config::instance().logging());
+
+    ui_.init();
 
     if (session_) {
         session_->start_handshake();
@@ -81,6 +84,7 @@ bool Game::init(int width, int height, const char* title) {
     player_entity_ = ecs::PlayerSystem::create_player(registry_, spawn_position);
     
     DisableCursor();
+    cursor_enabled_ = false;
 
     TraceLog(LOG_INFO, "Game initialized with ECS architecture!");
     TraceLog(LOG_INFO, "Player spawned at (%.1f, %.1f, %.1f)",
@@ -105,6 +109,93 @@ bool Game::init(int width, int height, const char* title) {
     TraceLog(LOG_INFO, "  %s - Exit", core::key_name(controls.exit).c_str());
     
     return true;
+}
+
+void Game::set_cursor_enabled(bool enabled) {
+    if (enabled == cursor_enabled_) {
+        return;
+    }
+
+    cursor_enabled_ = enabled;
+    if (cursor_enabled_) {
+        EnableCursor();
+    } else {
+        DisableCursor();
+        SetMousePosition(screen_width_ / 2, screen_height_ / 2);
+    }
+}
+
+void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
+    for (const auto& cmd : out.commands) {
+        if (const auto* s = std::get_if<ui::SetCameraSensitivity>(&cmd)) {
+            if (player_entity_ != entt::null && registry_.all_of<ecs::PlayerController>(player_entity_)) {
+                registry_.get<ecs::PlayerController>(player_entity_).camera_sensitivity = s->value;
+            }
+        }
+    }
+}
+
+void Game::clear_player_input() {
+    if (player_entity_ == entt::null || !registry_.all_of<ecs::InputState>(player_entity_)) {
+        return;
+    }
+    auto& input = registry_.get<ecs::InputState>(player_entity_);
+    input.move_input = {0.0f, 0.0f};
+    input.look_input = {0.0f, 0.0f};
+    input.jump_pressed = false;
+    input.sprint_pressed = false;
+    input.primary_action = false;
+    input.secondary_action = false;
+}
+
+void Game::refresh_ui_view_model(float delta_time) {
+    ui_vm_.screen_width = screen_width_;
+    ui_vm_.screen_height = screen_height_;
+    ui_vm_.dt = delta_time;
+    ui_vm_.fps = GetFPS();
+
+    if (player_entity_ != entt::null) {
+        if (registry_.all_of<ecs::Transform>(player_entity_)) {
+            ui_vm_.player.position = registry_.get<ecs::Transform>(player_entity_).position;
+        }
+        if (registry_.all_of<ecs::Velocity>(player_entity_)) {
+            ui_vm_.player.velocity = registry_.get<ecs::Velocity>(player_entity_).linear;
+        }
+        if (registry_.all_of<ecs::PlayerController>(player_entity_)) {
+            const auto& pc = registry_.get<ecs::PlayerController>(player_entity_);
+            ui_vm_.player.on_ground = pc.on_ground;
+            ui_vm_.player.sprinting = pc.is_sprinting;
+            ui_vm_.player.creative = pc.in_creative_mode;
+            ui_vm_.player.camera_sensitivity = pc.camera_sensitivity;
+        }
+        if (registry_.all_of<ecs::FirstPersonCamera>(player_entity_)) {
+            const auto& cam = registry_.get<ecs::FirstPersonCamera>(player_entity_);
+            ui_vm_.player.yaw = cam.yaw;
+            ui_vm_.player.pitch = cam.pitch;
+        }
+    }
+
+    ui_vm_.net = {};
+    if (session_) {
+        const auto& hello = session_->server_hello();
+        ui_vm_.net.has_server_hello = hello.has_value();
+        if (hello.has_value()) {
+            ui_vm_.net.tick_rate = hello->tickRate;
+            ui_vm_.net.world_seed = hello->worldSeed;
+        }
+
+        const auto& ack = session_->join_ack();
+        ui_vm_.net.has_join_ack = ack.has_value();
+        if (ack.has_value()) {
+            ui_vm_.net.player_id = ack->playerId;
+        }
+
+        const auto& snap = session_->latest_snapshot();
+        ui_vm_.net.has_snapshot = snap.has_value();
+        if (snap.has_value()) {
+            ui_vm_.net.server_tick = snap->serverTick;
+        }
+    }
 }
 
 void Game::run() {
@@ -139,6 +230,23 @@ void Game::handle_global_input() {
 }
 
 void Game::update(float delta_time) {
+    // Ensure UI has valid dimensions even before we build a full view-model.
+    ui_vm_.screen_width = screen_width_;
+    ui_vm_.screen_height = screen_height_;
+    ui_vm_.dt = delta_time;
+    ui_vm_.fps = GetFPS();
+
+    // UI: toggle + capture + apply commands from last frame (safe point).
+    ui::UIFrameInput ui_in;
+    ui_in.dt = delta_time;
+    ui_in.toggle_debug_ui = IsKeyPressed(KEY_F1);
+
+    const ui::UIFrameOutput ui_out = ui_.update(ui_in, ui_vm_);
+    ui_captures_input_ = ui_out.capture.captured();
+    apply_ui_commands(ui_out);
+
+    set_cursor_enabled(ui_out.capture.wants_mouse);
+
     if (session_) {
         session_->poll();
     }
@@ -158,8 +266,12 @@ void Game::update(float delta_time) {
     }
 
     // Update ECS systems
-    input_system_->update(registry_, delta_time);
-    player_system_->update(registry_, delta_time);
+    if (!ui_captures_input_) {
+        input_system_->update(registry_, delta_time);
+        player_system_->update(registry_, delta_time);
+    } else {
+        clear_player_input();
+    }
     // physics_system_ is intentionally not run in client replica mode
     
     // Get player position and camera for world updates
@@ -169,14 +281,14 @@ void Game::update(float delta_time) {
     auto& tool = registry_.get<ecs::ToolHolder>(player_entity_);
 
     if (session_) {
-        // Note: this is only the plumbing stage; server-authoritative movement comes later.
+        // Note: server-authoritative movement; client sends intent only.
         session_->send_input(
-            input.move_input.x,
-            input.move_input.y,
+            ui_captures_input_ ? 0.0f : input.move_input.x,
+            ui_captures_input_ ? 0.0f : input.move_input.y,
             fps_camera.yaw,
             fps_camera.pitch,
-            input.jump_pressed,
-            input.sprint_pressed);
+            ui_captures_input_ ? false : input.jump_pressed,
+            ui_captures_input_ ? false : input.sprint_pressed);
     }
 
     // Apply authoritative position from the server snapshot.
@@ -213,21 +325,26 @@ void Game::update(float delta_time) {
         camera.target.z - camera.position.z
     };
     
-    // Update block interaction
-    block_interaction_->update(*world_, camera.position, camera_dir,
-                                tool, input.primary_action, input.secondary_action, delta_time);
+    if (!ui_captures_input_) {
+        // Update block interaction
+        block_interaction_->update(*world_, camera.position, camera_dir,
+                                    tool, input.primary_action, input.secondary_action, delta_time);
 
-    if (session_) {
-        if (auto req = block_interaction_->consume_break_request(); req.has_value()) {
-            session_->send_try_break_block(req->x, req->y, req->z);
-        }
-        if (auto req = block_interaction_->consume_place_request(); req.has_value()) {
-            session_->send_try_place_block(req->x, req->y, req->z, req->block_type);
+        if (session_) {
+            if (auto req = block_interaction_->consume_break_request(); req.has_value()) {
+                session_->send_try_break_block(req->x, req->y, req->z);
+            }
+            if (auto req = block_interaction_->consume_place_request(); req.has_value()) {
+                session_->send_try_place_block(req->x, req->y, req->z, req->block_type);
+            }
         }
     }
     
     // Update world (chunk loading/unloading)
     world_->update(transform.position);
+
+    // Build a fresh view-model for render() (debug overlays, stats, etc.)
+    refresh_ui_view_model(delta_time);
 }
 
 void Game::render() {
@@ -249,7 +366,8 @@ void Game::render() {
     
     // Render UI
     render_system_->render_ui(registry_, screen_width_, screen_height_);
-    voxel::BlockInteraction::render_crosshair(screen_width_, screen_height_);
+
+    ui_.render(ui_vm_);
     
     EndDrawing();
 }

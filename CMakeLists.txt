@@ -65,6 +65,7 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR}/client)
 include_directories(${CMAKE_SOURCE_DIR}/shared)
 include_directories(${CMAKE_SOURCE_DIR}/server)
+include_directories(${CMAKE_SOURCE_DIR}/ui)
 
 add_library(shared_lib STATIC
     shared/transport/local_transport.cpp
@@ -96,9 +97,20 @@ add_library(client_lib STATIC
     client/voxel/block_interaction.cpp
     client/voxel/texture_atlas.cpp
     client/renderer/mesh.cpp
+
+    ui/runtime/ui_manager.cpp
 )
 
 target_include_directories(client_lib PUBLIC ${CMAKE_SOURCE_DIR}/client ${CMAKE_SOURCE_DIR}/shared)
+
+# Debug UI (raygui) is developer-only. Enable it by default for non-Release builds.
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(client_lib PUBLIC DEBUG_UI)
+    target_sources(client_lib PRIVATE
+        ui/debug/debug_ui.cpp
+        ui/debug/raygui_impl.cpp
+    )
+endif()
 target_link_libraries(client_lib PUBLIC shared_lib)
 
 # client_lib needs EnTT and raylib headers during compilation

@@ -6,6 +6,9 @@
 
 #include "../net/client_session.hpp"
 
+#include "runtime/ui_manager.hpp"
+
+
 // Forward declarations
 namespace voxel {
     class World;
@@ -34,6 +37,11 @@ private:
     void update(float delta_time);
     void render();
     void handle_global_input();
+
+    void apply_ui_commands(const ui::UIFrameOutput& out);
+    void clear_player_input();
+    void refresh_ui_view_model(float delta_time);
+    void set_cursor_enabled(bool enabled);
     
     // Window
     int screen_width_{1280};
@@ -55,4 +63,9 @@ private:
     std::unique_ptr<voxel::BlockInteraction> block_interaction_;
 
     std::unique_ptr<client::net::ClientSession> session_;
+
+    ui::UIManager ui_{};
+    ui::UIViewModel ui_vm_{};
+    bool ui_captures_input_{false};
+    bool cursor_enabled_{false};
 };
