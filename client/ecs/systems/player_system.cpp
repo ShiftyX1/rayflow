@@ -14,6 +14,11 @@ constexpr float DEG_TO_RAD = 0.017453292519943295f;
 
 void PlayerSystem::update(entt::registry& registry, float delta_time) {
     handle_tool_selection(registry);
+
+    if (clientReplicaMode_) {
+        return;
+    }
+
     handle_creative_mode(registry);
     handle_movement(registry, delta_time);
     handle_jumping(registry);

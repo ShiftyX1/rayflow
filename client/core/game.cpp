@@ -15,6 +15,10 @@
 Game::Game() = default;
 Game::~Game() = default;
 
+void Game::set_transport_endpoint(std::shared_ptr<shared::transport::IEndpoint> endpoint) {
+    session_ = std::make_unique<client::net::ClientSession>(std::move(endpoint));
+}
+
 bool Game::init(int width, int height, const char* title) {
     screen_width_ = width;
     screen_height_ = height;
@@ -26,6 +30,10 @@ bool Game::init(int width, int height, const char* title) {
     // Load client config from rayflow.conf (optional; defaults apply if missing)
     core::Config::instance().load_from_file("rayflow.conf");
     core::Logger::instance().init(core::Config::instance().logging());
+
+    if (session_) {
+        session_->start_handshake();
+    }
     
     // Initialize block registry
     if (!voxel::BlockRegistry::instance().init("textures/terrain.png")) {
@@ -45,6 +53,9 @@ bool Game::init(int width, int height, const char* title) {
     physics_system_ = std::make_unique<ecs::PhysicsSystem>();
     player_system_ = std::make_unique<ecs::PlayerSystem>();
     render_system_ = std::make_unique<ecs::RenderSystem>();
+
+    // Server-authoritative movement: client systems must not simulate movement/physics.
+    player_system_->set_client_replica_mode(true);
     
     // Set world reference for systems
     physics_system_->set_world(world_.get());
@@ -114,16 +125,56 @@ void Game::handle_global_input() {
 }
 
 void Game::update(float delta_time) {
+    if (session_) {
+        session_->poll();
+    }
+
     // Update ECS systems
     input_system_->update(registry_, delta_time);
     player_system_->update(registry_, delta_time);
-    physics_system_->update(registry_, delta_time);
+    // physics_system_ is intentionally not run in client replica mode
     
     // Get player position and camera for world updates
     auto& transform = registry_.get<ecs::Transform>(player_entity_);
     auto& fps_camera = registry_.get<ecs::FirstPersonCamera>(player_entity_);
     auto& input = registry_.get<ecs::InputState>(player_entity_);
     auto& tool = registry_.get<ecs::ToolHolder>(player_entity_);
+
+    if (session_) {
+        // Note: this is only the plumbing stage; server-authoritative movement comes later.
+        session_->send_input(
+            input.move_input.x,
+            input.move_input.y,
+            fps_camera.yaw,
+            fps_camera.pitch,
+            input.jump_pressed,
+            input.sprint_pressed);
+    }
+
+    // Apply authoritative position from the server snapshot.
+    if (session_) {
+        const auto& snapOpt = session_->latest_snapshot();
+        if (snapOpt.has_value()) {
+            const auto& snap = *snapOpt;
+            const float targetX = snap.px;
+            const float targetY = snap.py;
+            const float targetZ = snap.pz;
+
+            // Simple interpolation (no prediction): critically damped-ish lerp.
+            const float t = (delta_time <= 0.0f) ? 1.0f : (delta_time * 15.0f);
+            const float alpha = (t > 1.0f) ? 1.0f : t;
+
+            transform.position.x = transform.position.x + (targetX - transform.position.x) * alpha;
+            transform.position.y = transform.position.y + (targetY - transform.position.y) * alpha;
+            transform.position.z = transform.position.z + (targetZ - transform.position.z) * alpha;
+
+            // Ensure client-side physics doesn't accumulate stale velocity.
+            if (registry_.all_of<ecs::Velocity>(player_entity_)) {
+                auto& vel = registry_.get<ecs::Velocity>(player_entity_);
+                vel.linear = {0.0f, 0.0f, 0.0f};
+            }
+        }
+    }
     
     Camera3D camera = ecs::PlayerSystem::get_camera(registry_, player_entity_);
     
