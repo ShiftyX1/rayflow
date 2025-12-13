@@ -25,6 +25,19 @@ All UI below must live in `ui/` and be driven by game state. UI must never own g
   - Toggleable at runtime (F1/F2) and removable via build flag (#ifdef DEBUG_UI).
   - Must not ship in release builds unless explicitly enabled.
   - May directly read engine internals for diagnostics, but must not become required for gameplay flow.
+
+## Debug UI modes (required)
+Debug output must support **two mutually exclusive modes**:
+
+1) **Interactive debug UI**
+- Shows windows/panels with controls (sliders, checkboxes, etc.).
+- **Captures mouse/keyboard** while open (gameplay input must not react).
+- Intended for developers to tweak settings.
+
+2) **Overlay-only debug HUD**
+- Shows informational panels/text over the game view.
+- **Does not capture input** (mouse-look and gameplay must keep working).
+- No windows and no settings; purely read-only diagnostics.
 - Typical panels:
   - FPS/frametime, camera, entity inspector, spawn tools, lighting, navmesh, net stats.
 

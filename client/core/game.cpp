@@ -240,6 +240,7 @@ void Game::update(float delta_time) {
     ui::UIFrameInput ui_in;
     ui_in.dt = delta_time;
     ui_in.toggle_debug_ui = IsKeyPressed(KEY_F1);
+    ui_in.toggle_debug_overlay = IsKeyPressed(KEY_F2);
 
     const ui::UIFrameOutput ui_out = ui_.update(ui_in, ui_vm_);
     ui_captures_input_ = ui_out.capture.captured();

@@ -16,7 +16,8 @@ struct UIInputCapture {
 struct UIFrameInput {
     float dt{0.0f};
 
-    bool toggle_debug_ui{false}; // e.g. F1
+    bool toggle_debug_ui{false};      // F1: interactive debug UI (windows/settings)
+    bool toggle_debug_overlay{false}; // F2: overlay-only (informational)
 };
 
 struct UIFrameOutput {

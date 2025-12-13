@@ -20,7 +20,13 @@ public:
 private:
     void queue_command_if_changed(float prev, float next);
 
-    bool debug_open_{false};
+    enum class DebugMode {
+        Off,
+        Overlay,
+        Interactive,
+    };
+
+    DebugMode debug_mode_{DebugMode::Off};
 
     bool show_player_info_{true};
     bool show_net_info_{true};

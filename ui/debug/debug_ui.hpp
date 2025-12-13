@@ -16,6 +16,7 @@ struct DebugUIResult {
 };
 
 void init();
-DebugUIResult draw(const DebugUIState& current, const UIViewModel& vm);
+DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& vm);
+DebugUIResult draw_overlay(const DebugUIState& current, const UIViewModel& vm);
 
 } // namespace ui::debug

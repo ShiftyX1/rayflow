@@ -61,7 +61,7 @@ static void draw_net_info(const UIViewModel& vm) {
     }
 }
 
-DebugUIResult draw(const DebugUIState& current, const UIViewModel& vm) {
+DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& vm) {
     DebugUIResult out;
     out.state = current;
 
@@ -71,28 +71,47 @@ DebugUIResult draw(const DebugUIState& current, const UIViewModel& vm) {
 
     GuiPanel(panel, "Debug UI (F1)");
 
-    Rectangle r = { panel.x + 10, panel.y + 30, panel.width - 20, 20 };
+    const float padding = 10.0f;
+    const float row_h = 20.0f;
+    const float gap_y = 6.0f;
+    const float check_size = 20.0f;
+    const float label_pad = 8.0f;
 
+    Rectangle row = { panel.x + padding, panel.y + 30, panel.width - padding * 2.0f, row_h };
+
+    // Checkbox: Show player info
     {
+        Rectangle cb = { row.x, row.y, check_size, check_size };
+        Rectangle label = { row.x + check_size + label_pad, row.y + 2.0f, row.width - check_size - label_pad, row_h };
+
         bool checked = out.state.show_player_info;
-        GuiCheckBox(r, "Show player info", &checked);
+        GuiCheckBox(cb, "", &checked);
+        GuiLabel(label, "Show player info");
         out.state.show_player_info = checked;
     }
-    r.y += 26;
 
+    row.y += row_h + gap_y;
+
+    // Checkbox: Show net info
     {
+        Rectangle cb = { row.x, row.y, check_size, check_size };
+        Rectangle label = { row.x + check_size + label_pad, row.y + 2.0f, row.width - check_size - label_pad, row_h };
+
         bool checked = out.state.show_net_info;
-        GuiCheckBox(r, "Show net info", &checked);
+        GuiCheckBox(cb, "", &checked);
+        GuiLabel(label, "Show net info");
         out.state.show_net_info = checked;
     }
-    r.y += 26;
 
-    r.height = 18;
-    GuiLabel(r, "Camera sensitivity");
-    r.y += 20;
+    row.y += row_h + gap_y + 4.0f;
 
-    Rectangle slider = { r.x, r.y, r.width, 18 };
+    // Slider: camera sensitivity
     {
+        Rectangle label = { row.x, row.y, row.width, 18.0f };
+        GuiLabel(label, "Camera sensitivity");
+        row.y += 18.0f + 4.0f;
+
+        Rectangle slider = { row.x, row.y, row.width, 18.0f };
         float value = out.state.camera_sensitivity;
         GuiSliderBar(slider, "", TextFormat("%.3f", value), &value, 0.02f, 0.5f);
         out.state.camera_sensitivity = value;
@@ -103,6 +122,20 @@ DebugUIResult draw(const DebugUIState& current, const UIViewModel& vm) {
         draw_player_info(vm);
     }
 
+    if (out.state.show_net_info) {
+        draw_net_info(vm);
+    }
+
+    return out;
+}
+
+DebugUIResult draw_overlay(const DebugUIState& current, const UIViewModel& vm) {
+    DebugUIResult out;
+    out.state = current;
+
+    if (out.state.show_player_info) {
+        draw_player_info(vm);
+    }
     if (out.state.show_net_info) {
         draw_net_info(vm);
     }
