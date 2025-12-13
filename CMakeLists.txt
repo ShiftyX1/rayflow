@@ -1,19 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 
-if(WIN32 AND NOT DEFINED CMAKE_C_COMPILER)
-    if(EXISTS "C:/msys64/mingw64/bin/gcc.exe")
-        set(CMAKE_C_COMPILER "C:/msys64/mingw64/bin/gcc.exe")
-        set(CMAKE_MAKE_PROGRAM "C:/msys64/mingw64/bin/mingw32-make.exe")
-    endif()
-endif()
+project(low_pulse CXX)
 
-project(low_pulse C)
-
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 
+include(FetchContent)
+FetchContent_Declare(
+    entt
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG v3.13.2
+)
+FetchContent_MakeAvailable(entt)
+
+# Find raylib
 find_package(raylib QUIET)
 
 if (NOT raylib_FOUND)
@@ -60,35 +63,40 @@ if (NOT raylib_FOUND)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${CMAKE_SOURCE_DIR}/src/lib)
 
+# Source files
 set(SOURCES
-    src/main.c
-    src/scene/scene.c
-    src/scene/entity.c
-    src/renderer/mesh.c
-    src/voxel/voxel.c
-    src/voxel/world.c
-    src/voxel/texture_atlas.c
-    src/voxel/block_registry.c
-    src/voxel/block_interaction.c
-    src/scene/player.c
+    src/main.cpp
+    src/core/game.cpp
+    src/ecs/components.cpp
+    src/ecs/systems/physics_system.cpp
+    src/ecs/systems/render_system.cpp
+    src/ecs/systems/input_system.cpp
+    src/ecs/systems/player_system.cpp
+    src/voxel/world.cpp
+    src/voxel/chunk.cpp
+    src/voxel/block_registry.cpp
+    src/voxel/block_interaction.cpp
+    src/voxel/texture_atlas.cpp
+    src/renderer/mesh.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
+target_link_libraries(${PROJECT_NAME} PRIVATE EnTT::EnTT)
+
 if (raylib_FOUND)
-    target_link_libraries(${PROJECT_NAME} raylib)
+    target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 else()
-    target_link_libraries(${PROJECT_NAME} ${RAYLIB_LIBRARY})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${RAYLIB_LIBRARY})
 endif()
 
 if (APPLE)
-    target_link_libraries(${PROJECT_NAME} "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
+    target_link_libraries(${PROJECT_NAME} PRIVATE "-framework IOKit" "-framework Cocoa" "-framework OpenGL")
 elseif (WIN32)
     if (CYGWIN)
-        target_link_libraries(${PROJECT_NAME} winmm gdi32 opengl32 user32)
+        target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32 user32)
     else()
-        target_link_libraries(${PROJECT_NAME} winmm gdi32)
+        target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32)
     endif()
 endif()
