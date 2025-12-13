@@ -31,6 +31,14 @@ std::optional<BlockInteraction::PlaceRequest> BlockInteraction::consume_place_re
     return out;
 }
 
+void BlockInteraction::on_action_rejected() {
+    pending_break_.reset();
+    pending_place_.reset();
+    break_progress_ = 0.0f;
+    was_breaking_ = false;
+    was_placing_ = false;
+}
+
 void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vector3& camera_dir,
                                const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time) {
     // Perform raycast

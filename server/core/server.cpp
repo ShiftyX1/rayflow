@@ -294,6 +294,31 @@ void Server::handle_message_(shared::proto::Message& msg) {
         return (dx * dx + dy * dy + dz * dz) <= (kMaxReach * kMaxReach);
     };
 
+    const auto would_intersect_player = [this](int bx, int by, int bz) -> bool {
+        // Player AABB (feet at py_)
+        const float half_w = kPlayerWidth * 0.5f;
+        const float half_d = kPlayerWidth * 0.5f;
+        const float pMinX = px_ - half_w;
+        const float pMaxX = px_ + half_w;
+        const float pMinY = py_;
+        const float pMaxY = py_ + kPlayerHeight;
+        const float pMinZ = pz_ - half_d;
+        const float pMaxZ = pz_ + half_d;
+
+        // Block AABB
+        const float bMinX = static_cast<float>(bx);
+        const float bMaxX = static_cast<float>(bx + 1);
+        const float bMinY = static_cast<float>(by);
+        const float bMaxY = static_cast<float>(by + 1);
+        const float bMinZ = static_cast<float>(bz);
+        const float bMaxZ = static_cast<float>(bz + 1);
+
+        const bool overlapX = (pMinX < (bMaxX - kEps)) && (pMaxX > (bMinX + kEps));
+        const bool overlapY = (pMinY < (bMaxY - kEps)) && (pMaxY > (bMinY + kEps));
+        const bool overlapZ = (pMinZ < (bMaxZ - kEps)) && (pMaxZ > (bMinZ + kEps));
+        return overlapX && overlapY && overlapZ;
+    };
+
     if (std::holds_alternative<shared::proto::ClientHello>(msg)) {
         const auto& hello = std::get<shared::proto::ClientHello>(msg);
 
@@ -418,6 +443,15 @@ void Server::handle_message_(shared::proto::Message& msg) {
             rej.seq = req.seq;
             rej.reason = shared::proto::RejectReason::OutOfRange;
             logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (would_intersect_player(req.x, req.y, req.z)) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::NotAllowed;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (intersects player)", rej.seq, static_cast<unsigned>(rej.reason));
             endpoint_->send(std::move(rej));
             return;
         }

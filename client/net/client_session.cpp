@@ -68,6 +68,7 @@ void ClientSession::poll() {
         } else if (std::holds_alternative<shared::proto::ActionRejected>(msg)) {
             const auto& rej = std::get<shared::proto::ActionRejected>(msg);
             TraceLog(LOG_WARNING, "[net] ActionRejected: seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            if (onActionRejected_) onActionRejected_(rej);
         }
     }
 }

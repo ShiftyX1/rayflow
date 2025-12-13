@@ -23,6 +23,7 @@ public:
 
     void set_on_block_placed(std::function<void(const shared::proto::BlockPlaced&)> cb) { onBlockPlaced_ = std::move(cb); }
     void set_on_block_broken(std::function<void(const shared::proto::BlockBroken&)> cb) { onBlockBroken_ = std::move(cb); }
+    void set_on_action_rejected(std::function<void(const shared::proto::ActionRejected&)> cb) { onActionRejected_ = std::move(cb); }
 
     const std::optional<shared::proto::ServerHello>& server_hello() const { return serverHello_; }
     const std::optional<shared::proto::JoinAck>& join_ack() const { return joinAck_; }
@@ -40,6 +41,7 @@ private:
 
     std::function<void(const shared::proto::BlockPlaced&)> onBlockPlaced_;
     std::function<void(const shared::proto::BlockBroken&)> onBlockBroken_;
+    std::function<void(const shared::proto::ActionRejected&)> onActionRejected_;
 };
 
 } // namespace client::net

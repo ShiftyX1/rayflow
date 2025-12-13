@@ -54,6 +54,9 @@ bool Game::init(int width, int height, const char* title) {
             if (!world_) return;
             world_->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(voxel::BlockType::Air));
         });
+        session_->set_on_action_rejected([this](const shared::proto::ActionRejected&) {
+            if (block_interaction_) block_interaction_->on_action_rejected();
+        });
     }
     
     // Create block interaction

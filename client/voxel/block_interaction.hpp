@@ -48,6 +48,8 @@ public:
 
     std::optional<BreakRequest> consume_break_request();
     std::optional<PlaceRequest> consume_place_request();
+
+    void on_action_rejected();
     
 private:
     BlockRaycastResult raycast(const World& world, const Vector3& origin, 
