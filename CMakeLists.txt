@@ -62,25 +62,25 @@ if (NOT raylib_FOUND)
     endif()
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/client)
 
 # Source files
 set(SOURCES
-    src/main.cpp
-    src/core/game.cpp
-    src/core/config.cpp
-    src/core/logger.cpp
-    src/ecs/components.cpp
-    src/ecs/systems/physics_system.cpp
-    src/ecs/systems/render_system.cpp
-    src/ecs/systems/input_system.cpp
-    src/ecs/systems/player_system.cpp
-    src/voxel/world.cpp
-    src/voxel/chunk.cpp
-    src/voxel/block_registry.cpp
-    src/voxel/block_interaction.cpp
-    src/voxel/texture_atlas.cpp
-    src/renderer/mesh.cpp
+    client/main.cpp
+    client/core/game.cpp
+    client/core/config.cpp
+    client/core/logger.cpp
+    client/ecs/components.cpp
+    client/ecs/systems/physics_system.cpp
+    client/ecs/systems/render_system.cpp
+    client/ecs/systems/input_system.cpp
+    client/ecs/systems/player_system.cpp
+    client/voxel/world.cpp
+    client/voxel/chunk.cpp
+    client/voxel/block_registry.cpp
+    client/voxel/block_interaction.cpp
+    client/voxel/texture_atlas.cpp
+    client/renderer/mesh.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
