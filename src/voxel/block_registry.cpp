@@ -17,7 +17,7 @@ bool BlockRegistry::init(const std::string& atlas_path) {
     
     atlas_texture_ = LoadTexture(atlas_path.c_str());
     if (atlas_texture_.id == 0) {
-        std::printf("Failed to load texture atlas: %s\n", atlas_path.c_str());
+        TraceLog(LOG_ERROR, "Failed to load texture atlas: %s", atlas_path.c_str());
         return false;
     }
     
@@ -27,8 +27,7 @@ bool BlockRegistry::init(const std::string& atlas_path) {
     register_blocks();
     
     initialized_ = true;
-    std::printf("Block registry initialized with %d block types\n", 
-                static_cast<int>(BlockType::Count));
+    TraceLog(LOG_INFO, "Block registry initialized with %d block types", static_cast<int>(BlockType::Count));
     
     return true;
 }

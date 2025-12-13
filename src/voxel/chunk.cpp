@@ -1,5 +1,6 @@
 #include "chunk.hpp"
 #include "block_registry.hpp"
+#include <raylib.h>
 #include <cstring>
 #include <vector>
 #include <cstdio>
@@ -192,7 +193,7 @@ void Chunk::generate_mesh() {
         return;
     }
     
-    std::printf("Chunk (%d, %d) mesh: %zu vertices\n", chunk_x_, chunk_z_, vertices.size() / 3);
+    TraceLog(LOG_DEBUG, "Chunk (%d, %d) mesh: %zu vertices", chunk_x_, chunk_z_, vertices.size() / 3);
     
     // Build mesh from collected data
     mesh_ = {0};

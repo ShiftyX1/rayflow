@@ -1,4 +1,6 @@
 #include "game.hpp"
+#include "config.hpp"
+#include "logger.hpp"
 #include "../ecs/components.hpp"
 #include "../ecs/systems/input_system.hpp"
 #include "../ecs/systems/physics_system.hpp"
@@ -20,10 +22,14 @@ bool Game::init(int width, int height, const char* title) {
     InitWindow(width, height, title);
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
+
+    // Load client config from rayflow.conf (optional; defaults apply if missing)
+    core::Config::instance().load_from_file("rayflow.conf");
+    core::Logger::instance().init(core::Config::instance().logging());
     
     // Initialize block registry
     if (!voxel::BlockRegistry::instance().init("textures/terrain.png")) {
-        std::fprintf(stderr, "Failed to initialize block registry!\n");
+        TraceLog(LOG_ERROR, "Failed to initialize block registry!");
         return false;
     }
     
@@ -50,20 +56,28 @@ bool Game::init(int width, int height, const char* title) {
     player_entity_ = ecs::PlayerSystem::create_player(registry_, spawn_position);
     
     DisableCursor();
-    
-    std::printf("Game initialized with ECS architecture!\n");
-    std::printf("Player spawned at (%.1f, %.1f, %.1f)\n", 
-                spawn_position.x, spawn_position.y, spawn_position.z);
-    std::printf("\nControls:\n");
-    std::printf("  WASD - Move player\n");
-    std::printf("  Mouse - Look around\n");
-    std::printf("  Space - Jump (or fly up in creative mode)\n");
-    std::printf("  Left Shift - Fly down in creative mode\n");
-    std::printf("  Left Ctrl - Sprint\n");
-    std::printf("  C - Toggle creative mode\n");
-    std::printf("  Left Mouse Button - Break block\n");
-    std::printf("  1-5 - Select tool\n");
-    std::printf("  ESC - Exit\n");
+
+    TraceLog(LOG_INFO, "Game initialized with ECS architecture!");
+    TraceLog(LOG_INFO, "Player spawned at (%.1f, %.1f, %.1f)",
+             spawn_position.x, spawn_position.y, spawn_position.z);
+
+    const auto& controls = core::Config::instance().controls();
+    TraceLog(LOG_INFO, "Controls:");
+    TraceLog(LOG_INFO, "  %s/%s/%s/%s - Move player",
+             core::key_name(controls.move_forward).c_str(),
+             core::key_name(controls.move_left).c_str(),
+             core::key_name(controls.move_backward).c_str(),
+             core::key_name(controls.move_right).c_str());
+    TraceLog(LOG_INFO, "  Mouse - Look around");
+    TraceLog(LOG_INFO, "  %s - Jump (or fly up in creative mode)", core::key_name(controls.jump).c_str());
+    TraceLog(LOG_INFO, "  %s - Fly down in creative mode", core::key_name(controls.fly_down).c_str());
+    TraceLog(LOG_INFO, "  %s - Sprint", core::key_name(controls.sprint).c_str());
+    TraceLog(LOG_INFO, "  %s - Toggle creative mode", core::key_name(controls.toggle_creative).c_str());
+    TraceLog(LOG_INFO, "  %s - Break block", core::mouse_button_name(controls.primary_mouse).c_str());
+    TraceLog(LOG_INFO, "  %s-%s - Select tool",
+             core::key_name(controls.tool_1).c_str(),
+             core::key_name(controls.tool_5).c_str());
+    TraceLog(LOG_INFO, "  %s - Exit", core::key_name(controls.exit).c_str());
     
     return true;
 }
@@ -87,12 +101,14 @@ void Game::shutdown() {
     physics_system_.reset();
     player_system_.reset();
     render_system_.reset();
+
+    core::Logger::instance().shutdown();
     
     CloseWindow();
 }
 
 void Game::handle_global_input() {
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(core::Config::instance().controls().exit)) {
         should_exit_ = true;
     }
 }

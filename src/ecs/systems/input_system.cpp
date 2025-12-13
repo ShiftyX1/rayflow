@@ -1,4 +1,5 @@
 #include "input_system.hpp"
+#include "../../core/config.hpp"
 #include <raylib.h>
 #include <cmath>
 
@@ -11,16 +12,18 @@ void InputSystem::update(entt::registry& registry, float delta_time) {
 
 void InputSystem::update_player_input(entt::registry& registry) {
     auto view = registry.view<InputState, PlayerTag>();
+
+    const auto& controls = core::Config::instance().controls();
     
     for (auto entity : view) {
         auto& input = view.get<InputState>(entity);
         
         // Movement input (WASD)
         input.move_input = {0.0f, 0.0f};
-        if (IsKeyDown(KEY_W)) input.move_input.y += 1.0f;
-        if (IsKeyDown(KEY_S)) input.move_input.y -= 1.0f;
-        if (IsKeyDown(KEY_A)) input.move_input.x += 1.0f;
-        if (IsKeyDown(KEY_D)) input.move_input.x -= 1.0f;
+        if (IsKeyDown(controls.move_forward)) input.move_input.y += 1.0f;
+        if (IsKeyDown(controls.move_backward)) input.move_input.y -= 1.0f;
+        if (IsKeyDown(controls.move_left)) input.move_input.x += 1.0f;
+        if (IsKeyDown(controls.move_right)) input.move_input.x -= 1.0f;
         
         // Normalize movement input
         float length = std::sqrt(input.move_input.x * input.move_input.x + 
@@ -35,10 +38,10 @@ void InputSystem::update_player_input(entt::registry& registry) {
         input.look_input = {mouse_delta.x, mouse_delta.y};
         
         // Action buttons
-        input.jump_pressed = IsKeyDown(KEY_SPACE);
-        input.sprint_pressed = IsKeyDown(KEY_LEFT_CONTROL);
-        input.primary_action = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-        input.secondary_action = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+        input.jump_pressed = IsKeyDown(controls.jump);
+        input.sprint_pressed = IsKeyDown(controls.sprint);
+        input.primary_action = IsMouseButtonDown(controls.primary_mouse);
+        input.secondary_action = IsMouseButtonDown(controls.secondary_mouse);
     }
 }
 

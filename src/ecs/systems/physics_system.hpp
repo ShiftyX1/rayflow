@@ -20,7 +20,6 @@ public:
 private:
     void apply_gravity(entt::registry& registry, float delta_time);
     void apply_velocity(entt::registry& registry, float delta_time);
-    void resolve_collisions(entt::registry& registry);
     bool check_block_collision(const Vector3& position, const Vector3& size);
     
     voxel::World* world_{nullptr};

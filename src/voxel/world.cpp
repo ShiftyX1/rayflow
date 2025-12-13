@@ -1,4 +1,5 @@
 #include "world.hpp"
+#include <raylib.h>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -28,11 +29,11 @@ float grad(int hash, float x, float y) {
 
 World::World(unsigned int seed) : seed_(seed) {
     init_perlin();
-    std::printf("World created with seed: %u (infinite chunk generation enabled)\n", seed);
+    TraceLog(LOG_INFO, "World created with seed: %u (infinite chunk generation enabled)", seed);
 }
 
 World::~World() {
-    std::printf("World destroyed. Total chunks generated: %zu\n", chunks_.size());
+    TraceLog(LOG_INFO, "World destroyed. Total chunks generated: %zu", chunks_.size());
 }
 
 void World::init_perlin() const {

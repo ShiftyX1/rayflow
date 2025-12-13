@@ -68,6 +68,8 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 set(SOURCES
     src/main.cpp
     src/core/game.cpp
+    src/core/config.cpp
+    src/core/logger.cpp
     src/ecs/components.cpp
     src/ecs/systems/physics_system.cpp
     src/ecs/systems/render_system.cpp

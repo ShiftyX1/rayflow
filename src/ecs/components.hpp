@@ -22,6 +22,12 @@ struct Velocity {
     Vector3 angular{0.0f, 0.0f, 0.0f};
 };
 
+// Previous position (used for stable collision resolution)
+struct PreviousPosition {
+    Vector3 value{0.0f, 0.0f, 0.0f};
+    bool initialized{false};
+};
+
 // AABB collision box
 struct BoxCollider {
     Vector3 size{1.0f, 1.0f, 1.0f};

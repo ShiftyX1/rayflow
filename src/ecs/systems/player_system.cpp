@@ -1,5 +1,6 @@
 #include "player_system.hpp"
 #include "../../voxel/world.hpp"
+#include "../../core/config.hpp"
 #include <raylib.h>
 #include <cmath>
 #include <cstdio>
@@ -93,6 +94,8 @@ Camera3D PlayerSystem::get_camera(entt::registry& registry, entt::entity player)
 
 void PlayerSystem::handle_movement(entt::registry& registry, float delta_time) {
     auto view = registry.view<Transform, Velocity, InputState, PlayerController, FirstPersonCamera>();
+
+    const auto& controls = core::Config::instance().controls();
     
     for (auto entity : view) {
         auto& velocity = view.get<Velocity>(entity);
@@ -123,7 +126,7 @@ void PlayerSystem::handle_movement(entt::registry& registry, float delta_time) {
             if (input.jump_pressed) {
                 velocity.linear.y = speed;
             }
-            if (IsKeyDown(KEY_LEFT_SHIFT)) {
+            if (IsKeyDown(controls.fly_down)) {
                 velocity.linear.y = -speed;
             }
         }
@@ -148,46 +151,50 @@ void PlayerSystem::handle_jumping(entt::registry& registry) {
 
 void PlayerSystem::handle_creative_mode(entt::registry& registry) {
     auto view = registry.view<PlayerController>();
+
+    const auto& controls = core::Config::instance().controls();
     
-    if (IsKeyPressed(KEY_C)) {
+    if (IsKeyPressed(controls.toggle_creative)) {
         for (auto entity : view) {
             auto& player = view.get<PlayerController>(entity);
             player.in_creative_mode = !player.in_creative_mode;
-            std::printf("Creative mode: %s\n", player.in_creative_mode ? "ON" : "OFF");
+            TraceLog(LOG_INFO, "Creative mode: %s", player.in_creative_mode ? "ON" : "OFF");
         }
     }
 }
 
 void PlayerSystem::handle_tool_selection(entt::registry& registry) {
     auto view = registry.view<ToolHolder>();
+
+    const auto& controls = core::Config::instance().controls();
     
     for (auto entity : view) {
         auto& tool = view.get<ToolHolder>(entity);
         
-        if (IsKeyPressed(KEY_ONE)) {
+        if (IsKeyPressed(controls.tool_1)) {
             tool.tool_type = ToolHolder::ToolType::None;
             tool.tool_level = ToolHolder::ToolLevel::Hand;
-            std::printf("Selected: Hand\n");
+            TraceLog(LOG_INFO, "Selected: Hand");
         }
-        if (IsKeyPressed(KEY_TWO)) {
+        if (IsKeyPressed(controls.tool_2)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Wood;
-            std::printf("Selected: Wooden Pickaxe\n");
+            TraceLog(LOG_INFO, "Selected: Wooden Pickaxe");
         }
-        if (IsKeyPressed(KEY_THREE)) {
+        if (IsKeyPressed(controls.tool_3)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Stone;
-            std::printf("Selected: Stone Pickaxe\n");
+            TraceLog(LOG_INFO, "Selected: Stone Pickaxe");
         }
-        if (IsKeyPressed(KEY_FOUR)) {
+        if (IsKeyPressed(controls.tool_4)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Iron;
-            std::printf("Selected: Iron Pickaxe\n");
+            TraceLog(LOG_INFO, "Selected: Iron Pickaxe");
         }
-        if (IsKeyPressed(KEY_FIVE)) {
+        if (IsKeyPressed(controls.tool_5)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Diamond;
-            std::printf("Selected: Diamond Pickaxe\n");
+            TraceLog(LOG_INFO, "Selected: Diamond Pickaxe");
         }
     }
 }
