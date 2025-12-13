@@ -1,20 +1,32 @@
 {
     "folders": [
         {
-            "name": "Source",
-            "path": "src/"
+            "name": "🧑🏻‍💻 Client",
+            "path": "client/"
         },
         {
-            "name": "Project Root",
+            "name": "🖥️ Server",
+            "path": "server/"
+        },
+        {
+            "name": "🎭 Shared",
+            "path": "shared/"
+        },
+        {
+            "name": " Github",
+            "path": ".github/",
+        },
+        {
+            "name": "🏗️ Build",
+            "path": "build/"
+        },
+        {
+            "name": "📁 Project Root",
             "path": ".",
             "exclude": [
                 "build/"
             ]
         },
-        {
-            "name": "Build",
-            "path": "build/"
-        }
     ],
     "settings": {
         "files.exclude": {
