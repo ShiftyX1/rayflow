@@ -1,45 +1,22 @@
 #pragma once
 
-#include <cstdint>
 #include <raylib.h>
+
+#include "../../shared/voxel/block.hpp"
 
 namespace voxel {
 
-// Block types
-enum class BlockType : uint8_t {
-    Air = 0,
-    Stone,
-    Dirt,
-    Grass,
-    Sand,
-    Water,
-    Wood,
-    Leaves,
-    Bedrock,
-    Gravel,
-    Coal,
-    Iron,
-    Gold,
-    Diamond,
-    Count
-};
+// Re-export shared voxel block definitions under the existing client namespace.
+using BlockType = shared::voxel::BlockType;
 
-// Chunk dimensions
-constexpr int CHUNK_WIDTH = 16;
-constexpr int CHUNK_HEIGHT = 256;
-constexpr int CHUNK_DEPTH = 16;
-constexpr int CHUNK_SIZE = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH;
+constexpr int CHUNK_WIDTH = shared::voxel::CHUNK_WIDTH;
+constexpr int CHUNK_HEIGHT = shared::voxel::CHUNK_HEIGHT;
+constexpr int CHUNK_DEPTH = shared::voxel::CHUNK_DEPTH;
+constexpr int CHUNK_SIZE = shared::voxel::CHUNK_SIZE;
 
-// Block helper functions
-inline bool is_solid(BlockType type) {
-    return type != BlockType::Air && type != BlockType::Water;
-}
+inline bool is_solid(BlockType type) { return shared::voxel::util::is_solid(type); }
+inline bool is_transparent(BlockType type) { return shared::voxel::util::is_transparent(type); }
 
-inline bool is_transparent(BlockType type) {
-    return type == BlockType::Air || type == BlockType::Water || type == BlockType::Leaves;
-}
-
-// Single block alias
-using Block = uint8_t;
+using Block = std::uint8_t;
 
 } // namespace voxel

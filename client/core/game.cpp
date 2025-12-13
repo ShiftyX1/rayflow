@@ -129,6 +129,20 @@ void Game::update(float delta_time) {
         session_->poll();
     }
 
+    // Ensure the client render-world matches the authoritative server seed.
+    if (session_) {
+        const auto& helloOpt = session_->server_hello();
+        if (helloOpt.has_value()) {
+            const unsigned int desiredSeed = static_cast<unsigned int>(helloOpt->worldSeed);
+            if (!world_ || world_->get_seed() != desiredSeed) {
+                world_ = std::make_unique<voxel::World>(desiredSeed);
+                physics_system_->set_world(world_.get());
+                player_system_->set_world(world_.get());
+                render_system_->set_world(world_.get());
+            }
+        }
+    }
+
     // Update ECS systems
     input_system_->update(registry_, delta_time);
     player_system_->update(registry_, delta_time);

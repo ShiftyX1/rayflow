@@ -28,6 +28,7 @@ struct ClientHello {
 struct ServerHello {
     ProtocolVersion acceptedVersion{kProtocolVersion};
     std::uint32_t tickRate{30};
+    std::uint32_t worldSeed{0};
 };
 
 struct JoinMatch {

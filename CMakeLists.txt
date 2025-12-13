@@ -74,6 +74,7 @@ target_include_directories(shared_lib PUBLIC ${CMAKE_SOURCE_DIR}/shared)
 
 add_library(server_lib STATIC
     server/core/server.cpp
+    server/voxel/terrain.cpp
 )
 
 target_include_directories(server_lib PUBLIC ${CMAKE_SOURCE_DIR}/server ${CMAKE_SOURCE_DIR}/shared)

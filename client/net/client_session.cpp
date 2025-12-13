@@ -34,7 +34,7 @@ void ClientSession::poll() {
     while (endpoint_->try_recv(msg)) {
         if (std::holds_alternative<shared::proto::ServerHello>(msg)) {
             serverHello_ = std::get<shared::proto::ServerHello>(msg);
-            TraceLog(LOG_INFO, "[net] ServerHello: tickRate=%u", serverHello_->tickRate);
+            TraceLog(LOG_INFO, "[net] ServerHello: tickRate=%u worldSeed=%u", serverHello_->tickRate, serverHello_->worldSeed);
         } else if (std::holds_alternative<shared::proto::JoinAck>(msg)) {
             joinAck_ = std::get<shared::proto::JoinAck>(msg);
             TraceLog(LOG_INFO, "[net] JoinAck: playerId=%u", joinAck_->playerId);

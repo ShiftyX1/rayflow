@@ -7,6 +7,8 @@
 #include <memory>
 #include <thread>
 
+#include "../voxel/terrain.hpp"
+
 namespace server::core {
 
 class Server {
@@ -33,6 +35,9 @@ private:
     std::uint32_t tickRate_{30};
     std::uint64_t serverTick_{0};
 
+    std::uint32_t worldSeed_{0};
+    std::unique_ptr<server::voxel::Terrain> terrain_{};
+
     bool helloSeen_{false};
     bool joined_{false};
     shared::proto::PlayerId playerId_{1};
@@ -41,6 +46,14 @@ private:
     float px_{50.0f};
     float py_{80.0f};
     float pz_{50.0f};
+
+    // Authoritative velocity (server-owned)
+    float vx_{0.0f};
+    float vy_{0.0f};
+    float vz_{0.0f};
+
+    bool onGround_{false};
+    bool lastJumpHeld_{false};
 
     shared::proto::InputFrame lastInput_{};
 };
