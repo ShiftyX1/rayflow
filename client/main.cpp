@@ -3,7 +3,7 @@
 int main() {
     Game game;
     
-    if (!game.init(1280, 720, "RayFlow 3D Engine - ECS Architecture")) {
+    if (!game.init(1280, 720, "Bed Wars")) {
         return -1;
     }
     

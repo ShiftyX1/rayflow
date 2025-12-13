@@ -4,18 +4,66 @@
 
 namespace voxel {
 
+static void face_to_offset(int face, int& ox, int& oy, int& oz) {
+    ox = 0;
+    oy = 0;
+    oz = 0;
+    switch (face) {
+        case 0: ox = 1; break;  // +X
+        case 1: ox = -1; break; // -X
+        case 2: oy = 1; break;  // +Y
+        case 3: oy = -1; break; // -Y
+        case 4: oz = 1; break;  // +Z
+        case 5: oz = -1; break; // -Z
+        default: break;
+    }
+}
+
+std::optional<BlockInteraction::BreakRequest> BlockInteraction::consume_break_request() {
+    auto out = outgoing_break_;
+    outgoing_break_.reset();
+    return out;
+}
+
+std::optional<BlockInteraction::PlaceRequest> BlockInteraction::consume_place_request() {
+    auto out = outgoing_place_;
+    outgoing_place_.reset();
+    return out;
+}
+
 void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vector3& camera_dir,
-                               const ecs::ToolHolder& tool, bool is_breaking, float delta_time) {
+                               const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time) {
     // Perform raycast
     target_ = raycast(world, camera_pos, camera_dir, MAX_REACH_DISTANCE);
+
+    // Clear pending requests if the world already reflects the server result.
+    if (pending_break_.has_value()) {
+        const auto b = world.get_block(pending_break_->x, pending_break_->y, pending_break_->z);
+        if (b == static_cast<Block>(BlockType::Air)) {
+            pending_break_.reset();
+        }
+    }
+    if (pending_place_.has_value()) {
+        const auto b = world.get_block(pending_place_->x, pending_place_->y, pending_place_->z);
+        if (b != static_cast<Block>(BlockType::Air)) {
+            pending_place_.reset();
+        }
+    }
     
     if (!target_.hit) {
         break_progress_ = 0.0f;
         was_breaking_ = false;
+        was_placing_ = false;
         return;
     }
     
     if (is_breaking) {
+        if (pending_break_.has_value() &&
+            pending_break_->x == target_.block_x &&
+            pending_break_->y == target_.block_y &&
+            pending_break_->z == target_.block_z) {
+            was_breaking_ = true;
+        } else {
         if (!was_breaking_) {
             break_progress_ = 0.0f;
         }
@@ -25,18 +73,46 @@ void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vec
             break_progress_ += delta_time / break_time;
             
             if (break_progress_ >= 1.0f) {
-                // Break the block
-                world.set_block(target_.block_x, target_.block_y, target_.block_z, 
-                               static_cast<Block>(BlockType::Air));
+                // Request break on the server (client must not mutate world).
+                BreakRequest req;
+                req.x = target_.block_x;
+                req.y = target_.block_y;
+                req.z = target_.block_z;
+                outgoing_break_ = req;
+                pending_break_ = req;
                 break_progress_ = 0.0f;
             }
         }
         
         was_breaking_ = true;
+        }
     } else {
         break_progress_ = 0.0f;
         was_breaking_ = false;
     }
+
+    // Place is edge-triggered to avoid spamming while holding RMB.
+    if (is_placing && !was_placing_) {
+        int ox = 0, oy = 0, oz = 0;
+        face_to_offset(target_.face, ox, oy, oz);
+        const int px = target_.block_x + ox;
+        const int py = target_.block_y + oy;
+        const int pz = target_.block_z + oz;
+
+        if (!pending_place_.has_value() || pending_place_->x != px || pending_place_->y != py || pending_place_->z != pz) {
+            const auto existing = world.get_block(px, py, pz);
+            if (existing == static_cast<Block>(BlockType::Air)) {
+                PlaceRequest req;
+                req.x = px;
+                req.y = py;
+                req.z = pz;
+                req.block_type = BlockType::Dirt;
+                outgoing_place_ = req;
+                pending_place_ = req;
+            }
+        }
+    }
+    was_placing_ = is_placing;
 }
 
 BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& origin,

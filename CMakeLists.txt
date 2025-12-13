@@ -63,13 +63,28 @@ if (NOT raylib_FOUND)
 endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/client)
+include_directories(${CMAKE_SOURCE_DIR}/shared)
+include_directories(${CMAKE_SOURCE_DIR}/server)
 
-# Source files
-set(SOURCES
-    client/main.cpp
+add_library(shared_lib STATIC
+    shared/transport/local_transport.cpp
+)
+
+target_include_directories(shared_lib PUBLIC ${CMAKE_SOURCE_DIR}/shared)
+
+add_library(server_lib STATIC
+    server/core/server.cpp
+    server/voxel/terrain.cpp
+)
+
+target_include_directories(server_lib PUBLIC ${CMAKE_SOURCE_DIR}/server ${CMAKE_SOURCE_DIR}/shared)
+target_link_libraries(server_lib PUBLIC shared_lib)
+
+add_library(client_lib STATIC
     client/core/game.cpp
     client/core/config.cpp
     client/core/logger.cpp
+    client/net/client_session.cpp
     client/ecs/components.cpp
     client/ecs/systems/physics_system.cpp
     client/ecs/systems/render_system.cpp
@@ -83,7 +98,23 @@ set(SOURCES
     client/renderer/mesh.cpp
 )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+target_include_directories(client_lib PUBLIC ${CMAKE_SOURCE_DIR}/client ${CMAKE_SOURCE_DIR}/shared)
+target_link_libraries(client_lib PUBLIC shared_lib)
+
+# client_lib needs EnTT and raylib headers during compilation
+target_link_libraries(client_lib PUBLIC EnTT::EnTT)
+
+if (raylib_FOUND)
+    target_link_libraries(client_lib PUBLIC raylib)
+else()
+    target_link_libraries(client_lib PUBLIC ${RAYLIB_LIBRARY})
+endif()
+
+add_executable(${PROJECT_NAME}
+    app/main.cpp
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE client_lib server_lib shared_lib)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE EnTT::EnTT)
 

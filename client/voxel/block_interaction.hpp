@@ -4,6 +4,8 @@
 #include "../ecs/components.hpp"
 #include <raylib.h>
 
+#include <optional>
+
 namespace voxel {
 
 // Result of a block raycast
@@ -20,9 +22,22 @@ struct BlockRaycastResult {
 class BlockInteraction {
 public:
     static constexpr float MAX_REACH_DISTANCE = 5.0f;
+
+    struct BreakRequest {
+        int x{0};
+        int y{0};
+        int z{0};
+    };
+
+    struct PlaceRequest {
+        int x{0};
+        int y{0};
+        int z{0};
+        BlockType block_type{BlockType::Air};
+    };
     
     void update(World& world, const Vector3& camera_pos, const Vector3& camera_dir, 
-                const ecs::ToolHolder& tool, bool is_breaking, float delta_time);
+                const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time);
     
     void render_highlight(const Camera3D& camera) const;
     void render_break_overlay(const Camera3D& camera) const;
@@ -30,6 +45,9 @@ public:
     
     const BlockRaycastResult& get_target() const { return target_; }
     float get_break_progress() const { return break_progress_; }
+
+    std::optional<BreakRequest> consume_break_request();
+    std::optional<PlaceRequest> consume_place_request();
     
 private:
     BlockRaycastResult raycast(const World& world, const Vector3& origin, 
@@ -39,6 +57,14 @@ private:
     BlockRaycastResult target_;
     float break_progress_{0.0f};
     bool was_breaking_{false};
+
+    bool was_placing_{false};
+
+    std::optional<BreakRequest> pending_break_;
+    std::optional<PlaceRequest> pending_place_;
+
+    std::optional<BreakRequest> outgoing_break_;
+    std::optional<PlaceRequest> outgoing_place_;
 };
 
 } // namespace voxel

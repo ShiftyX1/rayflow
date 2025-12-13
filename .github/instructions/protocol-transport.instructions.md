@@ -22,9 +22,13 @@ Critical: client always “connects” to the transport abstraction; server alwa
 
 ## Session flow (minimum)
 1. `ClientHello { protocolVersion, clientName, settings }`
-2. `ServerHello { acceptedVersion, tickRate, matchParams, mapId }`
+2. `ServerHello { acceptedVersion, tickRate, worldSeed?, matchParams, mapId }`
 3. `JoinMatch { requestedTeam? }`
 4. `JoinAck { playerId, teamId, spawn, initialInventory }`
+
+Note (current migration state):
+- `worldSeed` is currently used so the client can render the same temporary terrain that the server collides against.
+- This is a temporary bridge; the target BedWars architecture is server-owned map templates + replication (snapshots/events/chunk deltas), not client-side procedural generation.
 
 ## Client -> Server commands (intent, not results)
 Commands represent **player intent** and can be rejected by the server.

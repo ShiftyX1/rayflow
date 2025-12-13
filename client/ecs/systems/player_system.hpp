@@ -14,6 +14,10 @@ class PlayerSystem : public System {
 public:
     void update(entt::registry& registry, float delta_time) override;
     void set_world(voxel::World* world) { world_ = world; }
+
+    // When true, PlayerSystem must not modify authoritative movement/physics state.
+    // Client becomes a replica driven by server snapshots.
+    void set_client_replica_mode(bool enabled) { clientReplicaMode_ = enabled; }
     
     // Create a player entity with all required components
     static entt::entity create_player(entt::registry& registry, const Vector3& spawn_position);
@@ -28,6 +32,7 @@ private:
     void handle_tool_selection(entt::registry& registry);
     
     voxel::World* world_{nullptr};
+    bool clientReplicaMode_{false};
 };
 
 } // namespace ecs

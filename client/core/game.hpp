@@ -4,6 +4,8 @@
 #include <raylib.h>
 #include <memory>
 
+#include "../net/client_session.hpp"
+
 // Forward declarations
 namespace voxel {
     class World;
@@ -21,6 +23,8 @@ class Game {
 public:
     Game();
     ~Game();
+
+    void set_transport_endpoint(std::shared_ptr<shared::transport::IEndpoint> endpoint);
     
     bool init(int width, int height, const char* title);
     void run();
@@ -49,4 +53,6 @@ private:
     // Voxel world
     std::unique_ptr<voxel::World> world_;
     std::unique_ptr<voxel::BlockInteraction> block_interaction_;
+
+    std::unique_ptr<client::net::ClientSession> session_;
 };
