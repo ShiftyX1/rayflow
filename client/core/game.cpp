@@ -141,6 +141,14 @@ void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
         if (const auto* l = std::get_if<ui::SetRaymarchLightingEnabled>(&cmd)) {
             renderer::LightingRaymarch::instance().set_enabled(l->enabled);
         }
+
+        if (const auto* c = std::get_if<ui::SetRaymarchLightConfig>(&cmd)) {
+            renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
+                c->time_of_day_hours,
+                c->use_moon,
+                c->sun_intensity,
+                c->ambient_intensity);
+        }
     }
 }
 

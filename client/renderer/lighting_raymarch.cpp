@@ -85,6 +85,63 @@ void LightingRaymarch::set_settings(const Settings& s) {
     ensure_resources_();
 }
 
+void LightingRaymarch::set_global_light_from_time_of_day(float time_of_day_hours, bool use_moon, float sun_intensity, float ambient_intensity) {
+    // Clamp inputs to sane ranges (debug-driven).
+    float h = time_of_day_hours;
+    if (h < 0.0f) h = 0.0f;
+    if (h > 24.0f) h = 24.0f;
+
+    float sunI = sun_intensity;
+    if (sunI < 0.0f) sunI = 0.0f;
+    if (sunI > 4.0f) sunI = 4.0f;
+
+    float ambI = ambient_intensity;
+    if (ambI < 0.0f) ambI = 0.0f;
+    if (ambI > 2.0f) ambI = 2.0f;
+
+    // Very simple sky model for debug:
+    // - Azimuth rotates over the day.
+    // - Elevation follows a sine curve peaking at noon.
+    // We keep a minimum elevation so shadows remain stable.
+
+    constexpr float kPi = 3.14159265358979323846f;
+
+    const float az = (h / 24.0f) * (2.0f * kPi);
+    const float elev_sin = std::sin(((h - 6.0f) / 12.0f) * kPi); // ~0 at 6/18, 1 at 12
+    float elev = elev_sin;
+
+    if (use_moon) {
+        // Moon roughly opposite the sun.
+        elev = -elev_sin;
+    }
+
+    // Keep some light above horizon so ndl/shadows don't degenerate.
+    const float y = std::max(0.10f, elev);
+    const float x = std::cos(az);
+    const float z = std::sin(az);
+
+    Vector3 dir = { x, y, z };
+    const float len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    if (len > 0.0001f) {
+        dir.x /= len;
+        dir.y /= len;
+        dir.z /= len;
+    } else {
+        dir = { 0.0f, 1.0f, 0.0f };
+    }
+
+    settings_.sun_dir_ws = dir;
+
+    if (use_moon) {
+        // Slightly bluish moonlight.
+        settings_.sun_color = { 0.65f * sunI, 0.70f * sunI, 0.85f * sunI };
+    } else {
+        settings_.sun_color = { 1.00f * sunI, 0.98f * sunI, 0.92f * sunI };
+    }
+
+    settings_.ambient_color = { ambI, ambI, ambI };
+}
+
 int LightingRaymarch::floor_div_(int a, int b) {
     // Floor division for possibly-negative integers.
     // b must be > 0.

@@ -23,7 +23,8 @@ public:
         float step_size_ws{0.5f};
         int max_steps{48};
 
-        Vector3 sun_dir_ws{-0.35f, -1.0f, -0.25f};
+        // Direction from surface towards the light source (sun/moon).
+        Vector3 sun_dir_ws{0.35f, 1.0f, 0.25f};
         Vector3 sun_color{1.0f, 1.0f, 1.0f};
         Vector3 ambient_color{0.35f, 0.35f, 0.35f};
     };
@@ -38,6 +39,9 @@ public:
 
     void set_settings(const Settings& s);
     const Settings& settings() const { return settings_; }
+
+    // Updates only the global light parameters (no texture realloc, no forced volume rebuild).
+    void set_global_light_from_time_of_day(float time_of_day_hours, bool use_moon, float sun_intensity, float ambient_intensity);
 
     // Rebuilds/upload occupancy if needed (rate-limited).
     void update_volume_if_needed(const voxel::World& world, const Vector3& camera_pos_ws);
