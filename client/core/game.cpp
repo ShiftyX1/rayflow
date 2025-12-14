@@ -9,6 +9,7 @@
 #include "../voxel/world.hpp"
 #include "../voxel/block_registry.hpp"
 #include "../voxel/block_interaction.hpp"
+#include "../renderer/lighting_raymarch.hpp"
 #include <cstdio>
 #include <ctime>
 #include <utility>
@@ -33,6 +34,9 @@ bool Game::init(int width, int height, const char* title) {
     core::Logger::instance().init(core::Config::instance().logging());
 
     ui_.init();
+
+    // Client-only rendering feature (safe in offline/online): ray-marched lighting.
+    renderer::LightingRaymarch::instance().init();
 
     if (session_) {
         session_->start_handshake();
@@ -133,6 +137,10 @@ void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
                 registry_.get<ecs::PlayerController>(player_entity_).camera_sensitivity = s->value;
             }
         }
+
+        if (const auto* l = std::get_if<ui::SetRaymarchLightingEnabled>(&cmd)) {
+            renderer::LightingRaymarch::instance().set_enabled(l->enabled);
+        }
     }
 }
 
@@ -225,6 +233,8 @@ void Game::shutdown() {
     physics_system_.reset();
     player_system_.reset();
     render_system_.reset();
+
+    renderer::LightingRaymarch::instance().shutdown();
 
     core::Logger::instance().shutdown();
     
@@ -352,6 +362,9 @@ void Game::update(float delta_time) {
     // Update world (chunk loading/unloading)
     world_->update(transform.position);
 
+    // Update ray-marched lighting occupancy volume (rate-limited).
+    renderer::LightingRaymarch::instance().update_volume_if_needed(*world_, camera.position);
+
     // Build a fresh view-model for render() (debug overlays, stats, etc.)
     refresh_ui_view_model(delta_time);
 }
@@ -363,6 +376,9 @@ void Game::render() {
     Camera3D camera = ecs::PlayerSystem::get_camera(registry_, player_entity_);
     
     BeginMode3D(camera);
+
+    // Update per-frame lighting shader uniforms before drawing voxel chunks.
+    renderer::LightingRaymarch::instance().apply_frame_uniforms();
     
     // Render world
     render_system_->render(registry_, camera);

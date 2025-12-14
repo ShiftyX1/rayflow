@@ -1,5 +1,6 @@
 #include "chunk.hpp"
 #include "block_registry.hpp"
+#include "../renderer/lighting_raymarch.hpp"
 #include <raylib.h>
 #include <cstring>
 #include <vector>
@@ -212,6 +213,11 @@ void Chunk::generate_mesh() {
     
     model_ = LoadModelFromMesh(mesh_);
     model_.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = registry.get_atlas_texture();
+
+    // Bind the client-only lighting shader (safe even if disabled; the shader itself gates behavior).
+    if (renderer::LightingRaymarch::instance().ready()) {
+        model_.materials[0].shader = renderer::LightingRaymarch::instance().shader();
+    }
     
     has_mesh_ = true;
     needs_mesh_update_ = false;

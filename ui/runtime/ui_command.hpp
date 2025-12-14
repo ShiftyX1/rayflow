@@ -8,6 +8,10 @@ struct SetCameraSensitivity {
     float value{0.1f};
 };
 
-using UICommand = std::variant<SetCameraSensitivity>;
+struct SetRaymarchLightingEnabled {
+    bool enabled{false};
+};
+
+using UICommand = std::variant<SetCameraSensitivity, SetRaymarchLightingEnabled>;
 
 } // namespace ui

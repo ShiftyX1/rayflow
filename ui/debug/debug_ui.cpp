@@ -66,7 +66,7 @@ DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& v
     out.state = current;
 
     const int w = 360;
-    const int h = 200;
+    const int h = 240;
     Rectangle panel = { static_cast<float>(vm.screen_width - w - 10), 10.0f, static_cast<float>(w), static_cast<float>(h) };
 
     GuiPanel(panel, "Debug UI (F1)");
@@ -101,6 +101,19 @@ DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& v
         GuiCheckBox(cb, "", &checked);
         GuiLabel(label, "Show net info");
         out.state.show_net_info = checked;
+    }
+
+    row.y += row_h + gap_y + 4.0f;
+
+    // Checkbox: Lighting raymarch shadows
+    {
+        Rectangle cb = { row.x, row.y, check_size, check_size };
+        Rectangle label = { row.x + check_size + label_pad, row.y + 2.0f, row.width - check_size - label_pad, row_h };
+
+        bool checked = out.state.lighting_raymarch_shadows;
+        GuiCheckBox(cb, "", &checked);
+        GuiLabel(label, "Lighting: Raymarch Shadows");
+        out.state.lighting_raymarch_shadows = checked;
     }
 
     row.y += row_h + gap_y + 4.0f;

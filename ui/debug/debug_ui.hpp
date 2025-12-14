@@ -8,6 +8,8 @@ struct DebugUIState {
     bool show_player_info{true};
     bool show_net_info{true};
 
+    bool lighting_raymarch_shadows{false};
+
     float camera_sensitivity{0.1f};
 };
 

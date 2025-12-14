@@ -56,18 +56,29 @@ void UIManager::queue_command_if_changed(float prev, float next) {
     }
 }
 
+void UIManager::queue_command_if_changed(bool prev, bool next) {
+    if (prev != next) {
+        pending_commands_.emplace_back(SetRaymarchLightingEnabled{next});
+    }
+}
+
 void UIManager::render(const UIViewModel& vm) {
 #ifdef DEBUG_UI
     if (debug_mode_ == DebugMode::Interactive) {
         debug::DebugUIState state;
         state.show_player_info = show_player_info_;
         state.show_net_info = show_net_info_;
+        state.lighting_raymarch_shadows = lighting_raymarch_shadows_;
         state.camera_sensitivity = camera_sensitivity_;
 
         debug::DebugUIResult result = debug::draw_interactive(state, vm);
 
         show_player_info_ = result.state.show_player_info;
         show_net_info_ = result.state.show_net_info;
+
+        const bool prev_lighting = lighting_raymarch_shadows_;
+        lighting_raymarch_shadows_ = result.state.lighting_raymarch_shadows;
+        queue_command_if_changed(prev_lighting, lighting_raymarch_shadows_);
 
         const float prev_sens = camera_sensitivity_;
         camera_sensitivity_ = result.state.camera_sensitivity;

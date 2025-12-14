@@ -104,6 +104,7 @@ add_library(client_lib STATIC
     client/voxel/block_interaction.cpp
     client/voxel/texture_atlas.cpp
     client/renderer/mesh.cpp
+    client/renderer/lighting_raymarch.cpp
 
     ui/runtime/ui_manager.cpp
 
@@ -144,6 +145,9 @@ add_custom_target(rayflow_copy_assets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${RAYFLOW_ASSETS_SRC}/textures
         ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/textures
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${RAYFLOW_ASSETS_SRC}/shaders
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${RAYFLOW_ASSETS_SRC}/ui
         ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ui
