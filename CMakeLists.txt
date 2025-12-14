@@ -16,6 +16,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(entt)
 
+FetchContent_Declare(
+    tinyxml2
+    GIT_REPOSITORY https://github.com/leethomason/tinyxml2.git
+    GIT_TAG 10.0.0
+)
+FetchContent_MakeAvailable(tinyxml2)
+
 # Find raylib
 find_package(raylib QUIET)
 
@@ -99,6 +106,9 @@ add_library(client_lib STATIC
     client/renderer/mesh.cpp
 
     ui/runtime/ui_manager.cpp
+
+    ui/runtime/xmlui/css_lite.cpp
+    ui/runtime/xmlui/ui_document.cpp
 )
 
 target_include_directories(client_lib PUBLIC ${CMAKE_SOURCE_DIR}/client ${CMAKE_SOURCE_DIR}/shared)
@@ -115,6 +125,7 @@ target_link_libraries(client_lib PUBLIC shared_lib)
 
 # client_lib needs EnTT and raylib headers during compilation
 target_link_libraries(client_lib PUBLIC EnTT::EnTT)
+target_link_libraries(client_lib PUBLIC tinyxml2)
 
 if (raylib_FOUND)
     target_link_libraries(client_lib PUBLIC raylib)

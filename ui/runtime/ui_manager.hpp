@@ -3,11 +3,14 @@
 #include "ui_frame.hpp"
 #include "ui_view_model.hpp"
 
+#include "xmlui/ui_document.hpp"
+
 namespace ui {
 
 class UIManager {
 public:
     UIManager() = default;
+    ~UIManager();
 
     void init();
 
@@ -35,6 +38,10 @@ private:
 
     std::vector<UICommand> pending_commands_{};
     UIFrameOutput last_frame_{};
+
+    // Player HUD (XML + CSS-lite)
+    xmlui::UIDocument hud_{};
+    bool hud_loaded_{false};
 };
 
 } // namespace ui

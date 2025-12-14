@@ -18,6 +18,10 @@ struct PlayerViewModel {
     float yaw{0.0f};
     float pitch{0.0f};
     float camera_sensitivity{0.1f};
+
+    // HUD stats (client-side view only; authoritative source is server/game state)
+    int health{20};
+    int max_health{20};
 };
 
 struct NetViewModel {

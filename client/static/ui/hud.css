@@ -1,0 +1,10 @@
+HealthBar {
+  gap: 2;
+  width: 32;
+  height: 32;
+}
+
+#hp {
+  anchor: bottom-left;
+  margin: 16;
+}

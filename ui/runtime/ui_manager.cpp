@@ -8,10 +8,17 @@
 
 namespace ui {
 
+UIManager::~UIManager() {
+    hud_.unload();
+}
+
 void UIManager::init() {
 #ifdef DEBUG_UI
     debug::init();
 #endif
+
+    // MVP: load HUD once at startup (no hot reload yet).
+    hud_loaded_ = hud_.load_from_files("ui/hud.xml", "ui/hud.css");
 }
 
 UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
@@ -78,8 +85,9 @@ void UIManager::render(const UIViewModel& vm) {
     }
 #endif
 
-    // Minimal HUD (always-on) can live here later.
-    (void)vm;
+    if (hud_loaded_) {
+        hud_.render(vm);
+    }
 }
 
 } // namespace ui

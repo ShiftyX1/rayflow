@@ -155,6 +155,10 @@ void Game::refresh_ui_view_model(float delta_time) {
     ui_vm_.dt = delta_time;
     ui_vm_.fps = GetFPS();
 
+    // Temporary HUD stats (server-authoritative health not implemented yet).
+    ui_vm_.player.health = 20;
+    ui_vm_.player.max_health = 20;
+
     if (player_entity_ != entt::null) {
         if (registry_.all_of<ecs::Transform>(player_entity_)) {
             ui_vm_.player.position = registry_.get<ecs::Transform>(player_entity_).position;

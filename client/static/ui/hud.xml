@@ -1,0 +1,8 @@
+<UI>
+  <HealthBar
+    id="hp"
+    class="hud-hp"
+    full="textures/ui/health_bar/full.png"
+    half="textures/ui/health_bar/half.png"
+    empty="textures/ui/health_bar/empty.png" />
+</UI>
