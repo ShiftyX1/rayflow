@@ -13,6 +13,10 @@
             "path": "server/"
         },
         {
+            "name": "🎨 UI",
+            "path": "ui/"
+        },
+        {
             "name": "🎭 Shared",
             "path": "shared/"
         },
