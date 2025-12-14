@@ -20,6 +20,8 @@ enum class BlockType : std::uint8_t {
     Iron,
     Gold,
     Diamond,
+    // LS-1: map/editor light marker block. Must stay stable (append-only).
+    Light,
     Count
 };
 
@@ -32,11 +34,11 @@ constexpr int CHUNK_SIZE = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH;
 namespace util {
 
 inline bool is_solid(BlockType type) {
-    return type != BlockType::Air && type != BlockType::Water;
+    return type != BlockType::Air && type != BlockType::Water && type != BlockType::Light;
 }
 
 inline bool is_transparent(BlockType type) {
-    return type == BlockType::Air || type == BlockType::Water || type == BlockType::Leaves;
+    return type == BlockType::Air || type == BlockType::Water || type == BlockType::Leaves || type == BlockType::Light;
 }
 
 } // namespace util

@@ -4,6 +4,7 @@
 #include <raylib.h>
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace voxel {
 
@@ -54,6 +55,9 @@ private:
     
     Mesh mesh_{};
     Model model_{};
+
+    // LS-1: non-solid Light blocks are rendered as separate markers.
+    std::vector<Vector3> light_markers_ws_{};
 };
 
 } // namespace voxel

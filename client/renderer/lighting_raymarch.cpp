@@ -93,11 +93,11 @@ void LightingRaymarch::set_global_light_from_time_of_day(float time_of_day_hours
 
     float sunI = sun_intensity;
     if (sunI < 0.0f) sunI = 0.0f;
-    if (sunI > 4.0f) sunI = 4.0f;
+    if (sunI > 10.0f) sunI = 10.0f;
 
     float ambI = ambient_intensity;
     if (ambI < 0.0f) ambI = 0.0f;
-    if (ambI > 2.0f) ambI = 2.0f;
+    if (ambI > 5.0f) ambI = 5.0f;
 
     // Very simple sky model for debug:
     // - Azimuth rotates over the day.

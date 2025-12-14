@@ -105,6 +105,7 @@ add_library(client_lib STATIC
     client/voxel/texture_atlas.cpp
     client/renderer/mesh.cpp
     client/renderer/lighting_raymarch.cpp
+    client/renderer/skybox.cpp
 
     ui/runtime/ui_manager.cpp
 

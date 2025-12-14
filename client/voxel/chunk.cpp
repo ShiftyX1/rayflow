@@ -90,6 +90,8 @@ void Chunk::set_block(int x, int y, int z, Block type) {
 
 void Chunk::generate_mesh() {
     cleanup_mesh();
+
+    light_markers_ws_.clear();
     
     std::vector<float> vertices;
     std::vector<float> texcoords;
@@ -144,6 +146,16 @@ void Chunk::generate_mesh() {
                 if (block == static_cast<Block>(BlockType::Air)) continue;
                 
                 auto block_type = static_cast<BlockType>(block);
+
+                // LS-1: Light is a marker-only block (no cube mesh).
+                if (block_type == BlockType::Light) {
+                    light_markers_ws_.push_back(Vector3{
+                        world_position_.x + static_cast<float>(x) + 0.5f,
+                        static_cast<float>(y) + 0.5f,
+                        world_position_.z + static_cast<float>(z) + 0.5f,
+                    });
+                    continue;
+                }
                 
                 // Check each face
                 int neighbors[6][3] = {
@@ -226,6 +238,12 @@ void Chunk::generate_mesh() {
 void Chunk::render() const {
     if (has_mesh_) {
         DrawModel(model_, {0, 0, 0}, 1.0f, WHITE);
+    }
+
+    if (!light_markers_ws_.empty()) {
+        for (const auto& p : light_markers_ws_) {
+            DrawSphere(p, 0.18f, YELLOW);
+        }
     }
 }
 

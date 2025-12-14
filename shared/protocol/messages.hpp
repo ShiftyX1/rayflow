@@ -96,6 +96,35 @@ struct ActionRejected {
     RejectReason reason{RejectReason::Unknown};
 };
 
+// Client -> Server: request server-side export of a finite map template.
+// Bounds are provided in chunk coordinates (inclusive).
+struct TryExportMap {
+    std::uint32_t seq{0};
+    std::string mapId;
+    std::uint32_t version{0};
+    int chunkMinX{0};
+    int chunkMinZ{0};
+    int chunkMaxX{0};
+    int chunkMaxZ{0};
+
+    // MV-1: render-only environment settings embedded into the exported template.
+    // Keep as plain fields to avoid cross-layer dependencies.
+    // MV-1: 0=None, 1=Day, 2=Night. Extended: values >2 select Panorama_Sky_XX by numeric id.
+    std::uint8_t skyboxKind{1};
+    float timeOfDayHours{12.0f};
+    bool useMoon{false};
+    float sunIntensity{1.0f};
+    float ambientIntensity{0.25f};
+};
+
+// Server -> Client: result of TryExportMap.
+struct ExportResult {
+    std::uint32_t seq{0};
+    bool ok{false};
+    RejectReason reason{RejectReason::Unknown};
+    std::string path;
+};
+
 using Message = std::variant<
     ClientHello,
     ServerHello,

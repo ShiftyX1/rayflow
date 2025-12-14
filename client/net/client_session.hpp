@@ -20,6 +20,18 @@ public:
 
     void send_try_break_block(int x, int y, int z);
     void send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType);
+    void send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType);
+    void send_try_export_map(const std::string& mapId,
+                             std::uint32_t version,
+                             int chunkMinX,
+                             int chunkMinZ,
+                             int chunkMaxX,
+                             int chunkMaxZ,
+                             std::uint8_t skyboxKind,
+                             float timeOfDayHours,
+                             bool useMoon,
+                             float sunIntensity,
+                             float ambientIntensity);
 
     void set_on_block_placed(std::function<void(const shared::proto::BlockPlaced&)> cb) { onBlockPlaced_ = std::move(cb); }
     void set_on_block_broken(std::function<void(const shared::proto::BlockBroken&)> cb) { onBlockBroken_ = std::move(cb); }

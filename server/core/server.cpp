@@ -495,6 +495,183 @@ void Server::handle_message_(shared::proto::Message& msg) {
         endpoint_->send(std::move(ev));
         return;
     }
+
+    if (std::holds_alternative<shared::proto::TrySetBlock>(msg)) {
+        const auto& req = std::get<shared::proto::TrySetBlock>(msg);
+        logf(serverTick_, "rx", "TrySetBlock seq=%u pos=(%d,%d,%d) type=%u",
+             req.seq,
+             req.x,
+             req.y,
+             req.z,
+             static_cast<unsigned>(req.blockType));
+
+        if (!joined_ || !editorMode_) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::NotAllowed;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (not editor)", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (terrain_ && terrain_->has_map_template() && !terrain_->is_within_template_bounds(req.x, req.y, req.z)) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::OutOfRange;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (outside bounds)", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (req.y < 0 || req.y >= shared::voxel::CHUNK_HEIGHT) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (bad y)", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        // Apply authoritative edit.
+        const auto prev = terrain_->get_block(req.x, req.y, req.z);
+        terrain_->set_block(req.x, req.y, req.z, req.blockType);
+        const auto cur = terrain_->get_block(req.x, req.y, req.z);
+
+        if (cur == prev) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (no-op)", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (cur == shared::voxel::BlockType::Air) {
+            shared::proto::BlockBroken ev;
+            ev.x = req.x;
+            ev.y = req.y;
+            ev.z = req.z;
+            logf(serverTick_, "tx", "BlockBroken (editor) pos=(%d,%d,%d)", ev.x, ev.y, ev.z);
+            endpoint_->send(std::move(ev));
+        } else {
+            shared::proto::BlockPlaced ev;
+            ev.x = req.x;
+            ev.y = req.y;
+            ev.z = req.z;
+            ev.blockType = cur;
+            logf(serverTick_, "tx", "BlockPlaced (editor) pos=(%d,%d,%d) type=%u", ev.x, ev.y, ev.z, static_cast<unsigned>(ev.blockType));
+            endpoint_->send(std::move(ev));
+        }
+        return;
+    }
+
+    if (std::holds_alternative<shared::proto::TryExportMap>(msg)) {
+        const auto& req = std::get<shared::proto::TryExportMap>(msg);
+        logf(serverTick_, "rx", "TryExportMap seq=%u mapId=%s version=%u chunks=[(%d,%d)-(%d,%d)]",
+             req.seq,
+             req.mapId.c_str(),
+             req.version,
+             req.chunkMinX, req.chunkMinZ, req.chunkMaxX, req.chunkMaxZ);
+
+        shared::proto::ExportResult result;
+        result.seq = req.seq;
+
+        if (!joined_) {
+            result.ok = false;
+            result.reason = shared::proto::RejectReason::NotAllowed;
+            logf(serverTick_, "tx", "ExportResult seq=%u ok=0 reason=%u", result.seq, static_cast<unsigned>(result.reason));
+            endpoint_->send(std::move(result));
+            return;
+        }
+
+        if (!is_valid_map_id(req.mapId) || req.version == 0) {
+            result.ok = false;
+            result.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ExportResult seq=%u ok=0 reason=%u", result.seq, static_cast<unsigned>(result.reason));
+            endpoint_->send(std::move(result));
+            return;
+        }
+
+        if (req.chunkMinX > req.chunkMaxX || req.chunkMinZ > req.chunkMaxZ) {
+            result.ok = false;
+            result.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ExportResult seq=%u ok=0 reason=%u (bad bounds)", result.seq, static_cast<unsigned>(result.reason));
+            endpoint_->send(std::move(result));
+            return;
+        }
+
+        const std::filesystem::path mapsDir = std::filesystem::path("maps");
+        std::error_code ec;
+        std::filesystem::create_directories(mapsDir, ec);
+        if (ec) {
+            result.ok = false;
+            result.reason = shared::proto::RejectReason::Unknown;
+            logf(serverTick_, "tx", "ExportResult seq=%u ok=0 reason=%u (mkdir failed)", result.seq, static_cast<unsigned>(result.reason));
+            endpoint_->send(std::move(result));
+            return;
+        }
+
+        const auto fileName = req.mapId + "_v" + std::to_string(req.version) + ".rfmap";
+        const auto outPath = mapsDir / fileName;
+
+        shared::maps::ExportRequest exportReq;
+        exportReq.mapId = req.mapId;
+        exportReq.version = req.version;
+        exportReq.bounds.chunkMinX = req.chunkMinX;
+        exportReq.bounds.chunkMinZ = req.chunkMinZ;
+        exportReq.bounds.chunkMaxX = req.chunkMaxX;
+        exportReq.bounds.chunkMaxZ = req.chunkMaxZ;
+
+        // MV-1: embed visual settings (render-only).
+        exportReq.visualSettings = shared::maps::default_visual_settings();
+        {
+            const std::uint8_t k = req.skyboxKind;
+            // MV-1 spec defined 0=None, 1=Day, 2=Night. The editor picker may provide additional
+            // numeric IDs that map to Panorama_Sky_XX textures; keep it bounded.
+            constexpr std::uint8_t kMaxSkyboxId = 25u;
+            const std::uint8_t clamped = (k > kMaxSkyboxId) ? kMaxSkyboxId : k;
+            exportReq.visualSettings.skyboxKind = static_cast<shared::maps::MapTemplate::SkyboxKind>(clamped);
+
+            float t = req.timeOfDayHours;
+            if (t < 0.0f) t = 0.0f;
+            if (t > 24.0f) t = 24.0f;
+            exportReq.visualSettings.timeOfDayHours = t;
+
+            exportReq.visualSettings.useMoon = req.useMoon;
+
+            float sunI = req.sunIntensity;
+            if (sunI < 0.0f) sunI = 0.0f;
+            if (sunI > 10.0f) sunI = 10.0f;
+            exportReq.visualSettings.sunIntensity = sunI;
+
+            float ambI = req.ambientIntensity;
+            if (ambI < 0.0f) ambI = 0.0f;
+            if (ambI > 5.0f) ambI = 5.0f;
+            exportReq.visualSettings.ambientIntensity = ambI;
+        }
+
+        std::string err;
+        const bool ok = shared::maps::write_rfmap(
+            outPath,
+            exportReq,
+            [this](int x, int y, int z) { return terrain_->get_block(x, y, z); },
+            &err);
+
+        if (!ok) {
+            result.ok = false;
+            result.reason = shared::proto::RejectReason::Unknown;
+            logf(serverTick_, "tx", "ExportResult seq=%u ok=0 reason=%u (write failed: %s)", result.seq, static_cast<unsigned>(result.reason), err.c_str());
+            endpoint_->send(std::move(result));
+            return;
+        }
+
+        result.ok = true;
+        result.reason = shared::proto::RejectReason::Unknown;
+        result.path = outPath.generic_string();
+        logf(serverTick_, "tx", "ExportResult seq=%u ok=1 path=%s", result.seq, result.path.c_str());
+        endpoint_->send(std::move(result));
+        return;
+    }
 }
 
 } // namespace server::core

@@ -10,6 +10,7 @@
 #include "../voxel/block_registry.hpp"
 #include "../voxel/block_interaction.hpp"
 #include "../renderer/lighting_raymarch.hpp"
+#include "../renderer/skybox.hpp"
 #include <cstdio>
 #include <ctime>
 #include <utility>
@@ -37,6 +38,7 @@ bool Game::init(int width, int height, const char* title) {
 
     // Client-only rendering feature (safe in offline/online): ray-marched lighting.
     renderer::LightingRaymarch::instance().init();
+    renderer::Skybox::instance().init();
 
     if (session_) {
         session_->start_handshake();
@@ -243,6 +245,7 @@ void Game::shutdown() {
     render_system_.reset();
 
     renderer::LightingRaymarch::instance().shutdown();
+    renderer::Skybox::instance().shutdown();
 
     core::Logger::instance().shutdown();
     
@@ -288,6 +291,37 @@ void Game::update(float delta_time) {
                 physics_system_->set_world(world_.get());
                 player_system_->set_world(world_.get());
                 render_system_->set_world(world_.get());
+            }
+
+            // MT-1: if server advertises a finite map template, load it locally for rendering.
+            if (helloOpt->hasMapTemplate && world_) {
+                const auto* cur = world_->map_template();
+                const bool mismatch = (!cur) || cur->mapId != helloOpt->mapId || cur->version != helloOpt->mapVersion;
+                if (mismatch) {
+                    const std::string fileName = helloOpt->mapId + "_v" + std::to_string(helloOpt->mapVersion) + ".rfmap";
+                    const std::filesystem::path path = std::filesystem::path("maps") / fileName;
+
+                    shared::maps::MapTemplate map;
+                    std::string err;
+                    if (shared::maps::read_rfmap(path, &map, &err)) {
+                        world_->set_map_template(std::move(map));
+
+                        if (const auto* mt = world_->map_template()) {
+                            const auto& vs = mt->visualSettings;
+                            renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
+                                vs.timeOfDayHours,
+                                vs.useMoon,
+                                vs.sunIntensity,
+                                vs.ambientIntensity);
+                            renderer::LightingRaymarch::instance().set_enabled(true);
+                            renderer::Skybox::instance().set_kind(vs.skyboxKind);
+                        }
+
+                        TraceLog(LOG_INFO, "[map] loaded template: %s", path.generic_string().c_str());
+                    } else {
+                        TraceLog(LOG_WARNING, "[map] failed to load template %s: %s", path.generic_string().c_str(), err.c_str());
+                    }
+                }
             }
         }
     }
@@ -379,11 +413,13 @@ void Game::update(float delta_time) {
 
 void Game::render() {
     BeginDrawing();
-    ClearBackground(Color{135, 206, 235, 255});  // Sky blue
+    ClearBackground(BLACK);
     
     Camera3D camera = ecs::PlayerSystem::get_camera(registry_, player_entity_);
     
     BeginMode3D(camera);
+
+    renderer::Skybox::instance().draw(camera);
 
     // Update per-frame lighting shader uniforms before drawing voxel chunks.
     renderer::LightingRaymarch::instance().apply_frame_uniforms();

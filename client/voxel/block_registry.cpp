@@ -109,6 +109,11 @@ void BlockRegistry::register_blocks() {
     blocks_[static_cast<size_t>(BlockType::Diamond)] = {
         "Diamond Ore", true, false, 3.0f, 3, {50, 50, 50, 50, 50, 50}
     };
+
+    // Light (LS-1 marker block). Rendered as a marker (not a textured cube).
+    blocks_[static_cast<size_t>(BlockType::Light)] = {
+        "Light", false, true, 0.0f, 0, {0, 0, 0, 0, 0, 0}
+    };
 }
 
 const BlockInfo& BlockRegistry::get_block_info(BlockType type) const {

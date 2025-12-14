@@ -48,6 +48,43 @@ void ClientSession::send_try_place_block(int x, int y, int z, shared::voxel::Blo
     endpoint_->send(std::move(req));
 }
 
+void ClientSession::send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType) {
+    shared::proto::TrySetBlock req;
+    req.seq = ++actionSeq_;
+    req.x = x;
+    req.y = y;
+    req.z = z;
+    req.blockType = blockType;
+    endpoint_->send(std::move(req));
+}
+
+void ClientSession::send_try_export_map(const std::string& mapId,
+                                       std::uint32_t version,
+                                       int chunkMinX,
+                                       int chunkMinZ,
+                                       int chunkMaxX,
+                                       int chunkMaxZ,
+                                       std::uint8_t skyboxKind,
+                                       float timeOfDayHours,
+                                       bool useMoon,
+                                       float sunIntensity,
+                                       float ambientIntensity) {
+    shared::proto::TryExportMap req;
+    req.seq = ++actionSeq_;
+    req.mapId = mapId;
+    req.version = version;
+    req.chunkMinX = chunkMinX;
+    req.chunkMinZ = chunkMinZ;
+    req.chunkMaxX = chunkMaxX;
+    req.chunkMaxZ = chunkMaxZ;
+    req.skyboxKind = skyboxKind;
+    req.timeOfDayHours = timeOfDayHours;
+    req.useMoon = useMoon;
+    req.sunIntensity = sunIntensity;
+    req.ambientIntensity = ambientIntensity;
+    endpoint_->send(std::move(req));
+}
+
 void ClientSession::poll() {
     shared::proto::Message msg;
     while (endpoint_->try_recv(msg)) {
