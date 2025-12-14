@@ -41,6 +41,31 @@ Physically split code into 3 layers:
 - No procedural infinite world. Maps are **loaded from templates/prefabs** (schematic-like format).
 - Match restart is done by **re-instantiating the map from template**.
 
+## Client rendering systems
+
+### Block interaction (`client/voxel/block_interaction.hpp`)
+- `BlockInteraction` handles:
+  - Raycasting from camera to find targeted block
+  - Break progress accumulation (client-side visual only)
+  - Rendering block highlight wireframe
+  - Rendering break overlay with stage textures
+  - Emitting `BreakRequest` / `PlaceRequest` for server validation
+- Break overlay textures:
+  - Located at `textures/destroy_stages/destroy_stage_0..9.png`
+  - 16x16 RGBA PNGs with transparent background and black crack patterns
+  - Loaded via `BlockInteraction::init()`, released via `BlockInteraction::destroy()`
+  - Rendered using `rlSetTexture` + `RL_QUADS` for each cube face
+
+### Block registry (`client/voxel/block_registry.hpp`)
+- Singleton managing block type metadata and texture atlas
+- Atlas: `textures/terrain.png` (16x16 tiles)
+- Provides `get_block_info()` for hardness, tool requirements, texture indices
+
+### Texture loading convention
+- All textures are loaded relative to executable working directory
+- Use raylib's `LoadTexture()` with relative paths
+- Client must call `init()` before use and `destroy()` on shutdown
+
 ## Anti-scope creep
 - Do not implement prediction/lag-compensation until migration Stage C is done.
 - Do not add a special singleplayer branch with direct calls into server code.

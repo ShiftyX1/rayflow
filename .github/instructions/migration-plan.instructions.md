@@ -15,6 +15,13 @@ Current bridge (allowed during Stage B):
 - Seed-synced procedural terrain may be used temporarily so server collisions match client rendering.
 - Server must be the source of the seed (`ServerHello.worldSeed`).
 
+### Completed in Stage B:
+- Server-authoritative movement/physics (gravity, jump, AABB collisions).
+- Client sends `InputFrame` with movement intent; server responds with `StateSnapshot`.
+- Block break/place flow: client sends request, server validates, server broadcasts events.
+- `BlockInteraction` on client: raycast + break progress + overlay rendering + request emission.
+- Block break overlay textures loaded separately (`destroy_stage_*.png`), not from atlas.
+
 Target direction (post-bridge):
 - Replace procedural terrain with map templates/prefabs owned by the server.
 - Client should ultimately render from replication (snapshots/events/chunk deltas), not generate authoritative terrain.

@@ -27,7 +27,12 @@ All gameplay below must live in `server/` and be exposed to clients only via pro
   - allowed block types
   - per-player/per-team placed-block limits
   - “can place” rules (no overlap, within bounds, not inside protected zones)
-
+## Block interaction client-side (rendering only)
+- Client tracks break progress locally for visual feedback (progress bar, overlay).
+- Break progress overlay uses 10-stage textures (`destroy_stage_0..9.png`).
+- Actual block removal happens only after server confirms via `BlockBroken` event.
+- Client sends `TryBreakBlock` / `TryPlaceBlock` requests; server validates and responds.
+- On `ActionRejected`, client resets break progress via `BlockInteraction::on_action_rejected()`.
 ## Match reset
 - Prefer: destroy current match instance and recreate from the same map template.
 - No persistent world state between sessions.

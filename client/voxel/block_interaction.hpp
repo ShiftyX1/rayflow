@@ -5,6 +5,7 @@
 #include <raylib.h>
 
 #include <optional>
+#include <array>
 
 namespace voxel {
 
@@ -22,6 +23,7 @@ struct BlockRaycastResult {
 class BlockInteraction {
 public:
     static constexpr float MAX_REACH_DISTANCE = 5.0f;
+    static constexpr int DESTROY_STAGE_COUNT = 10;
 
     struct BreakRequest {
         int x{0};
@@ -35,6 +37,9 @@ public:
         int z{0};
         BlockType block_type{BlockType::Air};
     };
+
+    bool init();
+    void destroy();
     
     void update(World& world, const Vector3& camera_pos, const Vector3& camera_dir, 
                 const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time);
@@ -67,6 +72,10 @@ private:
 
     std::optional<BreakRequest> outgoing_break_;
     std::optional<PlaceRequest> outgoing_place_;
+
+    // Destroy stage textures
+    std::array<Texture2D, DESTROY_STAGE_COUNT> destroy_textures_{};
+    bool textures_loaded_{false};
 };
 
 } // namespace voxel

@@ -1,8 +1,37 @@
 #include "block_interaction.hpp"
 #include "block_registry.hpp"
 #include <cmath>
+#include <rlgl.h>
+#include <cstdio>
 
 namespace voxel {
+
+bool BlockInteraction::init() {
+    if (textures_loaded_) return true;
+
+    for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
+        char path[128];
+        snprintf(path, sizeof(path), "textures/destroy_stages/destroy_stage_%d.png", i);
+        destroy_textures_[i] = LoadTexture(path);
+        if (destroy_textures_[i].id == 0) {
+            TraceLog(LOG_ERROR, "Failed to load destroy texture: %s", path);
+            return false;
+        }
+    }
+
+    textures_loaded_ = true;
+    TraceLog(LOG_INFO, "Destroy stage textures loaded");
+    return true;
+}
+
+void BlockInteraction::destroy() {
+    if (textures_loaded_) {
+        for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
+            UnloadTexture(destroy_textures_[i]);
+        }
+        textures_loaded_ = false;
+    }
+}
 
 static void face_to_offset(int face, int& ox, int& oy, int& oz) {
     ox = 0;
@@ -221,18 +250,85 @@ void BlockInteraction::render_highlight(const Camera3D& camera) const {
 
 void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
     if (!target_.hit || break_progress_ <= 0.0f) return;
+    if (!textures_loaded_) return;
+
+    (void)camera;
+
+    // Calculate stage (0-9)
+    int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
+    if (stage < 0) stage = 0;
+    if (stage > 9) stage = 9;
+
+    const Texture2D& tex = destroy_textures_[stage];
     
     Vector3 pos = {
         static_cast<float>(target_.block_x) + 0.5f,
         static_cast<float>(target_.block_y) + 0.5f,
         static_cast<float>(target_.block_z) + 0.5f
     };
+
+    // Use raylib's DrawCubeTexture - slightly larger than block to avoid z-fighting
+    constexpr float size = 1.002f;
     
-    // Draw breaking progress overlay
-    unsigned char alpha = static_cast<unsigned char>(break_progress_ * 200);
-    Color overlay = {0, 0, 0, alpha};
+    float x = pos.x;
+    float y = pos.y;
+    float z = pos.z;
+    float width = size;
+    float height = size;
+    float length = size;
+
+    float texWidth = static_cast<float>(tex.width);
+    float texHeight = static_cast<float>(tex.height);
+
+    rlSetTexture(tex.id);
+
+    rlBegin(RL_QUADS);
+    rlColor4ub(255, 255, 255, 255);
     
-    DrawCube(pos, 1.01f, 1.01f, 1.01f, overlay);
+    // Front Face
+    rlNormal3f(0.0f, 0.0f, 1.0f);
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
+    
+    // Back Face
+    rlNormal3f(0.0f, 0.0f, -1.0f);
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
+    
+    // Top Face
+    rlNormal3f(0.0f, 1.0f, 0.0f);
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
+    
+    // Bottom Face
+    rlNormal3f(0.0f, -1.0f, 0.0f);
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
+    
+    // Right Face
+    rlNormal3f(1.0f, 0.0f, 0.0f);
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
+    
+    // Left Face
+    rlNormal3f(-1.0f, 0.0f, 0.0f);
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
+    
+    rlEnd();
+    rlSetTexture(0);
 }
 
 void BlockInteraction::render_crosshair(int screen_width, int screen_height) {

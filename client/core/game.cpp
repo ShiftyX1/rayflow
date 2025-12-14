@@ -64,6 +64,7 @@ bool Game::init(int width, int height, const char* title) {
     
     // Create block interaction
     block_interaction_ = std::make_unique<voxel::BlockInteraction>();
+    block_interaction_->init();
     
     // Initialize systems
     input_system_ = std::make_unique<ecs::InputSystem>();
@@ -209,6 +210,9 @@ void Game::run() {
 }
 
 void Game::shutdown() {
+    if (block_interaction_) {
+        block_interaction_->destroy();
+    }
     block_interaction_.reset();
     world_.reset();
     voxel::BlockRegistry::instance().destroy();

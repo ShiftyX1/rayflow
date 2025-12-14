@@ -12,6 +12,8 @@ This repository is a voxel-based BedWars-like game.
 - Rendering is **client-only**:
 	- Client interpolates to authoritative positions and renders.
 	- Client does **not** run local physics for the player.
+	- Block break overlay uses separate textures (`textures/destroy_stages/destroy_stage_*.png`).
+	- `BlockInteraction` manages raycasting, break progress, and overlay rendering.
 - World generation is currently a **temporary seed-based terrain placeholder** for migration:
 	- Server chooses a `worldSeed` and includes it in `ServerHello`.
 	- Client uses that seed to render the same terrain as the server collides against.

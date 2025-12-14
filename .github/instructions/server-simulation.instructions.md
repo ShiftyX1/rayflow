@@ -24,6 +24,21 @@ Every action must be validated on the server:
 - Hit: distance/LOS, attack cooldown, target validity.
 - Buy/upgrade: currency check, shop availability, team upgrades.
 
+### Block break flow (current implementation)
+1. Client raycast finds target block.
+2. Client accumulates `break_progress_` locally (for visual feedback only).
+3. When progress >= 1.0, client sends `TryBreakBlock { x, y, z }` via transport.
+4. Server validates: distance, block type, protection rules, tool level.
+5. Server either:
+   - Broadcasts `BlockBroken { x, y, z, brokenBy }` event → client removes block from `ClientWorld`.
+   - Sends `ActionRejected { seq, reason }` → client calls `BlockInteraction::on_action_rejected()` to reset progress.
+
+### Block place flow (current implementation)
+1. Client raycast determines placement position (target block + face offset).
+2. On right-click, client sends `TryPlaceBlock { x, y, z, blockType }`.
+3. Server validates: position empty, within bounds, player has block, not protected zone.
+4. Server either broadcasts `BlockPlaced` or sends `ActionRejected`.
+
 ## World ownership
 - Server owns `World` and all rules.
 - Server is responsible for generating replication outputs: snapshots + events.
