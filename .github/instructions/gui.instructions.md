@@ -43,8 +43,8 @@ Debug output must support **two mutually exclusive modes**:
 
 # Player UI (custom XML UI)
 - UI definition
-	- Layout lives in assets/ui/*.xml
-	- Styles live in assets/ui/*.css (CSS-lite: type/class/id selectors only)
+	- Layout lives in `client/static/ui/*.xml` and is copied to `build/ui/*.xml` on build.
+	- Styles live in `client/static/ui/*.css` and are copied to `build/ui/*.css` on build.
 	- Optional scripts later (assets/ui/*.lua) but not required for MVP.
 - Retained tree
 	- UI is a persistent tree of nodes (Panel, Text, Button, Image, Row, Column, Spacer…).
@@ -56,6 +56,32 @@ Debug output must support **two mutually exclusive modes**:
 	- fixed sizes + “grow”
 	- anchors (top/center/bottom, left/center/right)
 	- Avoid full HTML/CSS flexbox/grid complexity.
+
+## Current implementation (Dec 2025)
+
+### Runtime
+- Implemented minimal XML + CSS-lite runtime in `ui/runtime/xmlui/`.
+- XML parsing: `tinyxml2`.
+- Style selectors supported: type (`HealthBar`), id (`#hp`), class (`.hud-hp`).
+- CSS-lite properties supported (MVP):
+	- `width`, `height` (integers; used for scaling UI sprites)
+	- `gap` (integer)
+	- `margin`, `padding` (integers; currently `margin` is used for anchored placement)
+	- `anchor` values: top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right
+
+### Current player HUD specification
+- Entry files:
+	- `ui/hud.xml`
+	- `ui/hud.css`
+- Nodes:
+	- `HealthBar` (only player-facing node implemented so far)
+		- Attributes: `full`, `half`, `empty` (texture paths)
+		- Renders a heart row (2 HP per heart) using `UIViewModel::player.health/max_health`
+		- Supports scaling via CSS `width/height`
+- Assets:
+	- `textures/ui/health_bar/full.png`
+	- `textures/ui/health_bar/half.png`
+	- `textures/ui/health_bar/empty.png`
 - Rendering
 	- Use raylib draw calls only (no embedded browser/CEF).
 	- Text rendering must be cached where possible (glyph/layout caching) to avoid per-frame heavy work.

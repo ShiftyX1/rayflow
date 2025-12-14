@@ -14,6 +14,11 @@ This repository is a voxel-based BedWars-like game.
 	- Client does **not** run local physics for the player.
 	- Block break overlay uses separate textures (`textures/destroy_stages/destroy_stage_*.png`).
 	- `BlockInteraction` manages raycasting, break progress, and overlay rendering.
+	- Player HUD is a custom retained-mode UI (XML + CSS-lite) rendered via raylib:
+		- Runtime lives in `ui/runtime/xmlui/` and uses `tinyxml2`.
+		- HUD loads from `ui/hud.xml` + `ui/hud.css` (copied from `client/static/ui/` into `build/ui/`).
+		- HP bar is currently implemented as a `HealthBar` node using textures in `textures/ui/health_bar/`.
+		- `UIViewModel::player.health/max_health` exist for HUD; currently filled with a temporary placeholder.
 - World generation is currently a **temporary seed-based terrain placeholder** for migration:
 	- Server chooses a `worldSeed` and includes it in `ServerHello`.
 	- Client uses that seed to render the same terrain as the server collides against.

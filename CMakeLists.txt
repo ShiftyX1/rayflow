@@ -139,6 +139,18 @@ add_executable(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} PRIVATE client_lib server_lib shared_lib)
 
+set(RAYFLOW_ASSETS_SRC ${CMAKE_SOURCE_DIR}/client/static)
+add_custom_target(rayflow_copy_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${RAYFLOW_ASSETS_SRC}/textures
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/textures
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${RAYFLOW_ASSETS_SRC}/ui
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ui
+    VERBATIM
+)
+add_dependencies(${PROJECT_NAME} rayflow_copy_assets)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE EnTT::EnTT)
 
 if (raylib_FOUND)
