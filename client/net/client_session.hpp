@@ -16,7 +16,7 @@ public:
     void start_handshake();
     void poll();
 
-    void send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint);
+    void send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint, bool camUp = false, bool camDown = false);
 
     void send_try_break_block(int x, int y, int z);
     void send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType);
@@ -36,6 +36,7 @@ public:
     void set_on_block_placed(std::function<void(const shared::proto::BlockPlaced&)> cb) { onBlockPlaced_ = std::move(cb); }
     void set_on_block_broken(std::function<void(const shared::proto::BlockBroken&)> cb) { onBlockBroken_ = std::move(cb); }
     void set_on_action_rejected(std::function<void(const shared::proto::ActionRejected&)> cb) { onActionRejected_ = std::move(cb); }
+    void set_on_export_result(std::function<void(const shared::proto::ExportResult&)> cb) { onExportResult_ = std::move(cb); }
 
     const std::optional<shared::proto::ServerHello>& server_hello() const { return serverHello_; }
     const std::optional<shared::proto::JoinAck>& join_ack() const { return joinAck_; }
@@ -54,6 +55,7 @@ private:
     std::function<void(const shared::proto::BlockPlaced&)> onBlockPlaced_;
     std::function<void(const shared::proto::BlockBroken&)> onBlockBroken_;
     std::function<void(const shared::proto::ActionRejected&)> onActionRejected_;
+    std::function<void(const shared::proto::ExportResult&)> onExportResult_;
 };
 
 } // namespace client::net

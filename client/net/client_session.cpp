@@ -16,7 +16,7 @@ void ClientSession::start_handshake() {
     endpoint_->send(shared::proto::JoinMatch{});
 }
 
-void ClientSession::send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint) {
+void ClientSession::send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint, bool camUp, bool camDown) {
     shared::proto::InputFrame frame;
     frame.seq = ++inputSeq_;
     frame.moveX = moveX;
@@ -25,6 +25,8 @@ void ClientSession::send_input(float moveX, float moveY, float yaw, float pitch,
     frame.pitch = pitch;
     frame.jump = jump;
     frame.sprint = sprint;
+    frame.camUp = camUp;
+    frame.camDown = camDown;
 
     endpoint_->send(std::move(frame));
 }
@@ -111,6 +113,14 @@ void ClientSession::poll() {
             const auto& rej = std::get<shared::proto::ActionRejected>(msg);
             TraceLog(LOG_WARNING, "[net] ActionRejected: seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
             if (onActionRejected_) onActionRejected_(rej);
+        } else if (std::holds_alternative<shared::proto::ExportResult>(msg)) {
+            const auto& ev = std::get<shared::proto::ExportResult>(msg);
+            TraceLog(LOG_INFO, "[net] ExportResult: seq=%u ok=%d reason=%u path=%s",
+                     ev.seq,
+                     ev.ok ? 1 : 0,
+                     static_cast<unsigned>(ev.reason),
+                     ev.path.c_str());
+            if (onExportResult_) onExportResult_(ev);
         }
     }
 }

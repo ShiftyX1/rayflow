@@ -13,7 +13,16 @@ namespace server::core {
 
 class Server {
 public:
+    struct Options {
+        // MT-1: main game prefers latest .rfmap when present; the map editor needs to start empty.
+        bool loadLatestMapTemplateFromDisk{true};
+
+        // Map editor: free-fly camera movement (no gravity/collision), driven by InputFrame camUp/camDown.
+        bool editorCameraMode{false};
+    };
+
     explicit Server(std::shared_ptr<shared::transport::IEndpoint> endpoint);
+    Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options opts);
     ~Server();
 
     Server(const Server&) = delete;
@@ -28,6 +37,8 @@ private:
     void handle_message_(shared::proto::Message& msg);
 
     std::shared_ptr<shared::transport::IEndpoint> endpoint_;
+
+    Options opts_{};
 
     std::atomic<bool> running_{false};
     std::thread thread_{};

@@ -221,14 +221,18 @@ static void resolve_voxel_y(const server::voxel::Terrain& terrain, float px, flo
 } // namespace
 
 Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint)
-    : endpoint_(std::move(endpoint)) {
+    : Server(std::move(endpoint), Options{}) {}
+
+Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options opts)
+    : endpoint_(std::move(endpoint)), opts_(opts) {
     // Pick a seed once per server instance; client will render the same seed.
     worldSeed_ = static_cast<std::uint32_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
     terrain_ = std::make_unique<server::voxel::Terrain>(worldSeed_);
 
     // MT-1: if a map template exists on disk, prefer it over procedural base terrain.
-    {
+    // The map editor disables this to avoid accidentally loading an unrelated map.
+    if (opts.loadLatestMapTemplateFromDisk) {
         shared::maps::MapTemplate map;
         std::filesystem::path path;
         if (load_latest_rfmap(&map, &path)) {
@@ -301,46 +305,71 @@ void Server::tick_once_() {
         const float rightX = std::cos(yawRad);
         const float rightZ = -std::sin(yawRad);
 
-        const float moveX = lastInput_.moveX * speed;
-        const float moveZ = lastInput_.moveY * speed;
+        if (opts_.editorCameraMode) {
+            // Editor camera: free-fly controls similar to typical map editors.
+            // - WASD: horizontal movement relative to yaw
+            // - Shift (sprint): faster movement
+            // - camUp/camDown: vertical movement (no gravity)
+            const float camSpeed = lastInput_.sprint ? 18.0f : 9.0f;
 
-        vx_ = rightX * moveX + forwardX * moveZ;
-        vz_ = rightZ * moveX + forwardZ * moveZ;
+            const float moveX = lastInput_.moveX * camSpeed;
+            const float moveZ = lastInput_.moveY * camSpeed;
 
-        // Jump edge detection to avoid re-triggering while held.
-        const bool jumpHeld = lastInput_.jump;
-        const bool jumpPressed = jumpHeld && !lastJumpHeld_;
-        lastJumpHeld_ = jumpHeld;
+            vx_ = rightX * moveX + forwardX * moveZ;
+            vz_ = rightZ * moveX + forwardZ * moveZ;
 
-        if (onGround_ && jumpPressed) {
-            vy_ = kJumpVelocity;
+            float vy = 0.0f;
+            if (lastInput_.camUp || lastInput_.jump) vy += camSpeed;
+            if (lastInput_.camDown) vy -= camSpeed;
+            vy_ = vy;
+
+            px_ += vx_ * dt;
+            py_ += vy_ * dt;
+            pz_ += vz_ * dt;
             onGround_ = false;
-        }
+            lastJumpHeld_ = lastInput_.jump;
+        } else {
+            const float moveX = lastInput_.moveX * speed;
+            const float moveZ = lastInput_.moveY * speed;
 
-        // Gravity
-        if (!onGround_) {
-            vy_ -= kGravity * dt;
-        } else if (vy_ < 0.0f) {
-            vy_ = 0.0f;
-        }
+            vx_ = rightX * moveX + forwardX * moveZ;
+            vz_ = rightZ * moveX + forwardZ * moveZ;
 
-        // Integrate per-axis and resolve against voxel terrain blocks.
-        const float dx = vx_ * dt;
-        if (dx != 0.0f) {
-            px_ += dx;
-            resolve_voxel_x(*terrain_, px_, py_, pz_, vx_, dx, serverTick_);
-        }
+            // Jump edge detection to avoid re-triggering while held.
+            const bool jumpHeld = lastInput_.jump;
+            const bool jumpPressed = jumpHeld && !lastJumpHeld_;
+            lastJumpHeld_ = jumpHeld;
 
-        const float dz = vz_ * dt;
-        if (dz != 0.0f) {
-            pz_ += dz;
-            resolve_voxel_z(*terrain_, px_, py_, pz_, vz_, dz, serverTick_);
-        }
+            if (onGround_ && jumpPressed) {
+                vy_ = kJumpVelocity;
+                onGround_ = false;
+            }
 
-        const float dy = vy_ * dt;
-        py_ += dy;
-        onGround_ = false;
-        resolve_voxel_y(*terrain_, px_, py_, pz_, vy_, dy, onGround_, serverTick_);
+            // Gravity
+            if (!onGround_) {
+                vy_ -= kGravity * dt;
+            } else if (vy_ < 0.0f) {
+                vy_ = 0.0f;
+            }
+
+            // Integrate per-axis and resolve against voxel terrain blocks.
+            const float dx = vx_ * dt;
+            if (dx != 0.0f) {
+                px_ += dx;
+                resolve_voxel_x(*terrain_, px_, py_, pz_, vx_, dx, serverTick_);
+            }
+
+            const float dz = vz_ * dt;
+            if (dz != 0.0f) {
+                pz_ += dz;
+                resolve_voxel_z(*terrain_, px_, py_, pz_, vz_, dz, serverTick_);
+            }
+
+            const float dy = vy_ * dt;
+            py_ += dy;
+            onGround_ = false;
+            resolve_voxel_y(*terrain_, px_, py_, pz_, vy_, dy, onGround_, serverTick_);
+        }
 
         if (should_log_movement(serverTick_)) {
             logf(serverTick_, "move", "pos=(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f) onGround=%d", px_, py_, pz_, vx_, vy_, vz_, onGround_ ? 1 : 0);
@@ -441,14 +470,16 @@ void Server::handle_message_(shared::proto::Message& msg) {
 
     if (std::holds_alternative<shared::proto::InputFrame>(msg)) {
         lastInput_ = std::get<shared::proto::InputFrame>(msg);
-        logf(serverTick_, "rx", "InputFrame seq=%u move=(%.2f,%.2f) yaw=%.1f pitch=%.1f jump=%d sprint=%d",
+           logf(serverTick_, "rx", "InputFrame seq=%u move=(%.2f,%.2f) yaw=%.1f pitch=%.1f jump=%d sprint=%d up=%d down=%d",
              lastInput_.seq,
              lastInput_.moveX,
              lastInput_.moveY,
              lastInput_.yaw,
              lastInput_.pitch,
              lastInput_.jump ? 1 : 0,
-             lastInput_.sprint ? 1 : 0);
+               lastInput_.sprint ? 1 : 0,
+               lastInput_.camUp ? 1 : 0,
+               lastInput_.camDown ? 1 : 0);
         return;
     }
 

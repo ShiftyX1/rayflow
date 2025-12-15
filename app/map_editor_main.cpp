@@ -535,13 +535,13 @@ int main() {
         transportPair = shared::transport::LocalTransport::create_pair();
 
         server::core::Server::Options opts;
-        opts.loadDefaultMapTemplate = false;
-        opts.forceAirBase = true;
+        opts.loadLatestMapTemplateFromDisk = false;
+        opts.editorCameraMode = true;
 
         server = std::make_unique<server::core::Server>(transportPair->server, opts);
         server->start();
 
-        session = std::make_unique<client::net::ClientSession>(transportPair->client, "map-editor");
+        session = std::make_unique<client::net::ClientSession>(transportPair->client);
         session->start_handshake();
 
         // Start with an empty-bounds template world so the editor doesn't show procedural terrain.
@@ -807,7 +807,9 @@ int main() {
         auto& fpsCamera = registry.get<ecs::FirstPersonCamera>(player);
         auto& input = registry.get<ecs::InputState>(player);
 
-        const bool flyDown = (!cursorEnabled) && IsKeyDown(core::Config::instance().controls().fly_down);
+        const bool camUp = (!cursorEnabled) && IsKeyDown(KEY_E);
+        const bool camDown = (!cursorEnabled) && IsKeyDown(KEY_Q);
+
         session->send_input(
             cursorEnabled ? 0.0f : input.move_input.x,
             cursorEnabled ? 0.0f : input.move_input.y,
@@ -815,7 +817,8 @@ int main() {
             fpsCamera.pitch,
             cursorEnabled ? false : input.jump_pressed,
             cursorEnabled ? false : input.sprint_pressed,
-            flyDown);
+            camUp,
+            camDown);
 
         if (const auto& snapOpt = session->latest_snapshot(); snapOpt.has_value()) {
             const auto& snap = *snapOpt;

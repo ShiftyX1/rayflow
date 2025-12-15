@@ -142,6 +142,16 @@ add_executable(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} PRIVATE client_lib server_lib shared_lib)
 
+option(RAYFLOW_BUILD_MAP_EDITOR "Build rayflow map editor" ON)
+if (RAYFLOW_BUILD_MAP_EDITOR)
+    # Map editor executable (shares the same client renderer stack).
+    add_executable(rayflow_map_editor
+        app/map_editor_main.cpp
+    )
+
+    target_link_libraries(rayflow_map_editor PRIVATE client_lib server_lib shared_lib)
+endif()
+
 set(RAYFLOW_ASSETS_SRC ${CMAKE_SOURCE_DIR}/client/static)
 add_custom_target(rayflow_copy_assets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -156,6 +166,9 @@ add_custom_target(rayflow_copy_assets ALL
     VERBATIM
 )
 add_dependencies(${PROJECT_NAME} rayflow_copy_assets)
+if (RAYFLOW_BUILD_MAP_EDITOR)
+    add_dependencies(rayflow_map_editor rayflow_copy_assets)
+endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE EnTT::EnTT)
 

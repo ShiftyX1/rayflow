@@ -29,6 +29,7 @@ private:
 
     void ensure_cubemap_loaded_();
     const char* panorama_path_for_kind_(shared::maps::MapTemplate::SkyboxKind kind);
+    const char* cubemap_path_for_kind_(shared::maps::MapTemplate::SkyboxKind kind);
 
     bool ready_{false};
 
@@ -36,9 +37,9 @@ private:
     shared::maps::MapTemplate::SkyboxKind loaded_kind_{shared::maps::MapTemplate::SkyboxKind::None};
 
     std::string pano_path_;
+    std::string cube_path_;
 
     Shader shader_{};
-    int loc_env_map_{-1};
 
     Model model_{};
     bool has_model_{false};

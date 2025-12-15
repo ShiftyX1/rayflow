@@ -54,6 +54,11 @@ struct InputFrame {
     float pitch{0.0f};
     bool jump{false};
     bool sprint{false};
+
+    // Editor camera mode (map editor): vertical movement controls.
+    // These are ignored by the normal physics-based movement.
+    bool camUp{false};
+    bool camDown{false};
 };
 
 // Client -> Server: block intents (authoritative server validates/applies)
