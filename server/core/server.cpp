@@ -484,7 +484,7 @@ void Server::handle_message_(shared::proto::Message& msg) {
             return;
         }
 
-        if (cur == shared::voxel::BlockType::Bedrock) {
+        if (!terrain_->can_player_break(req.x, req.y, req.z, cur)) {
             shared::proto::ActionRejected rej;
             rej.seq = req.seq;
             rej.reason = shared::proto::RejectReason::ProtectedBlock;
@@ -493,7 +493,7 @@ void Server::handle_message_(shared::proto::Message& msg) {
             return;
         }
 
-        terrain_->set_block(req.x, req.y, req.z, shared::voxel::BlockType::Air);
+        terrain_->break_player_block(req.x, req.y, req.z);
 
         shared::proto::BlockBroken ev;
         ev.x = req.x;
@@ -568,7 +568,7 @@ void Server::handle_message_(shared::proto::Message& msg) {
             return;
         }
 
-        terrain_->set_block(req.x, req.y, req.z, req.blockType);
+        terrain_->place_player_block(req.x, req.y, req.z, req.blockType);
 
         shared::proto::BlockPlaced ev;
         ev.x = req.x;
@@ -696,6 +696,11 @@ void Server::handle_message_(shared::proto::Message& msg) {
         exportReq.bounds.chunkMinZ = req.chunkMinZ;
         exportReq.bounds.chunkMaxX = req.chunkMaxX;
         exportReq.bounds.chunkMaxZ = req.chunkMaxZ;
+
+        // MT-1: preserve template protection allow-list when exporting from an existing template.
+        if (const auto* tmpl = terrain_->map_template(); tmpl) {
+            exportReq.breakableTemplateBlocks = tmpl->breakableTemplateBlocks;
+        }
 
         // MV-1: embed visual settings (render-only).
         exportReq.visualSettings = shared::maps::default_visual_settings();

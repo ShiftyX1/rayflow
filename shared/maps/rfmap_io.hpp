@@ -20,7 +20,7 @@ struct ChunkBounds {
     std::int32_t chunkMaxZ{0};
 };
 
-using BlockGetter = std::function<shared::voxel::BlockType(int x, int y, int z)>;
+using BlockGetter = std::function<::shared::voxel::BlockType(int x, int y, int z)>;
 
 struct MapTemplate {
     // MV-1: render-only environment settings. Must be persisted in .rfmap (format v2+ section table).
@@ -49,7 +49,7 @@ struct MapTemplate {
     };
 
     struct ChunkData {
-        std::array<shared::voxel::BlockType, shared::voxel::CHUNK_SIZE> blocks{};
+        std::array<::shared::voxel::BlockType, ::shared::voxel::CHUNK_SIZE> blocks{};
     };
 
     std::string mapId;
@@ -63,7 +63,7 @@ struct MapTemplate {
 
     // Template protection metadata (MT-1): allow-list of template blocks that may be broken.
     // Defaults to all false.
-    std::array<bool, static_cast<std::size_t>(shared::voxel::BlockType::Count)> breakableTemplateBlocks{};
+    std::array<bool, static_cast<std::size_t>(::shared::voxel::BlockType::Count)> breakableTemplateBlocks{};
 
     // Sparse set of chunks that contain any non-Air blocks.
     std::unordered_map<std::pair<std::int32_t, std::int32_t>, ChunkData, ChunkCoordHash> chunks;
@@ -92,6 +92,10 @@ struct ExportRequest {
     std::string mapId;
     std::uint32_t version{0};
     ChunkBounds bounds;
+
+    // MT-1: template protection metadata to embed in the exported template.
+    // Defaults to all false.
+    std::array<bool, static_cast<std::size_t>(::shared::voxel::BlockType::Count)> breakableTemplateBlocks{};
 
     // MV-1: render-only environment settings to embed in the exported template.
     MapTemplate::VisualSettings visualSettings{default_visual_settings()};

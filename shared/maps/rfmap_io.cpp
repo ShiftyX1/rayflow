@@ -23,6 +23,10 @@ constexpr std::uint32_t make_tag(char a, char b, char c, char d) {
 constexpr std::uint32_t kSectionTagVisualSettings = make_tag('V', 'I', 'S', '0');
 constexpr std::uint32_t kVisualSettingsPayloadSize = 16; // fixed MV-1 payload
 
+// MT-1: template protection allow-list by BlockType id.
+constexpr std::uint32_t kSectionTagProtection = make_tag('P', 'R', 'O', '0');
+constexpr std::uint32_t kProtectionPayloadSize = static_cast<std::uint32_t>(static_cast<std::size_t>(::shared::voxel::BlockType::Count));
+
 bool read_bytes(std::ifstream& in, void* data, std::size_t size) {
     in.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(size));
     return static_cast<bool>(in);
@@ -129,12 +133,12 @@ bool write_string_u16(std::ofstream& out, const std::string& s) {
 }
 
 static bool is_valid_block_type(std::uint8_t raw) {
-    return raw < static_cast<std::uint8_t>(shared::voxel::BlockType::Count);
+    return raw < static_cast<std::uint8_t>(::shared::voxel::BlockType::Count);
 }
 
 static std::size_t chunk_index(std::uint8_t lx, std::uint16_t ly, std::uint8_t lz) {
-    return static_cast<std::size_t>(ly) * static_cast<std::size_t>(shared::voxel::CHUNK_WIDTH) * static_cast<std::size_t>(shared::voxel::CHUNK_DEPTH) +
-           static_cast<std::size_t>(lz) * static_cast<std::size_t>(shared::voxel::CHUNK_WIDTH) +
+    return static_cast<std::size_t>(ly) * static_cast<std::size_t>(::shared::voxel::CHUNK_WIDTH) * static_cast<std::size_t>(::shared::voxel::CHUNK_DEPTH) +
+           static_cast<std::size_t>(lz) * static_cast<std::size_t>(::shared::voxel::CHUNK_WIDTH) +
            static_cast<std::size_t>(lx);
 }
 
@@ -275,7 +279,8 @@ bool write_rfmap(const std::filesystem::path& path,
     // MT-1/MV-1 forward-compat: section table.
     // Format v2+: u32 sectionCount, then [tag:u32][size:u32][payload...].
     // MV-1 requires VisualSettings section.
-    if (!write_u32_le(out, 1)) {
+    // MT-1 adds an optional protection allow-list section.
+    if (!write_u32_le(out, 2)) {
         if (outError) *outError = "failed to write sectionCount";
         return false;
     }
@@ -296,6 +301,20 @@ bool write_rfmap(const std::filesystem::path& path,
         !write_f32_le(out, vs.ambientIntensity)) {
         if (outError) *outError = "failed to write VisualSettings payload";
         return false;
+    }
+
+    // MT-1: Protection allow-list (by BlockType id)
+    if (!write_u32_le(out, kSectionTagProtection) || !write_u32_le(out, kProtectionPayloadSize)) {
+        if (outError) *outError = "failed to write Protection section header";
+        return false;
+    }
+
+    for (std::size_t i = 0; i < req.breakableTemplateBlocks.size(); i++) {
+        const std::uint8_t v = req.breakableTemplateBlocks[i] ? 1u : 0u;
+        if (!write_u8(out, v)) {
+            if (outError) *outError = "failed to write Protection payload";
+            return false;
+        }
     }
 
     if (!out) {
@@ -485,12 +504,38 @@ bool read_rfmap(const std::filesystem::path& path,
                         }
                     }
                 } else {
-                    // Skip unknown sections for forward compatibility.
-                    if (size > 0) {
-                        in.seekg(static_cast<std::streamoff>(size), std::ios::cur);
-                        if (!in) {
-                            if (outError) *outError = "failed to skip section";
+                    if (tag == kSectionTagProtection) {
+                        // MT-1 fixed-size payload; tolerate larger payloads by reading known prefix and skipping the rest.
+                        if (size < kProtectionPayloadSize) {
+                            if (outError) *outError = "Protection section too small";
                             return false;
+                        }
+
+                        for (std::size_t i = 0; i < map.breakableTemplateBlocks.size(); i++) {
+                            std::uint8_t v = 0;
+                            if (!read_u8(in, &v)) {
+                                if (outError) *outError = "failed to read Protection payload";
+                                return false;
+                            }
+                            map.breakableTemplateBlocks[i] = (v != 0);
+                        }
+
+                        const std::uint32_t remaining = size - kProtectionPayloadSize;
+                        if (remaining > 0) {
+                            in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
+                            if (!in) {
+                                if (outError) *outError = "failed to skip Protection padding";
+                                return false;
+                            }
+                        }
+                    } else {
+                        // Skip unknown sections for forward compatibility.
+                        if (size > 0) {
+                            in.seekg(static_cast<std::streamoff>(size), std::ios::cur);
+                            if (!in) {
+                                if (outError) *outError = "failed to skip section";
+                                return false;
+                            }
                         }
                     }
                 }

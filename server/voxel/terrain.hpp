@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace server::voxel {
 
@@ -19,6 +20,15 @@ public:
 
     shared::voxel::BlockType get_block(int x, int y, int z) const;
     void set_block(int x, int y, int z, shared::voxel::BlockType type);
+
+    // Gameplay edits: used by authoritative server validators.
+    void place_player_block(int x, int y, int z, shared::voxel::BlockType type);
+    void break_player_block(int x, int y, int z);
+    bool is_player_placed(int x, int y, int z) const;
+
+    // BedWars rule: in templated matches, only player-placed blocks are breakable by default.
+    // Template blocks may be broken only if allow-listed in the template metadata.
+    bool can_player_break(int x, int y, int z, shared::voxel::BlockType current) const;
 
     bool has_map_template() const { return map_template_.has_value(); }
     const shared::maps::MapTemplate* map_template() const { return map_template_ ? &*map_template_ : nullptr; }
@@ -53,6 +63,8 @@ private:
     shared::voxel::BlockType get_template_block_(int x, int y, int z) const;
     static int floor_div_(int a, int b);
 
+    void set_override_(int x, int y, int z, shared::voxel::BlockType type, bool keep_if_matches_base);
+
     void init_perlin_() const;
     float perlin_noise_(float x, float y) const;
     float octave_perlin_(float x, float y, int octaves, float persistence) const;
@@ -63,6 +75,10 @@ private:
 
     // Sparse runtime modifications (placed/broken blocks) on top of procedural base terrain.
     std::unordered_map<BlockKey, shared::voxel::BlockType, BlockKeyHash> overrides_{};
+
+    // Positions whose current block was placed by a player during the match.
+    // Only these are breakable by default in a templated match.
+    std::unordered_set<BlockKey, BlockKeyHash> player_placed_{};
 
     mutable std::array<unsigned char, 512> perm_{};
     mutable bool perm_initialized_{false};

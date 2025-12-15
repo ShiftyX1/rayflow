@@ -43,13 +43,91 @@ void Terrain::set_map_template(shared::maps::MapTemplate map) {
     if (!overrides_.empty()) {
         for (auto it = overrides_.begin(); it != overrides_.end();) {
             const auto base = get_template_block_(it->first.x, it->first.y, it->first.z);
-            if (it->second == base) {
+            if (it->second == base && player_placed_.find(it->first) == player_placed_.end()) {
                 it = overrides_.erase(it);
             } else {
                 ++it;
             }
         }
     }
+}
+
+void Terrain::set_override_(int x, int y, int z, shared::voxel::BlockType type, bool keep_if_matches_base) {
+    // Ignore out-of-range edits.
+    if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
+        return;
+    }
+
+    const BlockKey key{x, y, z};
+    const auto base = map_template_ ? get_template_block_(x, y, z) : get_base_block_(x, y, z);
+
+    if (!keep_if_matches_base && type == base) {
+        if (!overrides_.empty()) {
+            overrides_.erase(key);
+        }
+        return;
+    }
+
+    overrides_[key] = type;
+}
+
+void Terrain::place_player_block(int x, int y, int z, shared::voxel::BlockType type) {
+    if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
+        return;
+    }
+
+    const BlockKey key{x, y, z};
+    player_placed_.insert(key);
+
+    // Keep the override even if it matches the template/base block type.
+    // This allows a player to rebuild a template block and still have it be breakable.
+    set_override_(x, y, z, type, /*keep_if_matches_base=*/true);
+}
+
+void Terrain::break_player_block(int x, int y, int z) {
+    if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
+        return;
+    }
+
+    const BlockKey key{x, y, z};
+    player_placed_.erase(key);
+
+    // Breaking results in Air. If base/template is non-air, keep the override (represents broken template).
+    set_override_(x, y, z, shared::voxel::BlockType::Air, /*keep_if_matches_base=*/false);
+}
+
+bool Terrain::is_player_placed(int x, int y, int z) const {
+    const BlockKey key{x, y, z};
+    return player_placed_.find(key) != player_placed_.end();
+}
+
+bool Terrain::can_player_break(int x, int y, int z, shared::voxel::BlockType current) const {
+    using shared::voxel::BlockType;
+
+    if (current == BlockType::Air) return false;
+    if (current == BlockType::Bedrock) return false;
+
+    // Procedural (no template): keep legacy behavior (everything except bedrock is breakable).
+    if (!map_template_) {
+        return true;
+    }
+
+    if (is_player_placed(x, y, z)) {
+        return true;
+    }
+
+    // Template protection: blocks that exist in the template are protected by default.
+    const auto templ = get_template_block_(x, y, z);
+    if (templ != BlockType::Air) {
+        const std::size_t idx = static_cast<std::size_t>(templ);
+        if (idx < map_template_->breakableTemplateBlocks.size() && map_template_->breakableTemplateBlocks[idx]) {
+            return true;
+        }
+        return false;
+    }
+
+    // Non-template blocks inside a templated match are only breakable if they were player-placed.
+    return false;
 }
 
 bool Terrain::is_within_template_bounds(int x, int y, int z) const {
@@ -196,23 +274,9 @@ shared::voxel::BlockType Terrain::get_block(int x, int y, int z) const {
 }
 
 void Terrain::set_block(int x, int y, int z, shared::voxel::BlockType type) {
-    // Ignore out-of-range edits.
-    if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
-        return;
-    }
-
-    const BlockKey key{x, y, z};
-    const auto base = map_template_ ? get_template_block_(x, y, z) : get_base_block_(x, y, z);
-
-    // If the requested type matches the base terrain, we can drop the override.
-    if (type == base) {
-        if (!overrides_.empty()) {
-            overrides_.erase(key);
-        }
-        return;
-    }
-
-    overrides_[key] = type;
+    // Editor/system edits do not mark blocks as player-placed.
+    // They also preserve the previous behavior of dropping redundant overrides.
+    set_override_(x, y, z, type, /*keep_if_matches_base=*/false);
 }
 
 } // namespace server::voxel
