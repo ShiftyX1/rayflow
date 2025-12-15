@@ -90,7 +90,12 @@ void ClientSession::poll() {
     while (endpoint_->try_recv(msg)) {
         if (std::holds_alternative<shared::proto::ServerHello>(msg)) {
             serverHello_ = std::get<shared::proto::ServerHello>(msg);
-            TraceLog(LOG_INFO, "[net] ServerHello: tickRate=%u worldSeed=%u", serverHello_->tickRate, serverHello_->worldSeed);
+            TraceLog(LOG_INFO, "[net] ServerHello: tickRate=%u worldSeed=%u hasMap=%d mapId=%s mapVer=%u",
+                     serverHello_->tickRate,
+                     serverHello_->worldSeed,
+                     serverHello_->hasMapTemplate ? 1 : 0,
+                     serverHello_->mapId.c_str(),
+                     serverHello_->mapVersion);
         } else if (std::holds_alternative<shared::proto::JoinAck>(msg)) {
             joinAck_ = std::get<shared::proto::JoinAck>(msg);
             TraceLog(LOG_INFO, "[net] JoinAck: playerId=%u", joinAck_->playerId);

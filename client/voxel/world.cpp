@@ -25,6 +25,12 @@ float grad(int hash, float x, float y) {
     return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
 }
 
+int floor_div_int(int a, int b) {
+    if (b == 0) return 0;
+    if (a >= 0) return a / b;
+    return -(((-a) + b - 1) / b);
+}
+
 } // anonymous namespace
 
 World::World(unsigned int seed) : seed_(seed) {
@@ -34,6 +40,16 @@ World::World(unsigned int seed) : seed_(seed) {
 
 World::~World() {
     TraceLog(LOG_INFO, "World destroyed. Total chunks generated: %zu", chunks_.size());
+}
+
+void World::set_map_template(shared::maps::MapTemplate map) {
+    map_template_ = std::move(map);
+    chunks_.clear();
+}
+
+void World::clear_map_template() {
+    map_template_.reset();
+    chunks_.clear();
 }
 
 void World::init_perlin() const {
@@ -154,6 +170,39 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
 void World::generate_chunk_terrain(Chunk& chunk) {
     int chunk_x = chunk.get_chunk_x();
     int chunk_z = chunk.get_chunk_z();
+
+    if (map_template_) {
+        const auto& b = map_template_->bounds;
+        if (chunk_x >= b.chunkMinX && chunk_x <= b.chunkMaxX && chunk_z >= b.chunkMinZ && chunk_z <= b.chunkMaxZ) {
+            const auto* src = map_template_->find_chunk(chunk_x, chunk_z);
+
+            for (int y = 0; y < CHUNK_HEIGHT; y++) {
+                for (int z = 0; z < CHUNK_DEPTH; z++) {
+                    for (int x = 0; x < CHUNK_WIDTH; x++) {
+                        Block bt = static_cast<Block>(BlockType::Air);
+                        if (src) {
+                            const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(CHUNK_WIDTH) * static_cast<std::size_t>(CHUNK_DEPTH) +
+                                                    static_cast<std::size_t>(z) * static_cast<std::size_t>(CHUNK_WIDTH) +
+                                                    static_cast<std::size_t>(x);
+                            bt = static_cast<Block>(src->blocks[idx]);
+                        }
+                        chunk.set_block(x, y, z, bt);
+                    }
+                }
+            }
+            return;
+        }
+
+        // Outside template bounds: leave as Air (void).
+        for (int y = 0; y < CHUNK_HEIGHT; y++) {
+            for (int z = 0; z < CHUNK_DEPTH; z++) {
+                for (int x = 0; x < CHUNK_WIDTH; x++) {
+                    chunk.set_block(x, y, z, static_cast<Block>(BlockType::Air));
+                }
+            }
+        }
+        return;
+    }
     
     for (int x = 0; x < CHUNK_WIDTH; x++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {

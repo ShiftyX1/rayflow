@@ -30,6 +30,67 @@ Terrain::Terrain(std::uint32_t seed)
     init_perlin_();
 }
 
+int Terrain::floor_div_(int a, int b) {
+    // Floors towards -inf for negative values.
+    if (b == 0) return 0;
+    if (a >= 0) return a / b;
+    return -(((-a) + b - 1) / b);
+}
+
+void Terrain::set_map_template(shared::maps::MapTemplate map) {
+    map_template_ = std::move(map);
+    // Keep runtime overrides, but drop any that are now redundant.
+    if (!overrides_.empty()) {
+        for (auto it = overrides_.begin(); it != overrides_.end();) {
+            const auto base = get_template_block_(it->first.x, it->first.y, it->first.z);
+            if (it->second == base) {
+                it = overrides_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+}
+
+bool Terrain::is_within_template_bounds(int x, int y, int z) const {
+    (void)y;
+    if (!map_template_) return false;
+    const auto& b = map_template_->bounds;
+    const int cx = floor_div_(x, shared::voxel::CHUNK_WIDTH);
+    const int cz = floor_div_(z, shared::voxel::CHUNK_DEPTH);
+    return (cx >= b.chunkMinX && cx <= b.chunkMaxX && cz >= b.chunkMinZ && cz <= b.chunkMaxZ);
+}
+
+shared::voxel::BlockType Terrain::get_template_block_(int x, int y, int z) const {
+    using shared::voxel::BlockType;
+
+    if (!map_template_) return BlockType::Air;
+    if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) return BlockType::Air;
+
+    const auto& b = map_template_->bounds;
+    const int cx = floor_div_(x, shared::voxel::CHUNK_WIDTH);
+    const int cz = floor_div_(z, shared::voxel::CHUNK_DEPTH);
+    if (cx < b.chunkMinX || cx > b.chunkMaxX || cz < b.chunkMinZ || cz > b.chunkMaxZ) {
+        return BlockType::Air;
+    }
+
+    const auto* chunk = map_template_->find_chunk(cx, cz);
+    if (!chunk) {
+        return BlockType::Air;
+    }
+
+    const int lx = x - cx * shared::voxel::CHUNK_WIDTH;
+    const int lz = z - cz * shared::voxel::CHUNK_DEPTH;
+    if (lx < 0 || lx >= shared::voxel::CHUNK_WIDTH || lz < 0 || lz >= shared::voxel::CHUNK_DEPTH) {
+        return BlockType::Air;
+    }
+
+    const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(shared::voxel::CHUNK_WIDTH) * static_cast<std::size_t>(shared::voxel::CHUNK_DEPTH) +
+                            static_cast<std::size_t>(lz) * static_cast<std::size_t>(shared::voxel::CHUNK_WIDTH) +
+                            static_cast<std::size_t>(lx);
+    return chunk->blocks[idx];
+}
+
 shared::voxel::BlockType Terrain::get_base_block_(int x, int y, int z) const {
     using shared::voxel::BlockType;
 
@@ -127,6 +188,10 @@ shared::voxel::BlockType Terrain::get_block(int x, int y, int z) const {
         }
     }
 
+    if (map_template_) {
+        return get_template_block_(x, y, z);
+    }
+
     return get_base_block_(x, y, z);
 }
 
@@ -137,7 +202,7 @@ void Terrain::set_block(int x, int y, int z, shared::voxel::BlockType type) {
     }
 
     const BlockKey key{x, y, z};
-    const auto base = get_base_block_(x, y, z);
+    const auto base = map_template_ ? get_template_block_(x, y, z) : get_base_block_(x, y, z);
 
     // If the requested type matches the base terrain, we can drop the override.
     if (type == base) {

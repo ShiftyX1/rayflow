@@ -1,10 +1,15 @@
 #include "server.hpp"
 
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <filesystem>
+#include <system_error>
 #include <thread>
+
+#include "../../shared/maps/rfmap_io.hpp"
 
 namespace server::core {
 
@@ -20,6 +25,65 @@ constexpr float kJumpVelocity = 8.0f;
 
 constexpr float kEps = 1e-4f;
 constexpr float kSkin = 1e-3f;
+
+static bool is_valid_map_id(const std::string& mapId) {
+    if (mapId.empty()) return false;
+    if (mapId.size() > 64) return false;
+    for (unsigned char c : mapId) {
+        const bool ok = (std::isalnum(c) != 0) || c == '_' || c == '-';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem::path* outPath) {
+    if (!outMap) return false;
+
+    const std::filesystem::path mapsDir = std::filesystem::path("maps");
+    std::error_code ec;
+    if (!std::filesystem::exists(mapsDir, ec)) {
+        return false;
+    }
+
+    std::filesystem::path bestPath;
+    std::filesystem::file_time_type bestTime{};
+    bool haveBest = false;
+
+    for (const auto& entry : std::filesystem::directory_iterator(mapsDir, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file(ec)) continue;
+        const auto& p = entry.path();
+        if (p.extension() != ".rfmap") continue;
+
+        const auto t = entry.last_write_time(ec);
+        if (ec) continue;
+
+        if (!haveBest || t > bestTime) {
+            bestTime = t;
+            bestPath = p;
+            haveBest = true;
+        }
+    }
+
+    if (!haveBest) return false;
+
+    shared::maps::MapTemplate map;
+    std::string err;
+    if (!shared::maps::read_rfmap(bestPath, &map, &err)) {
+        std::fprintf(stderr, "[sv][init][map] failed to read %s: %s\n", bestPath.generic_string().c_str(), err.c_str());
+        return false;
+    }
+
+    if (map.mapId.empty() || map.version == 0 || !is_valid_map_id(map.mapId)) {
+        std::fprintf(stderr, "[sv][init][map] ignoring invalid map metadata in %s (mapId=%s version=%u)\n",
+                     bestPath.generic_string().c_str(), map.mapId.c_str(), map.version);
+        return false;
+    }
+
+    *outMap = std::move(map);
+    if (outPath) *outPath = bestPath;
+    return true;
+}
 
 static bool should_log_movement(std::uint64_t serverTick) {
     // Roughly 1 Hz at 30 TPS.
@@ -162,6 +226,21 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint)
     worldSeed_ = static_cast<std::uint32_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
     terrain_ = std::make_unique<server::voxel::Terrain>(worldSeed_);
+
+    // MT-1: if a map template exists on disk, prefer it over procedural base terrain.
+    {
+        shared::maps::MapTemplate map;
+        std::filesystem::path path;
+        if (load_latest_rfmap(&map, &path)) {
+            hasMapTemplate_ = true;
+            mapId_ = map.mapId;
+            mapVersion_ = map.version;
+            terrain_->set_map_template(std::move(map));
+            logf(serverTick_, "init", "loaded map template: %s (mapId=%s version=%u)",
+                 path.generic_string().c_str(), mapId_.c_str(), mapVersion_);
+        }
+    }
+
     logf(serverTick_, "init", "tickRate=%u worldSeed=%u", tickRate_, worldSeed_);
 }
 
@@ -330,6 +409,11 @@ void Server::handle_message_(shared::proto::Message& msg) {
         resp.acceptedVersion = hello.version; // minimal: assume compatible
         resp.tickRate = tickRate_;
         resp.worldSeed = worldSeed_;
+        resp.hasMapTemplate = hasMapTemplate_;
+        if (hasMapTemplate_) {
+            resp.mapId = mapId_;
+            resp.mapVersion = mapVersion_;
+        }
         logf(serverTick_, "tx", "ServerHello tickRate=%u worldSeed=%u", resp.tickRate, resp.worldSeed);
         endpoint_->send(std::move(resp));
         return;
@@ -505,20 +589,11 @@ void Server::handle_message_(shared::proto::Message& msg) {
              req.z,
              static_cast<unsigned>(req.blockType));
 
-        if (!joined_ || !editorMode_) {
+        if (!joined_) {
             shared::proto::ActionRejected rej;
             rej.seq = req.seq;
             rej.reason = shared::proto::RejectReason::NotAllowed;
-            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (not editor)", rej.seq, static_cast<unsigned>(rej.reason));
-            endpoint_->send(std::move(rej));
-            return;
-        }
-
-        if (terrain_ && terrain_->has_map_template() && !terrain_->is_within_template_bounds(req.x, req.y, req.z)) {
-            shared::proto::ActionRejected rej;
-            rej.seq = req.seq;
-            rej.reason = shared::proto::RejectReason::OutOfRange;
-            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (outside bounds)", rej.seq, static_cast<unsigned>(rej.reason));
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
             endpoint_->send(std::move(rej));
             return;
         }

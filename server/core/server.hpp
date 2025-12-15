@@ -38,6 +38,10 @@ private:
     std::uint32_t worldSeed_{0};
     std::unique_ptr<server::voxel::Terrain> terrain_{};
 
+    bool hasMapTemplate_{false};
+    std::string mapId_{};
+    std::uint32_t mapVersion_{0};
+
     bool helloSeen_{false};
     bool joined_{false};
     shared::proto::PlayerId playerId_{1};

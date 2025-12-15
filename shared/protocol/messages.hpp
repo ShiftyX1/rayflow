@@ -31,6 +31,12 @@ struct ServerHello {
     ProtocolVersion acceptedVersion{kProtocolVersion};
     std::uint32_t tickRate{30};
     std::uint32_t worldSeed{0};
+
+    // MT-1: optional finite map template loaded by the server.
+    // When true, client may try to load `maps/<mapId>_v<mapVersion>.rfmap` locally.
+    bool hasMapTemplate{false};
+    std::string mapId;
+    std::uint32_t mapVersion{0};
 };
 
 struct JoinMatch {
@@ -64,6 +70,16 @@ struct TryBreakBlock {
     int x{0};
     int y{0};
     int z{0};
+};
+
+// Client -> Server: editor intent to set a block (authoritative server validates/applies).
+// Unlike TryPlaceBlock/TryBreakBlock, this is intended for tools (map editor).
+struct TrySetBlock {
+    std::uint32_t seq{0};
+    int x{0};
+    int y{0};
+    int z{0};
+    shared::voxel::BlockType blockType{shared::voxel::BlockType::Air};
 };
 
 struct StateSnapshot {
@@ -133,10 +149,13 @@ using Message = std::variant<
     InputFrame,
     TryPlaceBlock,
     TryBreakBlock,
+    TrySetBlock,
     StateSnapshot,
     BlockPlaced,
     BlockBroken,
-    ActionRejected
+    ActionRejected,
+    TryExportMap,
+    ExportResult
 >;
 
 } // namespace shared::proto

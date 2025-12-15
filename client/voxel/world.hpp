@@ -6,6 +6,10 @@
 #include <memory>
 #include <functional>
 
+#include "../../shared/maps/rfmap_io.hpp"
+
+#include <optional>
+
 namespace voxel {
 
 // Hash function for chunk coordinates
@@ -40,6 +44,12 @@ public:
     void set_render_distance(int distance) { render_distance_ = distance; }
     int get_render_distance() const { return render_distance_; }
     unsigned int get_seed() const { return seed_; }
+
+    // MT-1: optional finite map template used for chunk generation.
+    bool has_map_template() const { return map_template_.has_value(); }
+    const shared::maps::MapTemplate* map_template() const { return map_template_ ? &*map_template_ : nullptr; }
+    void set_map_template(shared::maps::MapTemplate map);
+    void clear_map_template();
     
 private:
     void generate_chunk_terrain(Chunk& chunk);
@@ -56,6 +66,8 @@ private:
     unsigned int seed_{0};
     int render_distance_{8};
     Vector3 last_player_position_{0, 0, 0};
+
+    std::optional<shared::maps::MapTemplate> map_template_{};
     
     // Perlin noise permutation table
     mutable std::array<unsigned char, 512> perm_;

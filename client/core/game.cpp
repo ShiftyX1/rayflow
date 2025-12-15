@@ -322,6 +322,11 @@ void Game::update(float delta_time) {
                         TraceLog(LOG_WARNING, "[map] failed to load template %s: %s", path.generic_string().c_str(), err.c_str());
                     }
                 }
+            } else if (world_) {
+                // No template advertised: ensure we render the procedural world.
+                if (world_->has_map_template()) {
+                    world_->clear_map_template();
+                }
             }
         }
     }
