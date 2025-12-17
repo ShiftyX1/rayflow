@@ -1,5 +1,6 @@
 #include "chunk.hpp"
 #include "block_registry.hpp"
+#include "world.hpp"
 #include "../renderer/lighting_raymarch.hpp"
 #include <raylib.h>
 #include <cstring>
@@ -88,7 +89,7 @@ void Chunk::set_block(int x, int y, int z, Block type) {
     needs_mesh_update_ = true;
 }
 
-void Chunk::generate_mesh() {
+void Chunk::generate_mesh(const World& world) {
     cleanup_mesh();
 
     light_markers_ws_.clear();
@@ -140,6 +141,83 @@ void Chunk::generate_mesh() {
     static const float face_normals[6][3] = {
         {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}
     };
+
+    static const int face_dir[6][3] = {
+        { 1, 0, 0}, {-1, 0, 0},
+        { 0, 1, 0}, { 0,-1, 0},
+        { 0, 0, 1}, { 0, 0,-1}
+    };
+
+    // Face-local axes used for Minecraft-style smooth lighting/AO per corner.
+    // Corner order matches face_vertices quad corners (0..3) used by tri_corner_idx.
+    static const int face_u[6][3] = {
+        { 0, 0, 1}, { 0, 0,-1},
+        { 1, 0, 0}, { 1, 0, 0},
+        {-1, 0, 0}, { 1, 0, 0}
+    };
+    static const int face_v[6][3] = {
+        { 0, 1, 0}, { 0, 1, 0},
+        { 0, 0, 1}, { 0, 0,-1},
+        { 0, 1, 0}, { 0, 1, 0}
+    };
+
+    static const int tri_corner_idx[6] = {0, 1, 2, 0, 2, 3};
+
+    auto is_solid_ws = [&world](int wx, int wy, int wz) -> bool {
+        const BlockType bt = static_cast<BlockType>(world.get_block(wx, wy, wz));
+        return is_solid(bt);
+    };
+
+    auto sample_light01_ws = [&world](int wx, int wy, int wz) -> float {
+        return world.sample_light01(wx, wy, wz);
+    };
+
+    auto compute_corner_shade = [&](int face, int wx, int wy, int wz, int corner) -> float {
+        // Adjacent cell outside the face.
+        const int ax = wx + face_dir[face][0];
+        const int ay = wy + face_dir[face][1];
+        const int az = wz + face_dir[face][2];
+
+        const int su = (corner == 2 || corner == 3) ? 1 : -1;
+        const int sv = (corner == 1 || corner == 2) ? 1 : -1;
+
+        const int ux = face_u[face][0] * su;
+        const int uy = face_u[face][1] * su;
+        const int uz = face_u[face][2] * su;
+
+        const int vx = face_v[face][0] * sv;
+        const int vy = face_v[face][1] * sv;
+        const int vz = face_v[face][2] * sv;
+
+        const bool side1 = is_solid_ws(ax + ux, ay + uy, az + uz);
+        const bool side2 = is_solid_ws(ax + vx, ay + vy, az + vz);
+        const bool cornerOcc = is_solid_ws(ax + ux + vx, ay + uy + vy, az + uz + vz);
+
+        int occ = 0;
+        if (side1) occ++;
+        if (side2) occ++;
+        if (!(side1 && side2) && cornerOcc) occ++;
+
+        const int ao_level = 3 - occ; // 0..3 (3 brightest)
+        static const float ao_table[4] = {0.45f, 0.65f, 0.85f, 1.0f};
+        const float ao = ao_table[ao_level];
+
+        const float l0 = sample_light01_ws(ax, ay, az);
+        const float l1 = sample_light01_ws(ax + ux, ay + uy, az + uz);
+        const float l2 = sample_light01_ws(ax + vx, ay + vy, az + vz);
+        const float l3 = sample_light01_ws(ax + ux + vx, ay + uy + vy, az + uz + vz);
+
+        float light = 0.25f * (l0 + l1 + l2 + l3);
+
+        // Keep a small baseline so fully unlit caves aren't pitch black.
+        constexpr float kMin = 0.08f;
+        light = kMin + (1.0f - kMin) * light;
+
+        float shade = light * ao;
+        if (shade < 0.0f) shade = 0.0f;
+        if (shade > 1.0f) shade = 1.0f;
+        return shade;
+    };
     
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
@@ -160,18 +238,16 @@ void Chunk::generate_mesh() {
                 }
                 
                 // Check each face
-                int neighbors[6][3] = {
-                    {x+1, y, z}, {x-1, y, z},
-                    {x, y+1, z}, {x, y-1, z},
-                    {x, y, z+1}, {x, y, z-1}
-                };
+                const int wx = chunk_x_ * CHUNK_WIDTH + x;
+                const int wy = y;
+                const int wz = chunk_z_ * CHUNK_DEPTH + z;
                 
                 for (int face = 0; face < 6; face++) {
-                    int nx = neighbors[face][0];
-                    int ny = neighbors[face][1];
-                    int nz = neighbors[face][2];
-                    
-                    Block neighbor = get_block(nx, ny, nz);
+                    const int nwx = wx + face_dir[face][0];
+                    const int nwy = wy + face_dir[face][1];
+                    const int nwz = wz + face_dir[face][2];
+
+                    Block neighbor = world.get_block(nwx, nwy, nwz);
                     if (!is_transparent(static_cast<BlockType>(neighbor))) continue;
                     
                     // World position of this block
@@ -191,6 +267,13 @@ void Chunk::generate_mesh() {
                         (block_type == BlockType::Leaves) ? 1.0f :
                         (block_type == BlockType::Grass && face == 2) ? 1.0f :
                         0.0f;
+
+                    float cornerShade[4] = {
+                        compute_corner_shade(face, wx, wy, wz, 0),
+                        compute_corner_shade(face, wx, wy, wz, 1),
+                        compute_corner_shade(face, wx, wy, wz, 2),
+                        compute_corner_shade(face, wx, wy, wz, 3),
+                    };
                     
                     // Add 6 vertices for this face (2 triangles)
                     for (int v = 0; v < 6; v++) {
@@ -201,8 +284,9 @@ void Chunk::generate_mesh() {
                         texcoords.push_back(u0 + face_uvs[face][v][0] * uv_size);
                         texcoords.push_back(v0 + face_uvs[face][v][1] * uv_size);
 
+                        const int c = tri_corner_idx[v];
                         texcoords2.push_back(foliageMask);
-                        texcoords2.push_back(0.0f);
+                        texcoords2.push_back(cornerShade[c]);
                         
                         normals.push_back(face_normals[face][0]);
                         normals.push_back(face_normals[face][1]);

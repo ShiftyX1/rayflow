@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chunk.hpp"
+#include "light_volume.hpp"
 #include <raylib.h>
 #include <unordered_map>
 #include <memory>
@@ -52,6 +53,10 @@ public:
     void clear_map_template();
 
     void mark_all_chunks_dirty();
+
+    // Client-only render lighting (skylight + blocklight). Never used for gameplay.
+    const LightVolume& light_volume() const { return light_volume_; }
+    float sample_light01(int x, int y, int z) const { return light_volume_.sample_combined01(x, y, z); }
     
 private:
     void generate_chunk_terrain(Chunk& chunk);
@@ -70,6 +75,11 @@ private:
     Vector3 last_player_position_{0, 0, 0};
 
     std::optional<shared::maps::MapTemplate> map_template_{};
+
+    // Client-only bounded lighting cache used by voxel mesh generation.
+    LightVolume light_volume_{};
+
+    bool light_volume_dirty_{true};
     
     // Perlin noise permutation table
     mutable std::array<unsigned char, 512> perm_;

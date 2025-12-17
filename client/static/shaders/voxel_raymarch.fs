@@ -73,6 +73,10 @@ void main() {
     vec3 baseRgb = mix(albedo.rgb, recolor, foliageMask);
     float baseA = albedo.a;
 
+    // Minecraft-style per-vertex shading: AO * (skylight/blocklight).
+    float vertexShade = clamp(fragTexCoord2.y, 0.0, 1.0);
+    baseRgb *= vertexShade;
+
     if (u_enabled < 0.5) {
         finalColor = vec4(baseRgb, baseA);
         return;

@@ -8,6 +8,8 @@
 
 namespace voxel {
 
+class World;
+
 class Chunk {
 public:
     Chunk(int chunk_x, int chunk_z);
@@ -26,7 +28,7 @@ public:
     void set_block(int x, int y, int z, Block type);
     
     // Mesh generation
-    void generate_mesh();
+    void generate_mesh(const World& world);
     void render() const;
     
     // Getters

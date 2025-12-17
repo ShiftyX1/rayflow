@@ -151,6 +151,9 @@ void World::set_block(int x, int y, int z, Block type) {
     int local_z = z - chunk_z * CHUNK_DEPTH;
     
     it->second->set_block(local_x, y, local_z, type);
+
+    // Client-only lighting cache: mark dirty so emissive/light-block changes update promptly.
+    light_volume_dirty_ = true;
 }
 
 Chunk* World::get_chunk(int chunk_x, int chunk_z) {
@@ -247,11 +250,16 @@ void World::generate_chunk_terrain(Chunk& chunk) {
 void World::update(const Vector3& player_position) {
     load_chunks_around_player(player_position);
     unload_distant_chunks(player_position);
+
+    // Client-only lighting cache for rendering (Minecraft-style skylight + blocklight).
+    if (light_volume_.update_if_needed(*this, player_position, light_volume_dirty_)) {
+        light_volume_dirty_ = false;
+    }
     
     // Update meshes for dirty chunks
     for (auto& [key, chunk] : chunks_) {
         if (chunk->needs_mesh_update()) {
-            chunk->generate_mesh();
+            chunk->generate_mesh(*this);
         }
     }
     
