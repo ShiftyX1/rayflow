@@ -14,6 +14,15 @@ namespace server::core {
 class Server {
 public:
     struct Options {
+        struct LoggingOptions {
+            bool enabled{true};
+            bool init{true};
+            bool rx{true};
+            bool tx{true};
+            bool move{true};
+            bool coll{true};
+        } logging{};
+
         // MT-1: main game prefers latest .rfmap when present; the map editor needs to start empty.
         bool loadLatestMapTemplateFromDisk{true};
 

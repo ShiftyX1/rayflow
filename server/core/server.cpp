@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <system_error>
 #include <thread>
@@ -72,6 +73,7 @@ static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem
     shared::maps::MapTemplate map;
     std::string err;
     if (!shared::maps::read_rfmap(bestPath, &map, &err)) {
+        // Defer to filtered sv logger.
         std::fprintf(stderr, "[sv][init][map] failed to read %s: %s\n", bestPath.generic_string().c_str(), err.c_str());
         return false;
     }
@@ -92,7 +94,36 @@ static bool should_log_movement(std::uint64_t serverTick) {
     return (serverTick % 30) == 0;
 }
 
+struct SvLogCfg {
+    bool enabled{true};
+    bool init{true};
+    bool rx{true};
+    bool tx{true};
+    bool move{true};
+    bool coll{true};
+};
+
+static SvLogCfg g_sv_log{};
+
+static bool sv_tag_enabled(const char* tag) {
+    if (!g_sv_log.enabled) return false;
+    if (!tag) return false;
+
+    // Tags used in this file:
+    // init, rx, tx, move, coll
+    if (std::strcmp(tag, "init") == 0) return g_sv_log.init;
+    if (std::strcmp(tag, "rx") == 0) return g_sv_log.rx;
+    if (std::strcmp(tag, "tx") == 0) return g_sv_log.tx;
+    if (std::strcmp(tag, "move") == 0) return g_sv_log.move;
+    if (std::strcmp(tag, "coll") == 0) return g_sv_log.coll;
+
+    // Unknown tag: keep it if logging is enabled.
+    return true;
+}
+
 static void logf(std::uint64_t serverTick, const char* tag, const char* fmt, ...) {
+    if (!sv_tag_enabled(tag)) return;
+
     std::fprintf(stderr, "[sv][%llu][%s] ", static_cast<unsigned long long>(serverTick), tag);
     va_list args;
     va_start(args, fmt);
@@ -227,6 +258,14 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint)
 
 Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options opts)
     : endpoint_(std::move(endpoint)), opts_(opts) {
+    // Apply logging options before any init logs.
+    g_sv_log.enabled = opts_.logging.enabled;
+    g_sv_log.init = opts_.logging.init;
+    g_sv_log.rx = opts_.logging.rx;
+    g_sv_log.tx = opts_.logging.tx;
+    g_sv_log.move = opts_.logging.move;
+    g_sv_log.coll = opts_.logging.coll;
+
     // Pick a seed once per server instance; client will render the same seed.
     worldSeed_ = static_cast<std::uint32_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());

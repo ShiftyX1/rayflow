@@ -125,6 +125,22 @@ int Config::parse_int(const std::string& v, int default_value) {
     }
 }
 
+static float parse_float_local(const std::string& v, float default_value) {
+    try {
+        auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+        std::string s = v;
+        while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+        while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) s.pop_back();
+
+        size_t idx = 0;
+        float out = std::stof(s, &idx);
+        (void)idx;
+        return out;
+    } catch (...) {
+        return default_value;
+    }
+}
+
 static std::string strip_quotes(std::string s) {
     auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
     while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
@@ -252,6 +268,32 @@ void Config::apply_kv(const std::string& section, const std::string& key, const 
 
     if (sec == "debug") {
         if (k == "collision") config_.logging.collision_debug = parse_bool(v, config_.logging.collision_debug);
+        return;
+    }
+
+    if (sec == "profiling") {
+        if (k == "enabled") config_.profiling.enabled = parse_bool(v, config_.profiling.enabled);
+        else if (k == "log_every_event") config_.profiling.log_every_event = parse_bool(v, config_.profiling.log_every_event);
+        else if (k == "log_interval_ms") config_.profiling.log_interval_ms = parse_int(v, config_.profiling.log_interval_ms);
+
+        else if (k == "light_volume") config_.profiling.light_volume = parse_bool(v, config_.profiling.light_volume);
+        else if (k == "chunk_mesh") config_.profiling.chunk_mesh = parse_bool(v, config_.profiling.chunk_mesh);
+        else if (k == "upload_mesh") config_.profiling.upload_mesh = parse_bool(v, config_.profiling.upload_mesh);
+
+        else if (k == "warn_light_volume_ms") config_.profiling.warn_light_volume_ms = parse_float_local(v, config_.profiling.warn_light_volume_ms);
+        else if (k == "warn_chunk_mesh_ms") config_.profiling.warn_chunk_mesh_ms = parse_float_local(v, config_.profiling.warn_chunk_mesh_ms);
+        else if (k == "warn_upload_mesh_ms") config_.profiling.warn_upload_mesh_ms = parse_float_local(v, config_.profiling.warn_upload_mesh_ms);
+
+        return;
+    }
+
+    if (sec == "sv_logging") {
+        if (k == "enabled") config_.sv_logging.enabled = parse_bool(v, config_.sv_logging.enabled);
+        else if (k == "init") config_.sv_logging.init = parse_bool(v, config_.sv_logging.init);
+        else if (k == "rx") config_.sv_logging.rx = parse_bool(v, config_.sv_logging.rx);
+        else if (k == "tx") config_.sv_logging.tx = parse_bool(v, config_.sv_logging.tx);
+        else if (k == "move") config_.sv_logging.move = parse_bool(v, config_.sv_logging.move);
+        else if (k == "coll") config_.sv_logging.coll = parse_bool(v, config_.sv_logging.coll);
         return;
     }
 }

@@ -3,7 +3,10 @@
 #include "world.hpp"
 #include "block.hpp"
 
+#include "../core/config.hpp"
+
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <deque>
 
@@ -77,7 +80,22 @@ bool LightVolume::update_if_needed(const World& world, const Vector3& center_pos
     skylight_.assign(static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_y) * static_cast<std::size_t>(dim_z), 0u);
     blocklight_.assign(skylight_.size(), 0u);
 
+    const auto t0 = std::chrono::steady_clock::now();
     rebuild_(world);
+    const auto t1 = std::chrono::steady_clock::now();
+
+    const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+    const auto& prof = core::Config::instance().profiling();
+    if (prof.enabled && prof.light_volume) {
+        static double last_log_s = 0.0;
+        const double now_s = GetTime();
+        const bool interval_ok = prof.log_every_event || ((now_s - last_log_s) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
+        if (ms >= prof.warn_light_volume_ms && interval_ok) {
+            TraceLog(LOG_INFO, "[prof] light_volume rebuild: %.2f ms (dim=%dx%dx%d, force=%s)",
+                     ms, dim_x, dim_y, dim_z, force_rebuild ? "true" : "false");
+            last_log_s = now_s;
+        }
+    }
 
     have_volume_ = true;
     last_update_time_ = now;

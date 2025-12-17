@@ -43,6 +43,38 @@ struct LoggingConfig {
 struct ClientConfig {
     ControlsConfig controls{};
     LoggingConfig logging{};
+
+    // Server-side (sv) log filtering for the embedded authoritative server.
+    // Note: still configured via the client config file because the app embeds both.
+    struct ServerLoggingConfig {
+        bool enabled{true};
+
+        // Tag filters (match server::core::logf tag values)
+        bool init{true};
+        bool rx{true};
+        bool tx{true};
+        bool move{true};
+        bool coll{true};
+    } sv_logging{};
+
+    struct ProfilingConfig {
+        // Master switch
+        bool enabled{false};
+
+        // Logging behavior
+        bool log_every_event{false};
+        int log_interval_ms{250};
+
+        // Per-feature toggles
+        bool light_volume{true};
+        bool chunk_mesh{true};
+        bool upload_mesh{true};
+
+        // Warn thresholds (ms)
+        float warn_light_volume_ms{4.0f};
+        float warn_chunk_mesh_ms{6.0f};
+        float warn_upload_mesh_ms{2.0f};
+    } profiling{};
 };
 
 class Config {
@@ -57,6 +89,8 @@ public:
     // Convenience for common lookups.
     const ControlsConfig& controls() const { return config_.controls; }
     const LoggingConfig& logging() const { return config_.logging; }
+    const ClientConfig::ProfilingConfig& profiling() const { return config_.profiling; }
+    const ClientConfig::ServerLoggingConfig& sv_logging() const { return config_.sv_logging; }
 
 private:
     Config();

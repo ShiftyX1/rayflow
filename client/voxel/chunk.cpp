@@ -2,8 +2,10 @@
 #include "block_registry.hpp"
 #include "world.hpp"
 #include "../renderer/lighting_raymarch.hpp"
+#include "../core/config.hpp"
 #include <raylib.h>
 #include <cstring>
+#include <chrono>
 #include <vector>
 #include <cstdio>
 
@@ -90,6 +92,8 @@ void Chunk::set_block(int x, int y, int z, Block type) {
 }
 
 void Chunk::generate_mesh(const World& world) {
+    const auto t_total0 = std::chrono::steady_clock::now();
+
     cleanup_mesh();
 
     light_markers_ws_.clear();
@@ -306,6 +310,19 @@ void Chunk::generate_mesh(const World& world) {
     if (vertices.empty()) {
         has_mesh_ = false;
         needs_mesh_update_ = false;
+
+        const auto t_total1 = std::chrono::steady_clock::now();
+        const float total_ms = std::chrono::duration<float, std::milli>(t_total1 - t_total0).count();
+        const auto& prof = core::Config::instance().profiling();
+        if (prof.enabled && prof.chunk_mesh) {
+            static double last_log_s = 0.0;
+            const double now_s = GetTime();
+            const bool interval_ok = prof.log_every_event || ((now_s - last_log_s) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
+            if (total_ms >= prof.warn_chunk_mesh_ms && interval_ok) {
+                TraceLog(LOG_INFO, "[prof] chunk mesh (empty): %.2f ms (chunk=%d,%d)", total_ms, chunk_x_, chunk_z_);
+                last_log_s = now_s;
+            }
+        }
         return;
     }
     
@@ -328,7 +345,23 @@ void Chunk::generate_mesh(const World& world) {
     std::memcpy(mesh_.normals, normals.data(), normals.size() * sizeof(float));
     std::memcpy(mesh_.colors, colors.data(), colors.size() * sizeof(unsigned char));
     
+    const auto t_up0 = std::chrono::steady_clock::now();
     UploadMesh(&mesh_, false);
+    const auto t_up1 = std::chrono::steady_clock::now();
+
+    const float upload_ms = std::chrono::duration<float, std::milli>(t_up1 - t_up0).count();
+    {
+        const auto& prof = core::Config::instance().profiling();
+        if (prof.enabled && prof.upload_mesh) {
+            static double last_log_s_upload = 0.0;
+            const double now_s = GetTime();
+            const bool interval_ok = prof.log_every_event || ((now_s - last_log_s_upload) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
+            if (upload_ms >= prof.warn_upload_mesh_ms && interval_ok) {
+                TraceLog(LOG_INFO, "[prof] UploadMesh: %.2f ms (chunk=%d,%d, vtx=%d)", upload_ms, chunk_x_, chunk_z_, mesh_.vertexCount);
+                last_log_s_upload = now_s;
+            }
+        }
+    }
     
     model_ = LoadModelFromMesh(mesh_);
     model_.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = registry.get_atlas_texture();
@@ -340,6 +373,21 @@ void Chunk::generate_mesh(const World& world) {
     
     has_mesh_ = true;
     needs_mesh_update_ = false;
+
+    const auto t_total1 = std::chrono::steady_clock::now();
+    const float total_ms = std::chrono::duration<float, std::milli>(t_total1 - t_total0).count();
+    {
+        const auto& prof = core::Config::instance().profiling();
+        if (prof.enabled && prof.chunk_mesh) {
+            static double last_log_s_total = 0.0;
+            const double now_s = GetTime();
+            const bool interval_ok = prof.log_every_event || ((now_s - last_log_s_total) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
+            if (total_ms >= prof.warn_chunk_mesh_ms && interval_ok) {
+                TraceLog(LOG_INFO, "[prof] chunk mesh: %.2f ms (chunk=%d,%d, vtx=%d)", total_ms, chunk_x_, chunk_z_, mesh_.vertexCount);
+                last_log_s_total = now_s;
+            }
+        }
+    }
 }
 
 void Chunk::render() const {
