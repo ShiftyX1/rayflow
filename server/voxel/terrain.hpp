@@ -34,6 +34,10 @@ public:
     const shared::maps::MapTemplate* map_template() const { return map_template_ ? &*map_template_ : nullptr; }
     void set_map_template(shared::maps::MapTemplate map);
 
+    // Editor mode helper: when no map template is set, treat the base world as empty/void (all Air).
+    // This ensures map exports contain only authored blocks, not procedural terrain.
+    void set_void_base(bool enabled) { void_base_ = enabled; }
+
     // Bounds check for template editing / validation (MT-1).
     bool is_within_template_bounds(int x, int y, int z) const;
 
@@ -70,6 +74,8 @@ private:
     float octave_perlin_(float x, float y, int octaves, float persistence) const;
 
     std::uint32_t seed_{0};
+
+    bool void_base_{false};
 
     std::optional<shared::maps::MapTemplate> map_template_{};
 

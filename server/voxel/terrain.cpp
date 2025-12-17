@@ -172,6 +172,13 @@ shared::voxel::BlockType Terrain::get_template_block_(int x, int y, int z) const
 shared::voxel::BlockType Terrain::get_base_block_(int x, int y, int z) const {
     using shared::voxel::BlockType;
 
+    if (void_base_) {
+        (void)x;
+        (void)y;
+        (void)z;
+        return BlockType::Air;
+    }
+
     if (y < 0 || y >= shared::voxel::CHUNK_HEIGHT) {
         return BlockType::Air;
     }

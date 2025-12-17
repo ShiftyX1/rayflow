@@ -11,6 +11,7 @@
 #include "../voxel/block_interaction.hpp"
 #include "../renderer/lighting_raymarch.hpp"
 #include "../renderer/skybox.hpp"
+#include "../../shared/maps/runtime_paths.hpp"
 #include <cstdio>
 #include <ctime>
 #include <utility>
@@ -53,7 +54,6 @@ bool Game::init(int width, int height, const char* title) {
     // Create world
     unsigned int seed = static_cast<unsigned int>(std::time(nullptr));
     world_ = std::make_unique<voxel::World>(seed);
-
     if (session_) {
         session_->set_on_block_placed([this](const shared::proto::BlockPlaced& ev) {
             if (!world_) return;
@@ -299,7 +299,7 @@ void Game::update(float delta_time) {
                 const bool mismatch = (!cur) || cur->mapId != helloOpt->mapId || cur->version != helloOpt->mapVersion;
                 if (mismatch) {
                     const std::string fileName = helloOpt->mapId + "_v" + std::to_string(helloOpt->mapVersion) + ".rfmap";
-                    const std::filesystem::path path = std::filesystem::path("maps") / fileName;
+                    const std::filesystem::path path = shared::maps::runtime_maps_dir() / fileName;
 
                     shared::maps::MapTemplate map;
                     std::string err;

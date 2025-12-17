@@ -11,6 +11,7 @@
 
 #include "../../shared/constants.hpp"
 #include "../../shared/maps/rfmap_io.hpp"
+#include "../../shared/maps/runtime_paths.hpp"
 
 namespace server::core {
 
@@ -40,7 +41,7 @@ static bool is_valid_map_id(const std::string& mapId) {
 static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem::path* outPath) {
     if (!outMap) return false;
 
-    const std::filesystem::path mapsDir = std::filesystem::path("maps");
+    const std::filesystem::path mapsDir = shared::maps::runtime_maps_dir();
     std::error_code ec;
     if (!std::filesystem::exists(mapsDir, ec)) {
         return false;
@@ -230,6 +231,12 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options o
     worldSeed_ = static_cast<std::uint32_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
     terrain_ = std::make_unique<server::voxel::Terrain>(worldSeed_);
+
+    // Map editor runs against an empty/void base terrain (no procedural generation).
+    // Authored blocks are applied as overrides and exported as the template.
+    if (opts_.editorCameraMode) {
+        terrain_->set_void_base(true);
+    }
 
     // MT-1: if a map template exists on disk, prefer it over procedural base terrain.
     // The map editor disables this to avoid accidentally loading an unrelated map.
@@ -730,7 +737,9 @@ void Server::handle_message_(shared::proto::Message& msg) {
             return;
         }
 
-        const std::filesystem::path mapsDir = std::filesystem::path("maps");
+        // Use the same runtime maps directory for exporting as we do for loading.
+        // This avoids editor/game running from different working directories producing/consuming different folders.
+        const std::filesystem::path mapsDir = shared::maps::runtime_maps_dir();
         std::error_code ec;
         std::filesystem::create_directories(mapsDir, ec);
         if (ec) {

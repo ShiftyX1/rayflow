@@ -77,6 +77,7 @@ include_directories(${CMAKE_SOURCE_DIR}/ui)
 add_library(shared_lib STATIC
     shared/transport/local_transport.cpp
     shared/maps/rfmap_io.cpp
+    shared/maps/runtime_paths.cpp
 )
 
 target_include_directories(shared_lib PUBLIC ${CMAKE_SOURCE_DIR}/shared)
