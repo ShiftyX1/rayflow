@@ -91,6 +91,7 @@ When making changes, follow the detailed rules in:
 - .github/instructions/architecture.instructions.md
 - .github/instructions/protocol-transport.instructions.md
 - .github/instructions/server-simulation.instructions.md
+- .github/instructions/comments.instructions.md
 - .github/instructions/bedwars-gameplay.instructions.md
 - .github/instructions/migration-plan.instructions.md
 - .github/instructions/lighting-raymarch.instructions.md

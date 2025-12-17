@@ -2,7 +2,7 @@
 #include <raylib.h>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
+#include <random>
 
 namespace voxel {
 
@@ -54,15 +54,17 @@ void World::clear_map_template() {
 
 void World::init_perlin() const {
     if (perm_initialized_) return;
-    
-    std::srand(seed_);
+
+    // NOTE: Deterministic local PRNG; do not use std::rand/std::srand here.
+    std::mt19937 rng(seed_);
     for (int i = 0; i < 256; i++) {
         perm_[i] = static_cast<unsigned char>(i);
     }
     
     // Shuffle
     for (int i = 255; i > 0; i--) {
-        int j = std::rand() % (i + 1);
+        std::uniform_int_distribution<int> dist(0, i);
+        const int j = dist(rng);
         std::swap(perm_[i], perm_[j]);
     }
     

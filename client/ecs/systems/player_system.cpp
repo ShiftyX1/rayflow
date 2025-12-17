@@ -1,15 +1,13 @@
 #include "player_system.hpp"
 #include "../../voxel/world.hpp"
 #include "../../core/config.hpp"
+#include "../../../shared/constants.hpp"
 #include <raylib.h>
 #include <cmath>
 #include <cstdio>
 
 namespace ecs {
 
-constexpr float PLAYER_HEIGHT = 1.8f;
-constexpr float PLAYER_WIDTH = 0.6f;
-constexpr float PLAYER_EYE_HEIGHT = 1.62f;
 constexpr float DEG_TO_RAD = 0.017453292519943295f;
 
 void PlayerSystem::update(entt::registry& registry, float delta_time) {
@@ -40,7 +38,7 @@ entt::entity PlayerSystem::create_player(entt::registry& registry, const Vector3
     registry.emplace<GravityAffected>(entity);
     
     auto& collider = registry.emplace<BoxCollider>(entity);
-    collider.size = {PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH};
+    collider.size = {shared::kPlayerWidth, shared::kPlayerHeight, shared::kPlayerWidth};
     
     // Player controller
     auto& controller = registry.emplace<PlayerController>(entity);
@@ -51,7 +49,7 @@ entt::entity PlayerSystem::create_player(entt::registry& registry, const Vector3
     
     // Camera
     auto& camera = registry.emplace<FirstPersonCamera>(entity);
-    camera.eye_height = PLAYER_EYE_HEIGHT;
+    camera.eye_height = shared::kPlayerEyeHeight;
     camera.fov = 60.0f;
     
     // Input

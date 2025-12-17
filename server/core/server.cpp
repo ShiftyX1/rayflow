@@ -9,6 +9,7 @@
 #include <system_error>
 #include <thread>
 
+#include "../../shared/constants.hpp"
 #include "../../shared/maps/rfmap_io.hpp"
 
 namespace server::core {
@@ -18,8 +19,8 @@ namespace {
 constexpr float kDegToRad = 0.017453292519943295f;
 
 // Keep these aligned with the old client-side defaults for now.
-constexpr float kPlayerWidth = 0.6f;
-constexpr float kPlayerHeight = 1.8f;
+constexpr float kPlayerWidth = shared::kPlayerWidth;
+constexpr float kPlayerHeight = shared::kPlayerHeight;
 constexpr float kGravity = 20.0f;
 constexpr float kJumpVelocity = 8.0f;
 
@@ -391,13 +392,12 @@ void Server::tick_once_() {
 
 void Server::handle_message_(shared::proto::Message& msg) {
     const auto is_in_block_reach = [this](int bx, int by, int bz) -> bool {
-        // Keep in sync with client voxel::BlockInteraction::MAX_REACH_DISTANCE (with small fudge).
-        constexpr float kMaxReach = 6.0f;
+        constexpr float kMaxReach = shared::kBlockReachDistance;
         const float cx = static_cast<float>(bx) + 0.5f;
         const float cy = static_cast<float>(by) + 0.5f;
         const float cz = static_cast<float>(bz) + 0.5f;
         const float dx = cx - px_;
-        const float dy = cy - (py_ + 1.62f);
+        const float dy = cy - (py_ + shared::kPlayerEyeHeight);
         const float dz = cz - pz_;
         return (dx * dx + dy * dy + dz * dz) <= (kMaxReach * kMaxReach);
     };
@@ -470,16 +470,22 @@ void Server::handle_message_(shared::proto::Message& msg) {
 
     if (std::holds_alternative<shared::proto::InputFrame>(msg)) {
         lastInput_ = std::get<shared::proto::InputFrame>(msg);
-           logf(serverTick_, "rx", "InputFrame seq=%u move=(%.2f,%.2f) yaw=%.1f pitch=%.1f jump=%d sprint=%d up=%d down=%d",
-             lastInput_.seq,
-             lastInput_.moveX,
-             lastInput_.moveY,
-             lastInput_.yaw,
-             lastInput_.pitch,
-             lastInput_.jump ? 1 : 0,
-               lastInput_.sprint ? 1 : 0,
-               lastInput_.camUp ? 1 : 0,
-               lastInput_.camDown ? 1 : 0);
+
+        if (lastInputLogTick_ == 0 || (serverTick_ - lastInputLogTick_) >= tickRate_) {
+            logf(serverTick_,
+                 "rx",
+                 "InputFrame seq=%u move=(%.2f,%.2f) yaw=%.1f pitch=%.1f jump=%d sprint=%d up=%d down=%d",
+                 lastInput_.seq,
+                 lastInput_.moveX,
+                 lastInput_.moveY,
+                 lastInput_.yaw,
+                 lastInput_.pitch,
+                 lastInput_.jump ? 1 : 0,
+                 lastInput_.sprint ? 1 : 0,
+                 lastInput_.camUp ? 1 : 0,
+                 lastInput_.camDown ? 1 : 0);
+            lastInputLogTick_ = serverTick_;
+        }
         return;
     }
 
@@ -492,6 +498,15 @@ void Server::handle_message_(shared::proto::Message& msg) {
             rej.seq = req.seq;
             rej.reason = shared::proto::RejectReason::NotAllowed;
             logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (req.y < 0 || req.y >= shared::voxel::CHUNK_HEIGHT) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (bad y)", rej.seq, static_cast<unsigned>(rej.reason));
             endpoint_->send(std::move(rej));
             return;
         }
@@ -549,6 +564,15 @@ void Server::handle_message_(shared::proto::Message& msg) {
             rej.seq = req.seq;
             rej.reason = shared::proto::RejectReason::NotAllowed;
             logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
+            endpoint_->send(std::move(rej));
+            return;
+        }
+
+        if (req.y < 0 || req.y >= shared::voxel::CHUNK_HEIGHT) {
+            shared::proto::ActionRejected rej;
+            rej.seq = req.seq;
+            rej.reason = shared::proto::RejectReason::Invalid;
+            logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (bad y)", rej.seq, static_cast<unsigned>(rej.reason));
             endpoint_->send(std::move(rej));
             return;
         }

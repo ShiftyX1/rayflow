@@ -71,6 +71,9 @@ private:
     bool lastJumpHeld_{false};
 
     shared::proto::InputFrame lastInput_{};
+
+    // Rate-limit noisy input logs (approx. 1Hz). Logging every frame is too spammy at 30 TPS.
+    std::uint64_t lastInputLogTick_{0};
 };
 
 } // namespace server::core

@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
+#include <random>
 
 namespace server::voxel {
 
@@ -204,14 +204,16 @@ shared::voxel::BlockType Terrain::get_base_block_(int x, int y, int z) const {
 void Terrain::init_perlin_() const {
     if (perm_initialized_) return;
 
-    // Keep algorithm consistent with the current client implementation.
-    std::srand(seed_);
+    // NOTE: Deterministic local PRNG; do not use std::rand/std::srand in simulation.
+    // Keep algorithm consistent with the client implementation.
+    std::mt19937 rng(seed_);
     for (int i = 0; i < 256; i++) {
         perm_[i] = static_cast<unsigned char>(i);
     }
 
     for (int i = 255; i > 0; i--) {
-        int j = std::rand() % (i + 1);
+        std::uniform_int_distribution<int> dist(0, i);
+        const int j = dist(rng);
         std::swap(perm_[i], perm_[j]);
     }
 

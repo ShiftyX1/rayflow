@@ -3,6 +3,8 @@
 #include <raylib.h>
 #include <entt/entt.hpp>
 
+#include "../../shared/constants.hpp"
+
 namespace ecs {
 
 // ============================================================================
@@ -59,7 +61,7 @@ struct FirstPersonCamera {
     float yaw{0.0f};
     float pitch{0.0f};
     float fov{60.0f};
-    float eye_height{1.62f};
+    float eye_height{shared::kPlayerEyeHeight};
     float near_plane{0.1f};
     float far_plane{1000.0f};
 };

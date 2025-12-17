@@ -2,6 +2,7 @@
 
 #include "world.hpp"
 #include "../ecs/components.hpp"
+#include "../../shared/constants.hpp"
 #include <raylib.h>
 
 #include <optional>
@@ -22,7 +23,7 @@ struct BlockRaycastResult {
 
 class BlockInteraction {
 public:
-    static constexpr float MAX_REACH_DISTANCE = 5.0f;
+    static constexpr float MAX_REACH_DISTANCE = shared::kBlockReachDistance;
     static constexpr int DESTROY_STAGE_COUNT = 10;
 
     struct BreakRequest {
