@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>.rfmap — Техническая спецификация формата</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; max-width: 1050px; }
+    h1, h2, h3 { line-height: 1.2; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    pre { padding: 12px; border: 1px solid #8884; border-radius: 8px; overflow: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; }
+    th, td { border: 1px solid #8884; padding: 8px; vertical-align: top; }
+    th { text-align: left; }
+    .muted { opacity: 0.85; }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid #8884; border-radius: 999px; font-size: 12px; }
+    ul { margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>.rfmap — Техническая спецификация формата</h1>
+  <p class="muted">
+    Проект: rayflow (воксельная игра в стиле BedWars). Документ описывает бинарный формат файлов карт,
+    который читается и записывается модулем <code>shared/maps/rfmap_io.cpp</code>.
+  </p>
+
+  <h2>1. Обзор</h2>
+  <p>
+    <strong>.rfmap</strong> — это версионированный бинарный формат для хранения шаблонов карт. Формат хранит
+    только блоки в пределах чанковых границ в разреженном виде (записываются только non-Air блоки), а также
+    содержит опциональную таблицу секций для расширяемости с прямой совместимостью.
+  </p>
+
+  <h3>1.1 Цели</h3>
+  <ul>
+    <li>Быстрая загрузка на сервере и клиенте без зависимостей от рендера.</li>
+    <li>Стабильные идентификаторы блоков, общие для клиента и сервера (<code>shared/voxel/block.hpp</code>).</li>
+    <li>Механизм расширений с прямой совместимостью (таблица секций, пропуск неизвестных секций).</li>
+  </ul>
+
+  <h3>1.2 Что НЕ является целью</h3>
+  <ul>
+    <li>Сжатие данных (пока не требуется: формат простой и разреженный).</li>
+    <li>Бесконечные миры или сохранения состояния (это шаблоны карт, а не файлы сохранений).</li>
+  </ul>
+
+  <h2>2. Общие соглашения</h2>
+  <table>
+    <tr><th>Параметр</th><th>Правило</th></tr>
+    <tr><td>Порядок байтов</td><td>Все многобайтовые числа и числа с плавающей точкой — <strong>little-endian</strong>.</td></tr>
+    <tr><td>Целые числа</td><td><code>u8</code>, <code>u16</code>, <code>u32</code>, <code>i32</code> — стандартные целочисленные типы фиксированной ширины.</td></tr>
+    <tr><td>Числа с плавающей точкой</td><td><code>f32</code> — IEEE-754 binary32, хранится как <code>u32</code> в little-endian.</td></tr>
+    <tr><td>Строки</td><td><code>string_u16</code> = <code>u16 byteLength</code> + байты строки (без NUL-терминатора). Предполагается UTF-8, но не проверяется.</td></tr>
+    <tr><td>Координаты чанков</td><td>Координаты чанков (<code>cx</code>, <code>cz</code>) — знаковые 32-битные целые числа.</td></tr>
+    <tr><td>Размер чанка</td><td>Фиксирован в коде: ширина=16, глубина=16, высота=256 (см. <code>shared/voxel/block.hpp</code>).</td></tr>
+  </table>
+
+  <h2>3. Структура файла (версия формата 2)</h2>
+  <p>
+    Текущая реализация записи создаёт файлы с <span class="pill">formatVersion = 2</span>. Модуль чтения поддерживает версии в диапазоне <code>[1..2]</code>.
+  </p>
+
+  <h3>3.1 Общая структура</h3>
+  <pre>
++------------------------------+
+| Заголовок (Header)           |
++------------------------------+
+| Метаданные (Metadata)        |
++------------------------------+
+| Chunk Bounds                 |
++------------------------------+
+| World Boundary (MT-1)        |
++------------------------------+
+| chunkCount (u32)             |
++------------------------------+
+| Повтор Chunk Records         |
++------------------------------+
+| Таблица секций (v2+)         |
++------------------------------+
+  </pre>
+
+  <h3>3.2 Заголовок (Header)</h3>
+  <table>
+    <tr><th>Offset</th><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>0x00</td><td>magic</td><td>4 bytes</td><td>ASCII <code>"RFMP"</code></td></tr>
+    <tr><td>0x04</td><td>formatVersion</td><td>u32</td><td>Сейчас <code>2</code></td></tr>
+  </table>
+
+  <h3>3.3 Метаданные карты</h3>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание / ограничения</th></tr>
+    <tr><td>mapId</td><td>string_u16</td><td>Обязательное поле, не должно быть пустым.</td></tr>
+    <tr><td>version</td><td>u32</td><td>Обязательное поле, должно быть больше 0.</td></tr>
+  </table>
+
+  <h3>3.4 Границы шаблона (Chunk Bounds)</h3>
+  <p class="muted">Границы указываются включительно (inclusive) в координатах чанков.</p>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>chunkMinX</td><td>i32</td><td>Минимальный chunk X (inclusive)</td></tr>
+    <tr><td>chunkMinZ</td><td>i32</td><td>Минимальный chunk Z (inclusive)</td></tr>
+    <tr><td>chunkMaxX</td><td>i32</td><td>Максимальный chunk X (inclusive)</td></tr>
+    <tr><td>chunkMaxZ</td><td>i32</td><td>Максимальный chunk Z (inclusive)</td></tr>
+  </table>
+
+  <h3>3.5 Границы мира (World Boundary, MT-1)</h3>
+  <p>
+    Файл содержит вторую структуру <code>ChunkBounds</code> для определения границ мира. В текущей реализации
+    записи эти границы устанавливаются равными границам шаблона карты.
+  </p>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>worldChunkMinX</td><td>i32</td><td>Boundary min X (inclusive)</td></tr>
+    <tr><td>worldChunkMinZ</td><td>i32</td><td>Boundary min Z (inclusive)</td></tr>
+    <tr><td>worldChunkMaxX</td><td>i32</td><td>Boundary max X (inclusive)</td></tr>
+    <tr><td>worldChunkMaxZ</td><td>i32</td><td>Boundary max Z (inclusive)</td></tr>
+  </table>
+
+  <h3>3.6 chunkCount</h3>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>chunkCount</td><td>u32</td><td>Количество chunk-записей далее (пишутся только чанки, где есть non-Air блоки).</td></tr>
+  </table>
+
+  <h2>4. Записи чанков (разреженное хранение блоков)</h2>
+  <p>
+    Чанки записываются при обходе всех координат чанков внутри границ. Если чанк не содержит блоков,
+    отличных от Air, его запись в файле полностью отсутствует.
+  </p>
+
+  <h3>4.1 Заголовок записи чанка</h3>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>cx</td><td>i32</td><td>Chunk X координата</td></tr>
+    <tr><td>cz</td><td>i32</td><td>Chunk Z координата</td></tr>
+    <tr><td>blockCount</td><td>u32</td><td>Количество block records далее в этом чанке</td></tr>
+  </table>
+
+  <h3>4.2 Block record</h3>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание / ограничения</th></tr>
+    <tr><td>lx</td><td>u8</td><td>Локальный X в чанке, <code>[0..15]</code></td></tr>
+    <tr><td>ly</td><td>u16</td><td>Локальный Y в чанке, <code>[0..255]</code></td></tr>
+    <tr><td>lz</td><td>u8</td><td>Локальный Z в чанке, <code>[0..15]</code></td></tr>
+    <tr><td>blockType</td><td>u8</td><td>ID блока, должен быть &lt; <code>BlockType::Count</code> (см. <code>shared/voxel/block.hpp</code>)</td></tr>
+  </table>
+
+  <h3>4.3 Правила разреженного хранения</h3>
+  <ul>
+    <li>Запись: блоки типа <code>Air</code> никогда не записываются в файл.</li>
+    <li>Чтение: если блок <code>Air</code> всё же встречается — запись игнорируется.</li>
+  </ul>
+
+  <h2>5. Таблица секций (механизм расширений в версии 2+)</h2>
+  <p>
+    После записей чанков файлы версии 2 и выше могут содержать опциональную таблицу секций.
+    Неизвестные секции должны пропускаться при чтении (обеспечение прямой совместимости).
+  </p>
+
+  <h3>5.1 Структура</h3>
+  <table>
+    <tr><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>sectionCount</td><td>u32</td><td>Количество секций далее</td></tr>
+    <tr><td>section[i].tag</td><td>u32</td><td>4-символьный ASCII-tag, упакованный little-endian (например <code>VIS0</code>)</td></tr>
+    <tr><td>section[i].size</td><td>u32</td><td>Размер payload в байтах</td></tr>
+    <tr><td>section[i].payload</td><td>bytes[size]</td><td>Payload секции (интерпретация зависит от tag)</td></tr>
+  </table>
+
+  <p class="muted">
+    Примечание к reader: если файл заканчивается сразу после чанков, это трактуется как “0 секций”.
+  </p>
+
+  <h2>6. Стандартные секции</h2>
+
+  <h3>6.1 <code>VIS0</code> — Визуальные настройки (MV-1 + MV-2)</h3>
+  <p>
+    Визуальные настройки — это параметры окружения только для рендера. Они не должны влиять на
+    авторитетную симуляцию на сервере.
+  </p>
+
+  <h4>Тег</h4>
+  <p><span class="pill">VIS0</span> (байты <code>'V''I''S''0'</code>)</p>
+
+  <h4>Полезная нагрузка MV-1 (минимальный префикс)</h4>
+  <p class="muted">Минимальный допустимый размер полезной нагрузки: 16 байт.</p>
+  <table>
+    <tr><th>Offset</th><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>+0</td><td>skyboxKind</td><td>u8</td><td>0=None, 1=Day, 2=Night; значения &gt;2 могут соответствовать Panorama_Sky_XX по числовому id</td></tr>
+    <tr><td>+1</td><td>useMoon</td><td>u8</td><td>0/1</td></tr>
+    <tr><td>+2</td><td>reserved</td><td>u16</td><td>Должно писаться как 0; reader игнорирует</td></tr>
+    <tr><td>+4</td><td>timeOfDayHours</td><td>f32</td><td>Диапазон [0, 24]</td></tr>
+    <tr><td>+8</td><td>sunIntensity</td><td>f32</td><td>Диапазон [0, 10]</td></tr>
+    <tr><td>+12</td><td>ambientIntensity</td><td>f32</td><td>Диапазон [0, 5]</td></tr>
+  </table>
+
+  <h4>Расширение MV-2</h4>
+  <p class="muted">Если размер полезной нагрузки составляет минимум 20 байт, MV-2 добавляет одно поле.</p>
+  <table>
+    <tr><th>Смещение</th><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>+16</td><td>temperature</td><td>f32</td><td>
+      Диапазон [0, 1], по умолчанию 0.5.
+      Влияет <strong>только</strong> на цвет рендера листвы и травы:
+      <ul>
+        <li><code>Leaves</code> (листва): все грани</li>
+        <li><code>Grass</code> (трава): только верхняя грань</li>
+      </ul>
+      Эффект представляет собой <strong>полную перекраску</strong> (не лёгкий оттенок).
+    </td></tr>
+  </table>
+
+  <h4>Правила совместимости</h4>
+  <ul>
+    <li>Если секция <code>VIS0</code> отсутствует: применяются значения по умолчанию (День, 12:00, без луны, sun=1, ambient=0.25, temperature=0.5).</li>
+    <li>Если <code>VIS0.size &gt;= 16</code> и <code>&lt; 20</code>: читаются поля MV-1; temperature остаётся по умолчанию (0.5).</li>
+    <li>Если <code>VIS0.size &gt; 20</code>: читается известный префикс; оставшиеся байты пропускаются.</li>
+  </ul>
+
+  <h3>6.2 <code>PRO0</code> — Список разрешённых для разрушения блоков (MT-1)</h3>
+  <p>
+    Метаданные защиты шаблона: определяет, какие типы блоков можно ломать, даже если они являются
+    частью шаблона карты.
+  </p>
+
+  <h4>Тег</h4>
+  <p><span class="pill">PRO0</span> (байты <code>'P''R''O''0'</code>)</p>
+
+  <h4>Полезная нагрузка</h4>
+  <p class="muted">
+    Размер в текущей версии фиксирован: <code>BlockType::Count</code> байт.
+    Индекс i соответствует идентификатору типа блока i.
+  </p>
+  <table>
+    <tr><th>Offset</th><th>Поле</th><th>Тип</th><th>Описание</th></tr>
+    <tr><td>+0..N-1</td><td>breakableTemplateBlocks[i]</td><td>u8</td><td>0/1 для каждого blockType id</td></tr>
+  </table>
+
+  <h4>Правила совместимости</h4>
+  <ul>
+    <li>Если секция <code>PRO0</code> отсутствует: все значения устанавливаются в false по умолчанию.</li>
+    <li>Если <code>PRO0.size &gt; N</code>: читаются первые N байт; остальные байты пропускаются.</li>
+  </ul>
+
+  <h2>7. Правила валидации (текущее поведение при чтении)</h2>
+  <ul>
+    <li>Магическая последовательность должна быть <code>RFMP</code>.</li>
+    <li>Версия формата должна быть в диапазоне <code>[1..2]</code> (версии 0 и выше 2 отклоняются).</li>
+    <li>Поле <code>mapId</code> не должно быть пустым, <code>version</code> должна быть больше 0.</li>
+    <li>Границы чанков и границы мира должны иметь min &lt;= max по обеим осям.</li>
+    <li>Каждая запись блока должна иметь координаты в допустимом диапазоне и валидный идентификатор типа блока.</li>
+    <li>Неизвестные теги секций пропускаются (обеспечение прямой совместимости).</li>
+  </ul>
+
+  <h2>8. Примечания для разработчиков</h2>
+  <ul>
+    <li>
+      <strong>Теги секций:</strong> тег хранится как упакованное значение <code>u32</code> в формате little-endian.
+      Пример: тег <code>VIS0</code> хранится как <code>0x30534956</code>.
+    </li>
+    <li>
+      <strong>Отсутствующие чанки:</strong> если запись чанка отсутствует в файле, это означает, что чанк
+      состоит только из блоков Air.
+    </li>
+    <li>
+      <strong>Расширение VIS0:</strong> новые поля добавляются в конец структуры; модуль чтения считывает
+      известный префикс и пропускает неизвестные байты в конце.
+    </li>
+  </ul>
+
+  <hr />
+  <p class="muted">
+    Документ соответствует текущему состоянию кодовой базы (декабрь 2025). При изменении бинарного формата
+    обновляйте этот документ вместе с модулем <code>shared/maps/rfmap_io.cpp</code>.
+  </p>
+</body>
+</html>

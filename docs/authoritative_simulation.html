@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Authoritative Simulation — Architecture Specification</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; max-width: 1050px; }
+    h1, h2, h3 { line-height: 1.2; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    pre { padding: 12px; border: 1px solid #8884; border-radius: 8px; overflow: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; }
+    th, td { border: 1px solid #8884; padding: 8px; vertical-align: top; }
+    th { text-align: left; }
+    .muted { opacity: 0.85; }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid #8884; border-radius: 999px; font-size: 12px; }
+    .highlight { background: #ffc; padding: 2px 4px; border-radius: 3px; }
+    ul { margin-top: 6px; }
+    .rule { border-left: 3px solid #0084; padding-left: 12px; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <h1>Authoritative Simulation — Architecture Specification</h1>
+  <p class="muted">
+    Project: rayflow (voxel BedWars-like). This document defines what "authoritative simulation" means in the context
+    of this project and establishes the architectural boundaries between server and client.
+  </p>
+
+  <h2>1. Core Principle</h2>
+  <p>
+    <strong>Authoritative simulation</strong> means that the <span class="highlight">server is the single source of truth</span>
+    for all game state, rules enforcement, and simulation logic. The client is a <span class="highlight">thin presentation layer</span>
+    that renders the game state and captures user input, but never directly modifies or simulates authoritative game state.
+  </p>
+
+  <h2>2. Server Responsibilities</h2>
+  <p>The server has exclusive authority over:</p>
+
+  <h3>2.1 Simulation & Physics</h3>
+  <ul>
+    <li><strong>Fixed tick loop:</strong> Server runs at a fixed tick rate (default 30 TPS) with deterministic timestep.</li>
+    <li><strong>Player movement:</strong> Server executes all physics calculations including gravity, jump, collision detection with voxel blocks.</li>
+    <li><strong>Entity state:</strong> All entity positions, velocities, health, and status effects are computed server-side.</li>
+  </ul>
+
+  <h3>2.2 Rules & Validation</h3>
+  <ul>
+    <li><strong>Command validation:</strong> Server validates every client command before execution (e.g., is the player allowed to break this block?).</li>
+    <li><strong>Game rules:</strong> Match timing, win conditions, team mechanics, resource generation — all enforced server-side.</li>
+    <li><strong>Cheat prevention:</strong> Movement speed limits, reach distance, action cooldowns are all validated by the server.</li>
+  </ul>
+
+  <h3>2.3 World State</h3>
+  <ul>
+    <li><strong>Block modifications:</strong> Block placement/breaking is validated and executed on the server.</li>
+    <li><strong>Template protection:</strong> Server enforces which blocks can be modified based on map template metadata.</li>
+    <li><strong>World boundaries:</strong> Server enforces world limits and prevents out-of-bounds movement.</li>
+  </ul>
+
+  <h3>2.4 Match Lifecycle</h3>
+  <ul>
+    <li><strong>Match initialization:</strong> Server loads map templates and initializes match state.</li>
+    <li><strong>Player spawning:</strong> Server determines spawn points and manages respawns.</li>
+    <li><strong>Match restart:</strong> Server re-instantiates maps from templates.</li>
+  </ul>
+
+  <h2>3. Client Responsibilities</h2>
+  <p>The client is strictly limited to presentation and input capture:</p>
+
+  <h3>3.1 Rendering</h3>
+  <ul>
+    <li><strong>Visual representation:</strong> Render blocks, entities, effects based on server-provided state.</li>
+    <li><strong>Interpolation:</strong> Smoothly interpolate between server state snapshots for fluid rendering.</li>
+    <li><strong>Camera & viewport:</strong> Manage camera position and rendering perspective (does not affect simulation).</li>
+    <li><strong>Visual-only settings:</strong> Skybox, lighting, temperature-based foliage colors (from map's <code>VIS0</code> section).</li>
+  </ul>
+
+  <h3>3.2 User Interface</h3>
+  <ul>
+    <li><strong>HUD rendering:</strong> Display health bars, inventory, match timer based on server-provided data.</li>
+    <li><strong>Debug UI:</strong> Developer overlays for debugging (has no effect on simulation).</li>
+    <li><strong>Block break overlay:</strong> Visual feedback for block-breaking progress (actual break is server-side).</li>
+  </ul>
+
+  <h3>3.3 Input Capture</h3>
+  <ul>
+    <li><strong>Intent frames:</strong> Client captures keyboard/mouse input and sends <em>intent</em> to the server.</li>
+    <li><strong>No direct execution:</strong> Client does not execute gameplay logic; it only requests actions.</li>
+    <li><strong>Raycasting for targeting:</strong> Client performs raycasting to determine <em>what</em> the player wants to interact with, but server validates.</li>
+  </ul>
+
+  <h2>4. Architectural Boundaries</h2>
+
+  <div class="rule">
+    <strong>Rule 1: No Shared State Mutation</strong><br>
+    Client must never directly read from or write to server state structures. Communication happens exclusively through the protocol layer.
+  </div>
+
+  <div class="rule">
+    <strong>Rule 2: Client-Side State is Replica</strong><br>
+    Any game state on the client (player positions, block state) is a <em>replica</em> rebuilt from server messages. If client and server diverge, server state is always correct.
+  </div>
+
+  <div class="rule">
+    <strong>Rule 3: Server Validates Everything</strong><br>
+    Server must never trust client-provided values for simulation-critical data (positions, timestamps, resource counts). Client sends <em>intents</em>, server computes results.
+  </div>
+
+  <div class="rule">
+    <strong>Rule 4: Visual Settings Don't Affect Simulation</strong><br>
+    Rendering parameters (skybox, time of day, foliage temperature) are client-only concerns loaded from map metadata (<code>VIS0</code> section). They must not influence collision, movement, or gameplay rules.
+  </div>
+
+  <h2>5. What This Means in Practice</h2>
+
+  <h3>5.1 Player Movement</h3>
+  <table>
+    <tr><th>Component</th><th>Authority</th><th>Details</th></tr>
+    <tr>
+      <td>Input capture</td>
+      <td>Client</td>
+      <td>Client detects key presses (W/A/S/D/Space) and sends intent frames to server.</td>
+    </tr>
+    <tr>
+      <td>Physics simulation</td>
+      <td>Server</td>
+      <td>Server applies velocity, gravity, collision detection with blocks, updates position.</td>
+    </tr>
+    <tr>
+      <td>Position rendering</td>
+      <td>Client</td>
+      <td>Client interpolates between server snapshots and renders player at smooth position.</td>
+    </tr>
+  </table>
+
+  <h3>5.2 Block Breaking</h3>
+  <table>
+    <tr><th>Component</th><th>Authority</th><th>Details</th></tr>
+    <tr>
+      <td>Target selection</td>
+      <td>Client</td>
+      <td>Client raycasts to find which block player is looking at.</td>
+    </tr>
+    <tr>
+      <td>Break validation</td>
+      <td>Server</td>
+      <td>Server checks: reach distance, block protection rules, player permissions.</td>
+    </tr>
+    <tr>
+      <td>Block removal</td>
+      <td>Server</td>
+      <td>Server removes the block from world state and broadcasts update.</td>
+    </tr>
+    <tr>
+      <td>Visual feedback</td>
+      <td>Client</td>
+      <td>Client shows break overlay animation; server tracks actual break progress.</td>
+    </tr>
+  </table>
+
+  <h3>5.3 Temporary Terrain (Migration Aid)</h3>
+  <p class="muted">
+    Currently, the project uses seed-based procedural terrain as a <strong>temporary migration aid</strong>:
+  </p>
+  <ul>
+    <li>Server selects a <code>worldSeed</code> and sends it to clients in <code>ServerHello</code>.</li>
+    <li>Client uses the same seed to generate matching terrain for rendering.</li>
+    <li>Server performs collision detection against the same seed-generated terrain.</li>
+    <li><strong>Important:</strong> This is NOT the final design. Final BedWars maps will be loaded from <code>.rfmap</code> templates.</li>
+  </ul>
+
+  <h2>6. Future: Prediction & Lag Compensation</h2>
+  <p>
+    The current architecture intentionally does <strong>not</strong> include client-side prediction or lag compensation.
+    These features are planned for <span class="pill">Stage C</span> of the migration plan.
+  </p>
+
+  <p>When implemented, prediction will work as follows:</p>
+  <ul>
+    <li><strong>Client prediction:</strong> Client may run a <em>speculative</em> copy of movement physics locally for immediate visual feedback.</li>
+    <li><strong>Server reconciliation:</strong> When server state arrives, client discards prediction and snaps to authoritative position.</li>
+    <li><strong>Still authoritative:</strong> Server state always wins; prediction is purely cosmetic to hide latency.</li>
+  </ul>
+
+  <h2>7. Single Protocol for Online & Offline</h2>
+  <p>
+    The project uses the <strong>same authoritative architecture</strong> for both "singleplayer" and multiplayer:
+  </p>
+  <ul>
+    <li><strong>Singleplayer:</strong> Server instance runs locally, client connects via <code>LocalTransport</code> (in-memory).</li>
+    <li><strong>Multiplayer:</strong> Server runs remotely, client connects via network transport.</li>
+    <li><strong>No special offline logic:</strong> All rules, validation, and simulation go through the server even in singleplayer.</li>
+  </ul>
+
+  <h2>8. Logging & Debugging</h2>
+  <p>For authoritative simulation to be maintainable, server must log:</p>
+  <ul>
+    <li><strong>Command received:</strong> What action did the client request?</li>
+    <li><strong>Validation result:</strong> Was it allowed or rejected? Why?</li>
+    <li><strong>State change:</strong> What simulation state was modified?</li>
+  </ul>
+  <p class="muted">
+    Logging must be rate-limited to avoid spam (e.g., don't log every tick, only state transitions).
+  </p>
+
+  <hr />
+  <p class="muted">
+    Document reflects current architecture as of December 2025.
+  </p>
+</body>
+</html>

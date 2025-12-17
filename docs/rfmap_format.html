@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>.rfmap Technical Specification</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; max-width: 1050px; }
+    h1, h2, h3 { line-height: 1.2; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    pre { padding: 12px; border: 1px solid #8884; border-radius: 8px; overflow: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; }
+    th, td { border: 1px solid #8884; padding: 8px; vertical-align: top; }
+    th { text-align: left; }
+    .muted { opacity: 0.85; }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid #8884; border-radius: 999px; font-size: 12px; }
+    .ok { font-weight: 600; }
+    .warn { font-weight: 700; }
+    ul { margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>.rfmap Technical Specification</h1>
+  <p class="muted">
+    Project: rayflow (voxel BedWars-like). This document describes the on-disk binary format written/read by
+    <code>shared/maps/rfmap_io.cpp</code>.
+  </p>
+
+  <h2>1. Overview</h2>
+  <p>
+    <strong>.rfmap</strong> is a versioned, binary “map template” format. It stores finite chunk-bounded voxel data sparsely
+    (only non-Air blocks) plus an optional section table for forward-compatible metadata.
+  </p>
+
+  <h3>1.1 Goals</h3>
+  <ul>
+    <li>Fast load in server/client without rendering dependencies.</li>
+    <li>Stable block IDs shared across client/server (<code>shared/voxel/block.hpp</code>).</li>
+    <li>Forward-compatible extension mechanism (section table, skippable unknown sections).</li>
+  </ul>
+
+  <h3>1.2 Non-goals</h3>
+  <ul>
+    <li>Compression (not required currently; format is simple and sparse).</li>
+    <li>Infinite worlds or persistent saves (templates, not world saves).</li>
+  </ul>
+
+  <h2>2. Conventions</h2>
+  <table>
+    <tr><th>Item</th><th>Rule</th></tr>
+    <tr><td>Endianness</td><td>All multi-byte integers and floats are <strong>little-endian</strong>.</td></tr>
+    <tr><td>Integers</td><td><code>u8</code>, <code>u16</code>, <code>u32</code>, <code>i32</code> as standard fixed-width types.</td></tr>
+    <tr><td>Float</td><td><code>f32</code> is IEEE-754 binary32 stored as little-endian <code>u32</code> bits.</td></tr>
+    <tr><td>Strings</td><td><code>string_u16</code> = <code>u16 byteLength</code> + raw bytes (no NUL terminator). Intended for UTF-8; not enforced.</td></tr>
+    <tr><td>Chunk coords</td><td>Chunk coordinates (<code>cx</code>, <code>cz</code>) are signed 32-bit integers.</td></tr>
+    <tr><td>Chunk size</td><td>Fixed by code: width=16, depth=16, height=256 (see <code>shared/voxel/block.hpp</code>).</td></tr>
+  </table>
+
+  <h2>3. File Layout (Format Version 2)</h2>
+  <p>
+    The current writer emits <span class="pill">formatVersion = 2</span>. Readers accept versions in <code>[1..2]</code>.
+  </p>
+
+  <h3>3.1 High-level structure</h3>
+  <pre>
++------------------------------+
+| Header                       |
++------------------------------+
+| Metadata                     |
++------------------------------+
+| Chunk Bounds                 |
++------------------------------+
+| World Boundary (MT-1)        |
++------------------------------+
+| chunkCount (u32)             |
++------------------------------+
+| Repeated Chunk Records       |
++------------------------------+
+| Section Table (v2+)          |
++------------------------------+
+  </pre>
+
+  <h3>3.2 Header</h3>
+  <table>
+    <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>0x00</td><td>magic</td><td>4 bytes</td><td>ASCII <code>"RFMP"</code></td></tr>
+    <tr><td>0x04</td><td>formatVersion</td><td>u32</td><td>Currently <code>2</code></td></tr>
+  </table>
+
+  <h3>3.3 Metadata</h3>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description / constraints</th></tr>
+    <tr><td>mapId</td><td>string_u16</td><td>Required, must be non-empty.</td></tr>
+    <tr><td>version</td><td>u32</td><td>Required, must be &gt; 0.</td></tr>
+  </table>
+
+  <h3>3.4 Chunk Bounds (finite template bounds)</h3>
+  <p class="muted">Bounds are inclusive and expressed in chunk coordinates.</p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>chunkMinX</td><td>i32</td><td>Minimum chunk X (inclusive)</td></tr>
+    <tr><td>chunkMinZ</td><td>i32</td><td>Minimum chunk Z (inclusive)</td></tr>
+    <tr><td>chunkMaxX</td><td>i32</td><td>Maximum chunk X (inclusive)</td></tr>
+    <tr><td>chunkMaxZ</td><td>i32</td><td>Maximum chunk Z (inclusive)</td></tr>
+  </table>
+
+  <h3>3.5 World Boundary (MT-1)</h3>
+  <p>
+    The file stores a second <code>ChunkBounds</code> block for world boundary rules. Current writer sets it equal to the
+    template chunk bounds.
+  </p>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>worldChunkMinX</td><td>i32</td><td>Boundary min X (inclusive)</td></tr>
+    <tr><td>worldChunkMinZ</td><td>i32</td><td>Boundary min Z (inclusive)</td></tr>
+    <tr><td>worldChunkMaxX</td><td>i32</td><td>Boundary max X (inclusive)</td></tr>
+    <tr><td>worldChunkMaxZ</td><td>i32</td><td>Boundary max Z (inclusive)</td></tr>
+  </table>
+
+  <h3>3.6 chunkCount</h3>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>chunkCount</td><td>u32</td><td>Number of chunk records that follow (only chunks containing non-Air blocks are written).</td></tr>
+  </table>
+
+  <h2>4. Chunk Records (sparse voxel storage)</h2>
+  <p>
+    Chunks are written by scanning all chunk coords inside bounds. If a chunk contains zero non-Air blocks,
+    it is omitted entirely.
+  </p>
+
+  <h3>4.1 Chunk record header</h3>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>cx</td><td>i32</td><td>Chunk X coordinate</td></tr>
+    <tr><td>cz</td><td>i32</td><td>Chunk Z coordinate</td></tr>
+    <tr><td>blockCount</td><td>u32</td><td>Number of block records that follow for this chunk</td></tr>
+  </table>
+
+  <h3>4.2 Block record</h3>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description / constraints</th></tr>
+    <tr><td>lx</td><td>u8</td><td>Local X in chunk, <code>[0..15]</code></td></tr>
+    <tr><td>ly</td><td>u16</td><td>Local Y in chunk, <code>[0..255]</code></td></tr>
+    <tr><td>lz</td><td>u8</td><td>Local Z in chunk, <code>[0..15]</code></td></tr>
+    <tr><td>blockType</td><td>u8</td><td>Block type id, must be &lt; <code>BlockType::Count</code> (see <code>shared/voxel/block.hpp</code>)</td></tr>
+  </table>
+
+  <h3>4.3 Sparse rule</h3>
+  <ul>
+    <li>Writer: never emits <code>Air</code> block records.</li>
+    <li>Reader: if <code>Air</code> appears anyway, it is ignored (still safe).</li>
+  </ul>
+
+  <h2>5. Section Table (v2+ extension mechanism)</h2>
+  <p>
+    After chunk records, v2+ files may contain an optional section table. Unknown sections are skipped for forward
+    compatibility.
+  </p>
+
+  <h3>5.1 Layout</h3>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>sectionCount</td><td>u32</td><td>Number of sections following</td></tr>
+    <tr><td>section[i].tag</td><td>u32</td><td>4-byte ASCII tag packed little-endian (e.g. <code>VIS0</code>)</td></tr>
+    <tr><td>section[i].size</td><td>u32</td><td>Payload size in bytes</td></tr>
+    <tr><td>section[i].payload</td><td>bytes[size]</td><td>Opaque payload, interpretation depends on tag</td></tr>
+  </table>
+
+  <p class="muted">
+    Reader behavior note: if the file ends immediately after chunks, the reader treats it as “no section table”.
+  </p>
+
+  <h2>6. Standard Sections</h2>
+
+  <h3>6.1 <code>VIS0</code> — Visual Settings (MV-1 + MV-2)</h3>
+  <p>
+    Visual settings are render-only environment parameters. They must not affect authoritative simulation.
+  </p>
+
+  <h4>Tag</h4>
+  <p><span class="pill">VIS0</span> (bytes <code>'V''I''S''0'</code>)</p>
+
+  <h4>MV-1 payload (minimum prefix)</h4>
+  <p class="muted">Minimum accepted payload size: 16 bytes.</p>
+  <table>
+    <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>+0</td><td>skyboxKind</td><td>u8</td><td>0=None, 1=Day, 2=Night; values &gt;2 may refer to Panorama_Sky_XX by numeric id</td></tr>
+    <tr><td>+1</td><td>useMoon</td><td>u8</td><td>0/1</td></tr>
+    <tr><td>+2</td><td>reserved</td><td>u16</td><td>Must be written as 0; readers ignore</td></tr>
+    <tr><td>+4</td><td>timeOfDayHours</td><td>f32</td><td>Range [0, 24]</td></tr>
+    <tr><td>+8</td><td>sunIntensity</td><td>f32</td><td>Range [0, 10]</td></tr>
+    <tr><td>+12</td><td>ambientIntensity</td><td>f32</td><td>Range [0, 5]</td></tr>
+  </table>
+
+  <h4>MV-2 extension</h4>
+  <p class="muted">If payload size is at least 20 bytes, MV-2 adds one field.</p>
+  <table>
+    <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>+16</td><td>temperature</td><td>f32</td><td>
+      Range [0, 1], default 0.5.
+      Affects <strong>only</strong> foliage/grass rendering color:
+      <ul>
+        <li><code>Leaves</code>: all faces</li>
+        <li><code>Grass</code>: top face only</li>
+      </ul>
+      Effect is a <strong>full recolor</strong> (not a subtle tint).
+    </td></tr>
+  </table>
+
+  <h4>Compatibility rules</h4>
+  <ul>
+    <li>If <code>VIS0</code> is missing: defaults apply (Day, 12:00, no moon, sun=1, ambient=0.25, temperature=0.5).</li>
+    <li>If <code>VIS0.size &gt;= 16</code> and <code>&lt; 20</code>: MV-1 values read; temperature stays default (0.5).</li>
+    <li>If <code>VIS0.size &gt; 20</code>: known prefix read; remaining bytes are skipped.</li>
+  </ul>
+
+  <h3>6.2 <code>PRO0</code> — Protection allow-list (MT-1)</h3>
+  <p>
+    Template protection metadata: which block types are allowed to be broken even if they are part of the template.
+  </p>
+
+  <h4>Tag</h4>
+  <p><span class="pill">PRO0</span> (bytes <code>'P''R''O''0'</code>)</p>
+
+  <h4>Payload</h4>
+  <p class="muted">
+    Size is currently fixed to <code>BlockType::Count</code> bytes.
+    Index i corresponds to block type id i.
+  </p>
+  <table>
+    <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>+0..N-1</td><td>breakableTemplateBlocks[i]</td><td>u8</td><td>0/1 per block type id</td></tr>
+  </table>
+
+  <h4>Compatibility rules</h4>
+  <ul>
+    <li>If <code>PRO0</code> is missing: all values default to false.</li>
+    <li>If <code>PRO0.size &gt; N</code>: first N bytes read; remaining bytes skipped.</li>
+  </ul>
+
+  <h2>7. Validation Rules (current reader behavior)</h2>
+  <ul>
+    <li>Magic must match <code>RFMP</code>.</li>
+    <li>formatVersion must be in <code>[1..2]</code> (0 and &gt;2 rejected).</li>
+    <li><code>mapId</code> must be non-empty, <code>version</code> must be &gt; 0.</li>
+    <li>Chunk bounds and world boundary must have min &lt;= max for both axes.</li>
+    <li>Each block record must have local coords in range and a valid blockType id.</li>
+    <li>Unknown section tags are skipped (forward compatibility).</li>
+  </ul>
+
+  <h2>8. Notes for Implementers</h2>
+  <ul>
+    <li>
+      <strong>Section tags:</strong> tags are stored as a packed <code>u32</code> where bytes are laid out little-endian.
+      Example: <code>VIS0</code> is stored as <code>0x30534956</code>.
+    </li>
+    <li>
+      <strong>Chunk omission:</strong> a missing chunk record implies an all-Air chunk (reader initializes blocks to Air).
+    </li>
+    <li>
+      <strong>Extending VIS0:</strong> append fields to the end; readers must read the known prefix and skip the rest.
+    </li>
+  </ul>
+
+  <hr />
+  <p class="muted">
+    Generated for current codebase state (Dec 2025). If the binary format changes, update this doc alongside
+    <code>shared/maps/rfmap_io.cpp</code>.
+  </p>
+</body>
+</html>
