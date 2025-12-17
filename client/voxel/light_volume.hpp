@@ -48,6 +48,13 @@ public:
     Vector3 volume_origin_ws() const { return volume_origin_ws_; }
 
 private:
+    struct QueueNode {
+        std::uint16_t x;
+        std::uint16_t y;
+        std::uint16_t z;
+        std::uint8_t level;
+    };
+
     static int floor_div_(int a, int b);
 
     void rebuild_(const World& world);
@@ -65,6 +72,14 @@ private:
 
     std::vector<std::uint8_t> skylight_{};
     std::vector<std::uint8_t> blocklight_{};
+
+    // Cached per-voxel opacity for the current volume; avoids calling World::get_block
+    // inside BFS propagation.
+    std::vector<std::uint8_t> opaque_{};
+
+    // Reused BFS queues to avoid per-rebuild allocations.
+    std::vector<QueueNode> q_sky_{};
+    std::vector<QueueNode> q_blk_{};
 };
 
 } // namespace voxel
