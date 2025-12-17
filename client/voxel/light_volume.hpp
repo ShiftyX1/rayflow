@@ -20,6 +20,10 @@ public:
 
         int origin_step_voxels{4};
         float max_update_hz{2.0f};
+
+        // Time budget (in ms) for incremental rebuild work per frame.
+        // Keeps lighting updates from stalling rendering.
+        float rebuild_budget_ms{1.5f};
     };
 
     void set_settings(const Settings& s);
@@ -55,6 +59,13 @@ private:
         std::uint8_t level;
     };
 
+    enum class BuildPhase : std::uint8_t {
+        None = 0,
+        Scan,
+        Skylight,
+        Blocklight,
+    };
+
     static int floor_div_(int a, int b);
 
     void rebuild_(const World& world);
@@ -80,6 +91,33 @@ private:
     // Reused BFS queues to avoid per-rebuild allocations.
     std::vector<QueueNode> q_sky_{};
     std::vector<QueueNode> q_blk_{};
+
+    // Incremental rebuild state (double-buffered channels).
+    bool building_{false};
+    BuildPhase build_phase_{BuildPhase::None};
+
+    int build_origin_x_{0};
+    int build_origin_y_{0};
+    int build_origin_z_{0};
+    Vector3 build_volume_origin_ws_{0.0f, 0.0f, 0.0f};
+
+    // Scan cursor (x/z/y) for incremental opacity/source scan.
+    int scan_x_{0};
+    int scan_y_{0};
+    int scan_z_{0};
+
+    std::size_t q_sky_head_{0};
+    std::size_t q_blk_head_{0};
+
+    std::vector<std::uint8_t> skylight_build_{};
+    std::vector<std::uint8_t> blocklight_build_{};
+
+    // If something changes while building, queue another rebuild after swap.
+    bool pending_force_rebuild_{false};
+    bool pending_origin_rebuild_{false};
+    int pending_origin_x_{0};
+    int pending_origin_y_{0};
+    int pending_origin_z_{0};
 };
 
 } // namespace voxel

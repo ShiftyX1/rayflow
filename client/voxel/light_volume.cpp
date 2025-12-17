@@ -30,6 +30,16 @@ void LightVolume::set_settings(const Settings& s) {
     opaque_.clear();
     q_sky_.clear();
     q_blk_.clear();
+
+    building_ = false;
+    build_phase_ = BuildPhase::None;
+    skylight_build_.clear();
+    blocklight_build_.clear();
+    q_sky_head_ = 0;
+    q_blk_head_ = 0;
+    scan_x_ = scan_y_ = scan_z_ = 0;
+    pending_force_rebuild_ = false;
+    pending_origin_rebuild_ = false;
 }
 
 int LightVolume::floor_div_(int a, int b) {
@@ -63,49 +73,69 @@ bool LightVolume::update_if_needed(const World& world, const Vector3& center_pos
     const double min_dt = (settings_.max_update_hz <= 0.0f) ? 0.0 : (1.0 / static_cast<double>(settings_.max_update_hz));
     const bool rate_ok = (now - last_update_time_) >= min_dt;
 
-    if ((!origin_changed && !force_rebuild) || !rate_ok) {
-        return false;
-    }
-
-    origin_x_ = ox;
-    origin_y_ = oy;
-    origin_z_ = oz;
-    volume_origin_ws_ = { static_cast<float>(ox), static_cast<float>(oy), static_cast<float>(oz) };
-
-    const std::size_t volume_size = static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_y) * static_cast<std::size_t>(dim_z);
-    if (skylight_.size() != volume_size) skylight_.resize(volume_size);
-    if (blocklight_.size() != volume_size) blocklight_.resize(volume_size);
-    if (opaque_.size() != volume_size) opaque_.resize(volume_size);
-    std::fill(skylight_.begin(), skylight_.end(), 0u);
-    std::fill(blocklight_.begin(), blocklight_.end(), 0u);
-
-    const auto t0 = std::chrono::steady_clock::now();
-    rebuild_(world);
-    const auto t1 = std::chrono::steady_clock::now();
-
-    const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
-    const auto& prof = core::Config::instance().profiling();
-    if (prof.enabled && prof.light_volume) {
-        static double last_log_s = 0.0;
-        const double now_s = GetTime();
-        const bool interval_ok = prof.log_every_event || ((now_s - last_log_s) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
-        if (ms >= prof.warn_light_volume_ms && interval_ok) {
-            TraceLog(LOG_INFO, "[prof] light_volume rebuild: %.2f ms (dim=%dx%dx%d, force=%s)",
-                     ms, dim_x, dim_y, dim_z, force_rebuild ? "true" : "false");
-            last_log_s = now_s;
+    // Track requests that arrive while a rebuild is already in progress.
+    if (building_) {
+        // If the build target origin differs from the newly desired origin, queue another rebuild
+        // after the current one completes (prevents thrash / never-finishing builds).
+        if (ox != build_origin_x_ || oy != build_origin_y_ || oz != build_origin_z_) {
+            pending_origin_rebuild_ = true;
+            pending_origin_x_ = ox;
+            pending_origin_y_ = oy;
+            pending_origin_z_ = oz;
+        }
+        if (force_rebuild) {
+            pending_force_rebuild_ = true;
         }
     }
 
-    have_volume_ = true;
-    last_update_time_ = now;
+    auto start_build = [&](int bx, int by, int bz) {
+        building_ = true;
+        build_phase_ = BuildPhase::Scan;
 
-    return true;
-}
+        build_origin_x_ = bx;
+        build_origin_y_ = by;
+        build_origin_z_ = bz;
+        build_volume_origin_ws_ = { static_cast<float>(bx), static_cast<float>(by), static_cast<float>(bz) };
 
-void LightVolume::rebuild_(const World& world) {
-    const int dim_x = std::max(1, settings_.volume_x);
-    const int dim_y = std::max(1, settings_.volume_y);
-    const int dim_z = std::max(1, settings_.volume_z);
+        scan_x_ = 0;
+        scan_y_ = 0;
+        scan_z_ = 0;
+        q_sky_head_ = 0;
+        q_blk_head_ = 0;
+        q_sky_.clear();
+        q_blk_.clear();
+
+        const std::size_t volume_size = static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_y) * static_cast<std::size_t>(dim_z);
+        if (skylight_build_.size() != volume_size) skylight_build_.resize(volume_size);
+        if (blocklight_build_.size() != volume_size) blocklight_build_.resize(volume_size);
+        if (opaque_.size() != volume_size) opaque_.resize(volume_size);
+
+        std::fill(skylight_build_.begin(), skylight_build_.end(), 0u);
+        std::fill(blocklight_build_.begin(), blocklight_build_.end(), 0u);
+        std::fill(opaque_.begin(), opaque_.end(), 0u);
+
+        // Reserve queues based on worst-case (volume size). This is amortized.
+        if (q_sky_.capacity() < volume_size) q_sky_.reserve(volume_size);
+        if (q_blk_.capacity() < volume_size) q_blk_.reserve(volume_size);
+    };
+
+    const bool want_rebuild = origin_changed || force_rebuild || pending_force_rebuild_;
+
+    // If not building, only start a new build when rate allows.
+    if (!building_) {
+        if (!want_rebuild || !rate_ok) {
+            return false;
+        }
+
+        start_build(ox, oy, oz);
+        pending_force_rebuild_ = false;
+        pending_origin_rebuild_ = false;
+    }
+
+    // Time-sliced rebuild step.
+    const float budget_ms = std::max(0.0f, settings_.rebuild_budget_ms);
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto deadline = t0 + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double, std::milli>(static_cast<double>(budget_ms)));
 
     const std::size_t stride_z = static_cast<std::size_t>(dim_x);
     const std::size_t stride_y = static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_z);
@@ -113,39 +143,7 @@ void LightVolume::rebuild_(const World& world) {
         return static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * stride_z + static_cast<std::size_t>(y) * stride_y;
     };
 
-    const std::size_t volume_size = static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_y) * static_cast<std::size_t>(dim_z);
-    if (q_sky_.capacity() < volume_size) q_sky_.reserve(volume_size);
-    if (q_blk_.capacity() < volume_size) q_blk_.reserve(volume_size);
-    q_sky_.clear();
-    q_blk_.clear();
-
-    // Precompute opacity and seed sources in a single scan.
-    // This avoids calling World::get_block in the BFS inner loop.
     const int top_y = dim_y - 1;
-    for (int y = 0; y < dim_y; ++y) {
-        for (int z = 0; z < dim_z; ++z) {
-            for (int x = 0; x < dim_x; ++x) {
-                const int wx = origin_x_ + x;
-                const int wy = origin_y_ + y;
-                const int wz = origin_z_ + z;
-
-                const BlockType bt = static_cast<BlockType>(world.get_block(wx, wy, wz));
-                const bool opaque = is_opaque_for_light(bt);
-                const std::size_t i = idx(x, y, z);
-                opaque_[i] = opaque ? 1u : 0u;
-
-                if (!opaque && y == top_y) {
-                    skylight_[i] = 15u;
-                    q_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), 15u });
-                }
-
-                if (bt == BlockType::Light) {
-                    blocklight_[i] = 15u;
-                    q_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), 15u });
-                }
-            }
-        }
-    }
 
     auto try_push = [idx, dim_x, dim_y, dim_z, this](
                         std::vector<QueueNode>& q,
@@ -164,48 +162,186 @@ void LightVolume::rebuild_(const World& world) {
         q.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), new_level });
     };
 
-    // BFS skylight
-    for (std::size_t head = 0; head < q_sky_.size(); ++head) {
-        const QueueNode n = q_sky_[head];
+    while (building_ && std::chrono::steady_clock::now() < deadline) {
+        if (build_phase_ == BuildPhase::Scan) {
+            // Incremental scan over the volume to fill opacity and seed sources.
+            // Ordering: x -> z -> y.
+            const int wx_base = build_origin_x_;
+            const int wy_base = build_origin_y_;
+            const int wz_base = build_origin_z_;
 
-        if (n.level == 0) continue;
+            // Process a chunk of voxels per loop iteration; time budget will stop us.
+            // This reduces overhead of checking the clock every single voxel.
+            constexpr int kScanBatch = 512;
+            for (int n = 0; n < kScanBatch; ++n) {
+                const std::size_t i = idx(scan_x_, scan_y_, scan_z_);
 
-        const int x = static_cast<int>(n.x);
-        const int y = static_cast<int>(n.y);
-        const int z = static_cast<int>(n.z);
+                const int wx = wx_base + scan_x_;
+                const int wy = wy_base + scan_y_;
+                const int wz = wz_base + scan_z_;
 
-        // 6-neighborhood
-        // Downward keeps same level, others attenuate.
-        const std::uint8_t level_down = n.level;
-        const std::uint8_t level_side = (n.level > 0) ? static_cast<std::uint8_t>(n.level - 1u) : 0u;
+                const BlockType bt = static_cast<BlockType>(world.get_block(wx, wy, wz));
+                const bool opaque = is_opaque_for_light(bt);
+                opaque_[i] = opaque ? 1u : 0u;
 
-        try_push(q_sky_, skylight_, x, y - 1, z, level_down);
-        try_push(q_sky_, skylight_, x + 1, y, z, level_side);
-        try_push(q_sky_, skylight_, x - 1, y, z, level_side);
-        try_push(q_sky_, skylight_, x, y, z + 1, level_side);
-        try_push(q_sky_, skylight_, x, y, z - 1, level_side);
-        try_push(q_sky_, skylight_, x, y + 1, z, level_side);
+                if (!opaque && scan_y_ == top_y) {
+                    skylight_build_[i] = 15u;
+                    q_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(scan_x_), static_cast<std::uint16_t>(scan_y_), static_cast<std::uint16_t>(scan_z_), 15u });
+                }
+
+                if (bt == BlockType::Light) {
+                    blocklight_build_[i] = 15u;
+                    q_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(scan_x_), static_cast<std::uint16_t>(scan_y_), static_cast<std::uint16_t>(scan_z_), 15u });
+                }
+
+                // Advance cursor.
+                ++scan_x_;
+                if (scan_x_ >= dim_x) {
+                    scan_x_ = 0;
+                    ++scan_z_;
+                    if (scan_z_ >= dim_z) {
+                        scan_z_ = 0;
+                        ++scan_y_;
+                        if (scan_y_ >= dim_y) {
+                            // Scan complete.
+                            build_phase_ = BuildPhase::Skylight;
+                            q_sky_head_ = 0;
+                            q_blk_head_ = 0;
+                            break;
+                        }
+                    }
+                }
+
+                if (std::chrono::steady_clock::now() >= deadline) break;
+            }
+        } else if (build_phase_ == BuildPhase::Skylight) {
+            constexpr int kBfsBatch = 1024;
+            int processed = 0;
+            while (q_sky_head_ < q_sky_.size() && processed < kBfsBatch) {
+                const QueueNode n = q_sky_[q_sky_head_++];
+                if (n.level == 0) {
+                    ++processed;
+                    continue;
+                }
+
+                const int x = static_cast<int>(n.x);
+                const int y = static_cast<int>(n.y);
+                const int z = static_cast<int>(n.z);
+
+                const std::uint8_t level_down = n.level;
+                const std::uint8_t level_side = (n.level > 0) ? static_cast<std::uint8_t>(n.level - 1u) : 0u;
+
+                try_push(q_sky_, skylight_build_, x, y - 1, z, level_down);
+                try_push(q_sky_, skylight_build_, x + 1, y, z, level_side);
+                try_push(q_sky_, skylight_build_, x - 1, y, z, level_side);
+                try_push(q_sky_, skylight_build_, x, y, z + 1, level_side);
+                try_push(q_sky_, skylight_build_, x, y, z - 1, level_side);
+                try_push(q_sky_, skylight_build_, x, y + 1, z, level_side);
+
+                ++processed;
+                if (std::chrono::steady_clock::now() >= deadline) break;
+            }
+
+            if (q_sky_head_ >= q_sky_.size()) {
+                build_phase_ = BuildPhase::Blocklight;
+            }
+        } else if (build_phase_ == BuildPhase::Blocklight) {
+            constexpr int kBfsBatch = 1024;
+            int processed = 0;
+            while (q_blk_head_ < q_blk_.size() && processed < kBfsBatch) {
+                const QueueNode n = q_blk_[q_blk_head_++];
+                if (n.level <= 1) {
+                    ++processed;
+                    continue;
+                }
+
+                const int x = static_cast<int>(n.x);
+                const int y = static_cast<int>(n.y);
+                const int z = static_cast<int>(n.z);
+
+                const std::uint8_t next = static_cast<std::uint8_t>(n.level - 1u);
+                try_push(q_blk_, blocklight_build_, x + 1, y, z, next);
+                try_push(q_blk_, blocklight_build_, x - 1, y, z, next);
+                try_push(q_blk_, blocklight_build_, x, y + 1, z, next);
+                try_push(q_blk_, blocklight_build_, x, y - 1, z, next);
+                try_push(q_blk_, blocklight_build_, x, y, z + 1, next);
+                try_push(q_blk_, blocklight_build_, x, y, z - 1, next);
+
+                ++processed;
+                if (std::chrono::steady_clock::now() >= deadline) break;
+            }
+
+            if (q_blk_head_ >= q_blk_.size()) {
+                // Build complete: swap in new buffers.
+                skylight_.swap(skylight_build_);
+                blocklight_.swap(blocklight_build_);
+                origin_x_ = build_origin_x_;
+                origin_y_ = build_origin_y_;
+                origin_z_ = build_origin_z_;
+                volume_origin_ws_ = build_volume_origin_ws_;
+
+                have_volume_ = true;
+                building_ = false;
+                build_phase_ = BuildPhase::None;
+
+                last_update_time_ = GetTime();
+
+                const auto t1 = std::chrono::steady_clock::now();
+                const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+                const auto& prof = core::Config::instance().profiling();
+                if (prof.enabled && prof.light_volume) {
+                    static double last_log_s = 0.0;
+                    const double now_s = GetTime();
+                    const bool interval_ok = prof.log_every_event || ((now_s - last_log_s) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
+                    if (ms >= prof.warn_light_volume_ms && interval_ok) {
+                        TraceLog(LOG_INFO, "[prof] light_volume rebuild: %.2f ms (dim=%dx%dx%d, force=%s)",
+                                 ms, dim_x, dim_y, dim_z, (force_rebuild || pending_force_rebuild_) ? "true" : "false");
+                        last_log_s = now_s;
+                    }
+                }
+
+                // If we accumulated requests during the build, trigger another build on the next frame.
+                if (pending_origin_rebuild_) {
+                    // Start from the queued origin.
+                    const int nx = pending_origin_x_;
+                    const int ny = pending_origin_y_;
+                    const int nz = pending_origin_z_;
+                    pending_origin_rebuild_ = false;
+                    pending_force_rebuild_ = false; // force will be re-accumulated as needed
+
+                    // Don't start immediately if rate limiting disallows; World will call again next frame.
+                    const double now2 = GetTime();
+                    const bool rate_ok2 = (min_dt <= 0.0) || ((now2 - last_update_time_) >= min_dt);
+                    if (rate_ok2) {
+                        start_build(nx, ny, nz);
+                    } else {
+                        // Keep a force flag so we rebuild once rate allows.
+                        pending_force_rebuild_ = true;
+                    }
+                } else if (pending_force_rebuild_) {
+                    // Rebuild at the current desired origin once rate allows.
+                    const double now2 = GetTime();
+                    const bool rate_ok2 = (min_dt <= 0.0) || ((now2 - last_update_time_) >= min_dt);
+                    if (rate_ok2) {
+                        pending_force_rebuild_ = false;
+                        start_build(origin_x_, origin_y_, origin_z_);
+                    }
+                }
+
+                return true;
+            }
+        } else {
+            // Should not happen.
+            building_ = false;
+            build_phase_ = BuildPhase::None;
+        }
     }
 
-    // BFS blocklight
-    for (std::size_t head = 0; head < q_blk_.size(); ++head) {
-        const QueueNode n = q_blk_[head];
+    return false;
+}
 
-        if (n.level <= 1) continue;
-
-        const int x = static_cast<int>(n.x);
-        const int y = static_cast<int>(n.y);
-        const int z = static_cast<int>(n.z);
-
-        const std::uint8_t next = static_cast<std::uint8_t>(n.level - 1u);
-
-        try_push(q_blk_, blocklight_, x + 1, y, z, next);
-        try_push(q_blk_, blocklight_, x - 1, y, z, next);
-        try_push(q_blk_, blocklight_, x, y + 1, z, next);
-        try_push(q_blk_, blocklight_, x, y - 1, z, next);
-        try_push(q_blk_, blocklight_, x, y, z + 1, next);
-        try_push(q_blk_, blocklight_, x, y, z - 1, next);
-    }
+void LightVolume::rebuild_(const World& /*world*/) {
+    // Intentionally unused: rebuild is now time-sliced inside update_if_needed.
 }
 
 std::uint8_t LightVolume::sample_combined(int wx, int wy, int wz) const {
@@ -218,6 +354,14 @@ std::uint8_t LightVolume::sample_combined(int wx, int wy, int wz) const {
     const int lx = wx - origin_x_;
     const int ly = wy - origin_y_;
     const int lz = wz - origin_z_;
+
+    const bool outside = (lx < 0 || ly < 0 || lz < 0 || lx >= dim_x || ly >= dim_y || lz >= dim_z);
+    if (outside && building_) {
+        // While the volume is being rebuilt incrementally, newly streamed-in chunks may
+        // request lighting outside the last-complete volume. Clamping to the old edge can
+        // bake those chunks as fully dark; prefer a bright fallback until the new volume swaps in.
+        return 15u;
+    }
 
     // Clamp out-of-volume samples to the edge to avoid:
     // - dark seams when the camera moves
@@ -246,6 +390,11 @@ std::uint8_t LightVolume::sample_skylight(int wx, int wy, int wz) const {
     const int ly = wy - origin_y_;
     const int lz = wz - origin_z_;
 
+    const bool outside = (lx < 0 || ly < 0 || lz < 0 || lx >= dim_x || ly >= dim_y || lz >= dim_z);
+    if (outside && building_) {
+        return 15u;
+    }
+
     const int cx = std::clamp(lx, 0, dim_x - 1);
     const int cy = std::clamp(ly, 0, dim_y - 1);
     const int cz = std::clamp(lz, 0, dim_z - 1);
@@ -266,6 +415,11 @@ std::uint8_t LightVolume::sample_blocklight(int wx, int wy, int wz) const {
     const int lx = wx - origin_x_;
     const int ly = wy - origin_y_;
     const int lz = wz - origin_z_;
+
+    const bool outside = (lx < 0 || ly < 0 || lz < 0 || lx >= dim_x || ly >= dim_y || lz >= dim_z);
+    if (outside && building_) {
+        return 0u;
+    }
 
     const int cx = std::clamp(lx, 0, dim_x - 1);
     const int cy = std::clamp(ly, 0, dim_y - 1);
