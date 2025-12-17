@@ -50,6 +50,8 @@ public:
     const shared::maps::MapTemplate* map_template() const { return map_template_ ? &*map_template_ : nullptr; }
     void set_map_template(shared::maps::MapTemplate map);
     void clear_map_template();
+
+    void mark_all_chunks_dirty();
     
 private:
     void generate_chunk_terrain(Chunk& chunk);

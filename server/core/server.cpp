@@ -792,6 +792,11 @@ void Server::handle_message_(shared::proto::Message& msg) {
             if (ambI < 0.0f) ambI = 0.0f;
             if (ambI > 5.0f) ambI = 5.0f;
             exportReq.visualSettings.ambientIntensity = ambI;
+
+            float temp = req.temperature;
+            if (temp < 0.0f) temp = 0.0f;
+            if (temp > 1.0f) temp = 1.0f;
+            exportReq.visualSettings.temperature = temp;
         }
 
         std::string err;

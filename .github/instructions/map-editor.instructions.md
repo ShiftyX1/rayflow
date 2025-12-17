@@ -149,6 +149,14 @@ Maps must carry **visual-only** environment settings that affect rendering in bo
 - `sunIntensity` (float32, range [0, 10])
 - `ambientIntensity` (float32, range [0, 5])
 
+MV-2 additive field:
+- `temperature` (float32, range [0, 1], default 0.5)
+  - Affects **only foliage/grass rendering color** for:
+    - `BlockType::Leaves` (all faces)
+    - `BlockType::Grass` (top face only)
+  - The effect must be a **full recolor** (not a subtle tint)
+  - Must not affect authoritative simulation.
+
 ### Serialization (required)
 - `.rfmap` must store `VisualSettings` in the **section table** (format v2+).
 - The section must be skippable/optional and forward-compatible.
@@ -156,10 +164,15 @@ Maps must carry **visual-only** environment settings that affect rendering in bo
   - `skyboxKind = Day`
   - `timeOfDayHours = 12`, `useMoon = false`, `sunIntensity = 1`, `ambientIntensity = 0.25`
 
+MV-2 backward/forward compatibility requirement:
+- If a map has MV-1 `VisualSettings` only, `temperature` must default to `0.5`.
+- Readers must tolerate larger payloads by skipping unknown tail bytes.
+
 ### Runtime application (required)
 - When a template is loaded on the client (`world->set_map_template()`), the client must apply `VisualSettings`:
   - Configure ray-marched global light using the map values.
   - Configure and render the selected skybox.
+  - Apply `temperature` so grass/foliage tint matches the map.
 - The Map Editor must also apply these settings while editing.
 
 ### Editor UI (required)

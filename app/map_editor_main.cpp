@@ -922,7 +922,8 @@ int main() {
                 visualSettings.timeOfDayHours,
                 visualSettings.useMoon,
                 visualSettings.sunIntensity,
-                visualSettings.ambientIntensity);
+                visualSettings.ambientIntensity,
+                visualSettings.temperature);
         }
 
         // --- MV-1: visual settings UI ---
@@ -971,12 +972,22 @@ int main() {
             0.0f,
             5.0f);
 
+        r.y += 28;
+        GuiSliderBar(
+            Rectangle{20, r.y, 300, 20},
+            "Temp",
+            TextFormat("%.2f", visualSettings.temperature),
+            &visualSettings.temperature,
+            0.0f,
+            1.0f);
+
         // Apply settings live while editing.
         renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
             visualSettings.timeOfDayHours,
             visualSettings.useMoon,
             visualSettings.sunIntensity,
             visualSettings.ambientIntensity);
+        renderer::LightingRaymarch::instance().set_temperature(visualSettings.temperature);
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
         // Skybox modal (MV-1): select panorama texture from textures/skybox/panorama.

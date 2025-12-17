@@ -313,6 +313,7 @@ void Game::update(float delta_time) {
                                 vs.useMoon,
                                 vs.sunIntensity,
                                 vs.ambientIntensity);
+                            renderer::LightingRaymarch::instance().set_temperature(vs.temperature);
                             renderer::LightingRaymarch::instance().set_enabled(true);
                             renderer::Skybox::instance().set_kind(vs.skyboxKind);
                         }
@@ -327,6 +328,9 @@ void Game::update(float delta_time) {
                 if (world_->has_map_template()) {
                     world_->clear_map_template();
                 }
+
+                // Reset MV-2 tint parameter back to neutral for procedural worlds.
+                renderer::LightingRaymarch::instance().set_temperature(0.5f);
             }
         }
     }

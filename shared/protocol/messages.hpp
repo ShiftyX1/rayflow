@@ -136,6 +136,10 @@ struct TryExportMap {
     bool useMoon{false};
     float sunIntensity{1.0f};
     float ambientIntensity{0.25f};
+
+    // MV-2: global temperature used for grass/foliage tint in rendering.
+    // Range: [0, 1] where 0=cold, 1=hot.
+    float temperature{0.5f};
 };
 
 // Server -> Client: result of TryExportMap.

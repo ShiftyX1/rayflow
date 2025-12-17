@@ -21,7 +21,8 @@ constexpr std::uint32_t make_tag(char a, char b, char c, char d) {
 }
 
 constexpr std::uint32_t kSectionTagVisualSettings = make_tag('V', 'I', 'S', '0');
-constexpr std::uint32_t kVisualSettingsPayloadSize = 16; // fixed MV-1 payload
+constexpr std::uint32_t kVisualSettingsPayloadMinSize = 16; // MV-1 payload prefix
+constexpr std::uint32_t kVisualSettingsPayloadSize = 20;    // MV-2 payload (adds temperature)
 
 // MT-1: template protection allow-list by BlockType id.
 constexpr std::uint32_t kSectionTagProtection = make_tag('P', 'R', 'O', '0');
@@ -298,7 +299,8 @@ bool write_rfmap(const std::filesystem::path& path,
     if (!write_u8(out, skybox) || !write_u8(out, useMoon) || !write_u16_le(out, reserved) ||
         !write_f32_le(out, vs.timeOfDayHours) ||
         !write_f32_le(out, vs.sunIntensity) ||
-        !write_f32_le(out, vs.ambientIntensity)) {
+        !write_f32_le(out, vs.ambientIntensity) ||
+        !write_f32_le(out, vs.temperature)) {
         if (outError) *outError = "failed to write VisualSettings payload";
         return false;
     }
@@ -471,7 +473,7 @@ bool read_rfmap(const std::filesystem::path& path,
 
                 if (tag == kSectionTagVisualSettings) {
                     // MV-1 fixed-size payload; tolerate larger payloads by reading known prefix and skipping the rest.
-                    if (size < kVisualSettingsPayloadSize) {
+                    if (size < kVisualSettingsPayloadMinSize) {
                         if (outError) *outError = "VisualSettings section too small";
                         return false;
                     }
@@ -483,10 +485,20 @@ bool read_rfmap(const std::filesystem::path& path,
                     float sunI = 1.0f;
                     float ambI = 0.25f;
 
+                    // MV-2 optional
+                    float temp = map.visualSettings.temperature;
+
                     if (!read_u8(in, &skybox) || !read_u8(in, &useMoon) || !read_u16_le(in, &reserved) ||
                         !read_f32_le(in, &timeOfDay) || !read_f32_le(in, &sunI) || !read_f32_le(in, &ambI)) {
                         if (outError) *outError = "failed to read VisualSettings payload";
                         return false;
+                    }
+
+                    if (size >= kVisualSettingsPayloadSize) {
+                        if (!read_f32_le(in, &temp)) {
+                            if (outError) *outError = "failed to read VisualSettings temperature";
+                            return false;
+                        }
                     }
 
                     map.visualSettings.skyboxKind = static_cast<MapTemplate::SkyboxKind>(skybox);
@@ -494,8 +506,10 @@ bool read_rfmap(const std::filesystem::path& path,
                     map.visualSettings.timeOfDayHours = timeOfDay;
                     map.visualSettings.sunIntensity = sunI;
                     map.visualSettings.ambientIntensity = ambI;
+                    map.visualSettings.temperature = temp;
 
-                    const std::uint32_t remaining = size - kVisualSettingsPayloadSize;
+                    const std::uint32_t consumed = (size >= kVisualSettingsPayloadSize) ? kVisualSettingsPayloadSize : kVisualSettingsPayloadMinSize;
+                    const std::uint32_t remaining = size - consumed;
                     if (remaining > 0) {
                         in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
                         if (!in) {

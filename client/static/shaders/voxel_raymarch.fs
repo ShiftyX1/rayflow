@@ -1,6 +1,7 @@
 #version 330
 
 in vec2 fragTexCoord;
+in vec2 fragTexCoord2;
 in vec4 fragColor;
 in vec3 fragPosWS;
 in vec3 fragNormalWS;
@@ -15,6 +16,9 @@ uniform float u_enabled;
 uniform vec3 u_sunDirWS;
 uniform vec3 u_sunColor;
 uniform vec3 u_ambientColor;
+
+// MV-2: temperature-driven foliage/grass color.
+uniform vec3 u_foliageColor;
 
 uniform vec3 u_volumeOriginWS;
 uniform vec3 u_volumeSize;
@@ -59,10 +63,18 @@ float compute_shadow(vec3 p_ws, vec3 n_ws) {
 }
 
 void main() {
-    vec4 albedo = texture(texture0, fragTexCoord) * fragColor;
+    vec4 texel = texture(texture0, fragTexCoord);
+    vec4 albedo = texel * fragColor;
+
+    // 0 -> normal shading, 1 -> full foliage recolor
+    float foliageMask = clamp(fragTexCoord2.x, 0.0, 1.0);
+    float lum = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 recolor = u_foliageColor * lum;
+    vec3 baseRgb = mix(albedo.rgb, recolor, foliageMask);
+    float baseA = albedo.a;
 
     if (u_enabled < 0.5) {
-        finalColor = albedo;
+        finalColor = vec4(baseRgb, baseA);
         return;
     }
 
@@ -72,5 +84,5 @@ void main() {
     float shadow = compute_shadow(fragPosWS, n);
 
     vec3 lit = u_ambientColor + (u_sunColor * ndl * shadow);
-    finalColor = vec4(albedo.rgb * lit, albedo.a);
+    finalColor = vec4(baseRgb * lit, baseA);
 }

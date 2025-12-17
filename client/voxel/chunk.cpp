@@ -95,7 +95,9 @@ void Chunk::generate_mesh() {
     
     std::vector<float> vertices;
     std::vector<float> texcoords;
+    std::vector<float> texcoords2;
     std::vector<float> normals;
+    std::vector<unsigned char> colors;
     
     auto& registry = BlockRegistry::instance();
     float atlas_size = static_cast<float>(registry.get_atlas_texture().width);
@@ -181,6 +183,14 @@ void Chunk::generate_mesh() {
                     Rectangle tex_rect = registry.get_texture_rect(block_type, face);
                     float u0 = tex_rect.x / atlas_size;
                     float v0 = tex_rect.y / atlas_size;
+
+                    // MV-2: foliage/grass recolor mask.
+                    // - Leaves: all faces
+                    // - Grass: top face only (+Y)
+                    const float foliageMask =
+                        (block_type == BlockType::Leaves) ? 1.0f :
+                        (block_type == BlockType::Grass && face == 2) ? 1.0f :
+                        0.0f;
                     
                     // Add 6 vertices for this face (2 triangles)
                     for (int v = 0; v < 6; v++) {
@@ -190,10 +200,19 @@ void Chunk::generate_mesh() {
                         
                         texcoords.push_back(u0 + face_uvs[face][v][0] * uv_size);
                         texcoords.push_back(v0 + face_uvs[face][v][1] * uv_size);
+
+                        texcoords2.push_back(foliageMask);
+                        texcoords2.push_back(0.0f);
                         
                         normals.push_back(face_normals[face][0]);
                         normals.push_back(face_normals[face][1]);
                         normals.push_back(face_normals[face][2]);
+
+                        // Keep vertex color neutral; recolor is handled in the shader.
+                        colors.push_back(255);
+                        colors.push_back(255);
+                        colors.push_back(255);
+                        colors.push_back(255);
                     }
                 }
             }
@@ -215,11 +234,15 @@ void Chunk::generate_mesh() {
     
     mesh_.vertices = static_cast<float*>(RL_MALLOC(vertices.size() * sizeof(float)));
     mesh_.texcoords = static_cast<float*>(RL_MALLOC(texcoords.size() * sizeof(float)));
+    mesh_.texcoords2 = static_cast<float*>(RL_MALLOC(texcoords2.size() * sizeof(float)));
     mesh_.normals = static_cast<float*>(RL_MALLOC(normals.size() * sizeof(float)));
+    mesh_.colors = static_cast<unsigned char*>(RL_MALLOC(colors.size() * sizeof(unsigned char)));
     
     std::memcpy(mesh_.vertices, vertices.data(), vertices.size() * sizeof(float));
     std::memcpy(mesh_.texcoords, texcoords.data(), texcoords.size() * sizeof(float));
+    std::memcpy(mesh_.texcoords2, texcoords2.data(), texcoords2.size() * sizeof(float));
     std::memcpy(mesh_.normals, normals.data(), normals.size() * sizeof(float));
+    std::memcpy(mesh_.colors, colors.data(), colors.size() * sizeof(unsigned char));
     
     UploadMesh(&mesh_, false);
     

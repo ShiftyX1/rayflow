@@ -43,6 +43,10 @@ public:
     // Updates only the global light parameters (no texture realloc, no forced volume rebuild).
     void set_global_light_from_time_of_day(float time_of_day_hours, bool use_moon, float sun_intensity, float ambient_intensity);
 
+    // MV-2: visual-only parameter used to recolor foliage / grass-top.
+    void set_temperature(float temperature);
+    float temperature() const { return temperature_; }
+
     // Rebuilds/upload occupancy if needed (rate-limited).
     void update_volume_if_needed(const voxel::World& world, const Vector3& camera_pos_ws);
 
@@ -68,11 +72,16 @@ private:
     bool ready_{false};
     bool enabled_{false};
 
+    float temperature_{0.5f};
+    Vector3 foliage_color_{0.35f, 0.75f, 0.35f};
+
     Shader shader_{};
     int loc_enabled_{-1};
     int loc_sun_dir_{-1};
     int loc_sun_color_{-1};
     int loc_ambient_{-1};
+
+    int loc_foliage_color_{-1};
 
     int loc_volume_origin_{-1};
     int loc_volume_size_{-1};

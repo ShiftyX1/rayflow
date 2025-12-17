@@ -52,6 +52,13 @@ void World::clear_map_template() {
     chunks_.clear();
 }
 
+void World::mark_all_chunks_dirty() {
+    for (auto& [key, chunk] : chunks_) {
+        (void)key;
+        chunk->mark_dirty();
+    }
+}
+
 void World::init_perlin() const {
     if (perm_initialized_) return;
 

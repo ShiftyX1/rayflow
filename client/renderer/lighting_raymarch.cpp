@@ -28,6 +28,8 @@ bool LightingRaymarch::init() {
     loc_sun_color_ = GetShaderLocation(shader_, "u_sunColor");
     loc_ambient_ = GetShaderLocation(shader_, "u_ambientColor");
 
+    loc_foliage_color_ = GetShaderLocation(shader_, "u_foliageColor");
+
     loc_volume_origin_ = GetShaderLocation(shader_, "u_volumeOriginWS");
     loc_volume_size_ = GetShaderLocation(shader_, "u_volumeSize");
     loc_occ_inv_size_ = GetShaderLocation(shader_, "u_occInvSize");
@@ -140,6 +142,20 @@ void LightingRaymarch::set_global_light_from_time_of_day(float time_of_day_hours
     }
 
     settings_.ambient_color = { ambI, ambI, ambI };
+}
+
+void LightingRaymarch::set_temperature(float temperature) {
+    temperature_ = std::clamp(temperature, 0.0f, 1.0f);
+
+    // Stronger mapping: cold -> teal-ish, warm -> yellow-green.
+    // The shader applies this as a full recolor using texture luminance.
+    const Vector3 cold{0.18f, 0.70f, 0.55f};
+    const Vector3 warm{0.70f, 0.78f, 0.18f};
+    foliage_color_ = {
+        cold.x + (warm.x - cold.x) * temperature_,
+        cold.y + (warm.y - cold.y) * temperature_,
+        cold.z + (warm.z - cold.z) * temperature_,
+    };
 }
 
 int LightingRaymarch::floor_div_(int a, int b) {
@@ -288,6 +304,8 @@ void LightingRaymarch::apply_frame_uniforms() {
     if (loc_sun_dir_ >= 0) SetShaderValue(shader_, loc_sun_dir_, &d, SHADER_UNIFORM_VEC3);
     if (loc_sun_color_ >= 0) SetShaderValue(shader_, loc_sun_color_, &settings_.sun_color, SHADER_UNIFORM_VEC3);
     if (loc_ambient_ >= 0) SetShaderValue(shader_, loc_ambient_, &settings_.ambient_color, SHADER_UNIFORM_VEC3);
+
+    if (loc_foliage_color_ >= 0) SetShaderValue(shader_, loc_foliage_color_, &foliage_color_, SHADER_UNIFORM_VEC3);
 
     if (loc_volume_origin_ >= 0) SetShaderValue(shader_, loc_volume_origin_, &volume_origin_ws_, SHADER_UNIFORM_VEC3);
 

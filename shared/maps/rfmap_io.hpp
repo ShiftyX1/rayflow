@@ -37,6 +37,10 @@ struct MapTemplate {
         bool useMoon{false};
         float sunIntensity{1.0f};
         float ambientIntensity{0.25f};
+
+        // MV-2 (visual-only): global temperature used for foliage/grass tint.
+        // Range: [0, 1] where 0=cold, 1=hot.
+        float temperature{0.5f};
     };
 
     struct ChunkCoordHash {
@@ -85,6 +89,7 @@ inline MapTemplate::VisualSettings default_visual_settings() {
     s.useMoon = false;
     s.sunIntensity = 1.0f;
     s.ambientIntensity = 0.25f;
+    s.temperature = 0.5f;
     return s;
 }
 
