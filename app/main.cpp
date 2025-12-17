@@ -6,7 +6,10 @@
 
 int main() {
     // Load config early so both client and embedded server can honor it.
-    core::Config::instance().load_from_file("rayflow.conf");
+    const bool cfg_ok = core::Config::instance().load_from_file("rayflow.conf");
+    TraceLog(LOG_INFO, "[config] %s, render.voxel_smooth_lighting=%s",
+             cfg_ok ? "ok" : "missing (defaults)",
+             core::Config::instance().get().render.voxel_smooth_lighting ? "true" : "false");
 
     auto pair = shared::transport::LocalTransport::create_pair();
 

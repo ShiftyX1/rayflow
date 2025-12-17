@@ -287,6 +287,11 @@ void Config::apply_kv(const std::string& section, const std::string& key, const 
         return;
     }
 
+    if (sec == "render") {
+        if (k == "voxel_smooth_lighting") config_.render.voxel_smooth_lighting = parse_bool(v, config_.render.voxel_smooth_lighting);
+        return;
+    }
+
     if (sec == "sv_logging") {
         if (k == "enabled") config_.sv_logging.enabled = parse_bool(v, config_.sv_logging.enabled);
         else if (k == "init") config_.sv_logging.init = parse_bool(v, config_.sv_logging.init);
@@ -299,10 +304,41 @@ void Config::apply_kv(const std::string& section, const std::string& key, const 
 }
 
 bool Config::load_from_file(const std::string& path) {
+    loaded_from_path_.clear();
+
     std::ifstream in(path);
+    std::string used = path;
+
     if (!in.is_open()) {
-        return false;
+        // The project is often run with different working directories (project root, build/, app/, etc).
+        // If the caller asks for the canonical filename, try a few common relative fallbacks.
+        if (path == "rayflow.conf") {
+            const char* candidates[] = {
+                "rayflow.conf",
+                "../rayflow.conf",
+                "../../rayflow.conf",
+                "build/rayflow.conf",
+                "../build/rayflow.conf",
+                "../../build/rayflow.conf",
+            };
+
+            for (const char* c : candidates) {
+                in.clear();
+                in.open(c);
+                if (in.is_open()) {
+                    used = c;
+                    break;
+                }
+            }
+        }
+
+        if (!in.is_open()) {
+            return false;
+        }
     }
+
+    loaded_from_path_ = used;
+    TraceLog(LOG_INFO, "[config] loaded: %s", loaded_from_path_.c_str());
 
     std::string section;
     std::string line;

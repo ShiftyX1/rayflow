@@ -32,8 +32,12 @@ bool Game::init(int width, int height, const char* title) {
     SetExitKey(KEY_NULL);
 
     // Load client config from rayflow.conf (optional; defaults apply if missing)
-    core::Config::instance().load_from_file("rayflow.conf");
+    const bool cfg_ok = core::Config::instance().load_from_file("rayflow.conf");
     core::Logger::instance().init(core::Config::instance().logging());
+
+    TraceLog(LOG_INFO, "[config] %s, render.voxel_smooth_lighting=%s",
+             cfg_ok ? "ok" : "missing (defaults)",
+             core::Config::instance().get().render.voxel_smooth_lighting ? "true" : "false");
 
     ui_.init();
 

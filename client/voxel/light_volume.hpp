@@ -31,11 +31,19 @@ public:
     bool ready() const { return have_volume_; }
 
     // Returns combined light (max of skylight and blocklight) in range [0..15].
-    // If outside the current volume, returns 15 (neutral bright) to avoid black seams.
+    // If outside the current volume, clamps to the nearest edge sample to avoid
+    // both dark seams and artificial skylight leaking into interiors.
     std::uint8_t sample_combined(int wx, int wy, int wz) const;
 
     // Returns combined light in [0..1].
     float sample_combined01(int wx, int wy, int wz) const;
+
+    // Separate channels (Minecraft-style). Range is [0..15] / [0..1].
+    // Outside the current volume, clamps to the nearest edge sample.
+    std::uint8_t sample_skylight(int wx, int wy, int wz) const;
+    std::uint8_t sample_blocklight(int wx, int wy, int wz) const;
+    float sample_skylight01(int wx, int wy, int wz) const;
+    float sample_blocklight01(int wx, int wy, int wz) const;
 
     Vector3 volume_origin_ws() const { return volume_origin_ws_; }
 

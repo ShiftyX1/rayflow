@@ -231,20 +231,76 @@ std::uint8_t LightVolume::sample_combined(int wx, int wy, int wz) const {
     const int ly = wy - origin_y_;
     const int lz = wz - origin_z_;
 
-    if (lx < 0 || ly < 0 || lz < 0) return 15u;
-    if (lx >= dim_x || ly >= dim_y || lz >= dim_z) return 15u;
+    // Clamp out-of-volume samples to the edge to avoid:
+    // - dark seams when the camera moves
+    // - artificial skylight leaking into interiors via corner averaging
+    const int cx = std::clamp(lx, 0, dim_x - 1);
+    const int cy = std::clamp(ly, 0, dim_y - 1);
+    const int cz = std::clamp(lz, 0, dim_z - 1);
 
-    const std::size_t i = static_cast<std::size_t>(lx) +
-                          static_cast<std::size_t>(lz) * static_cast<std::size_t>(dim_x) +
-                          static_cast<std::size_t>(ly) * static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_z);
+    const std::size_t i = static_cast<std::size_t>(cx) +
+                          static_cast<std::size_t>(cz) * static_cast<std::size_t>(dim_x) +
+                          static_cast<std::size_t>(cy) * static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_z);
 
     const std::uint8_t s = skylight_[i];
     const std::uint8_t b = blocklight_[i];
     return (s > b) ? s : b;
 }
 
+std::uint8_t LightVolume::sample_skylight(int wx, int wy, int wz) const {
+    if (!have_volume_) return 15u;
+
+    const int dim_x = std::max(1, settings_.volume_x);
+    const int dim_y = std::max(1, settings_.volume_y);
+    const int dim_z = std::max(1, settings_.volume_z);
+
+    const int lx = wx - origin_x_;
+    const int ly = wy - origin_y_;
+    const int lz = wz - origin_z_;
+
+    const int cx = std::clamp(lx, 0, dim_x - 1);
+    const int cy = std::clamp(ly, 0, dim_y - 1);
+    const int cz = std::clamp(lz, 0, dim_z - 1);
+
+    const std::size_t i = static_cast<std::size_t>(cx) +
+                          static_cast<std::size_t>(cz) * static_cast<std::size_t>(dim_x) +
+                          static_cast<std::size_t>(cy) * static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_z);
+    return skylight_[i];
+}
+
+std::uint8_t LightVolume::sample_blocklight(int wx, int wy, int wz) const {
+    if (!have_volume_) return 0u;
+
+    const int dim_x = std::max(1, settings_.volume_x);
+    const int dim_y = std::max(1, settings_.volume_y);
+    const int dim_z = std::max(1, settings_.volume_z);
+
+    const int lx = wx - origin_x_;
+    const int ly = wy - origin_y_;
+    const int lz = wz - origin_z_;
+
+    const int cx = std::clamp(lx, 0, dim_x - 1);
+    const int cy = std::clamp(ly, 0, dim_y - 1);
+    const int cz = std::clamp(lz, 0, dim_z - 1);
+
+    const std::size_t i = static_cast<std::size_t>(cx) +
+                          static_cast<std::size_t>(cz) * static_cast<std::size_t>(dim_x) +
+                          static_cast<std::size_t>(cy) * static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_z);
+    return blocklight_[i];
+}
+
 float LightVolume::sample_combined01(int wx, int wy, int wz) const {
     const std::uint8_t l = sample_combined(wx, wy, wz);
+    return static_cast<float>(l) / 15.0f;
+}
+
+float LightVolume::sample_skylight01(int wx, int wy, int wz) const {
+    const std::uint8_t l = sample_skylight(wx, wy, wz);
+    return static_cast<float>(l) / 15.0f;
+}
+
+float LightVolume::sample_blocklight01(int wx, int wy, int wz) const {
+    const std::uint8_t l = sample_blocklight(wx, wy, wz);
     return static_cast<float>(l) / 15.0f;
 }
 

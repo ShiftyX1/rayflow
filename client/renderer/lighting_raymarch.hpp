@@ -23,6 +23,9 @@ public:
         float step_size_ws{0.5f};
         int max_steps{48};
 
+        // Minecraft-like brightness shaping. Values > 1.0 lift dark regions.
+        float light_gamma{1.35f};
+
         // Direction from surface towards the light source (sun/moon).
         Vector3 sun_dir_ws{0.35f, 1.0f, 0.25f};
         Vector3 sun_color{1.0f, 1.0f, 1.0f};
@@ -49,6 +52,10 @@ public:
 
     // Rebuilds/upload occupancy if needed (rate-limited).
     void update_volume_if_needed(const voxel::World& world, const Vector3& camera_pos_ws);
+
+    // Notify the occupancy volume that a block changed. If the changed voxel is inside
+    // the currently-uploaded volume, this updates the GPU texture immediately.
+    void notify_block_changed(int wx, int wy, int wz, bool occupied);
 
     // Call once per frame before drawing chunks.
     void apply_frame_uniforms();
@@ -89,6 +96,8 @@ private:
 
     int loc_step_size_{-1};
     int loc_max_steps_{-1};
+
+    int loc_light_gamma_{-1};
 
     int loc_occ_tex_{-1};
 

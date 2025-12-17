@@ -37,6 +37,8 @@ bool LightingRaymarch::init() {
     loc_step_size_ = GetShaderLocation(shader_, "u_stepSize");
     loc_max_steps_ = GetShaderLocation(shader_, "u_maxSteps");
 
+    loc_light_gamma_ = GetShaderLocation(shader_, "u_lightGamma");
+
     loc_occ_tex_ = GetShaderLocation(shader_, "u_occTex");
 
     ready_ = ensure_resources_();
@@ -246,6 +248,41 @@ void LightingRaymarch::update_volume_if_needed(const voxel::World& world, const 
     last_upload_time_ = now;
 }
 
+void LightingRaymarch::notify_block_changed(int wx, int wy, int wz, bool occupied) {
+    if (!ready_) return;
+    if (!have_volume_) return;
+    if (occ_tex_.id == 0) return;
+
+    const int dim_x = std::max(1, settings_.volume_x);
+    const int dim_y = std::max(1, settings_.volume_y);
+    const int dim_z = std::max(1, settings_.volume_z);
+
+    const int lx = wx - volume_origin_x_;
+    const int ly = wy - volume_origin_y_;
+    const int lz = wz - volume_origin_z_;
+
+    if (lx < 0 || ly < 0 || lz < 0) return;
+    if (lx >= dim_x || ly >= dim_y || lz >= dim_z) return;
+
+    const int row = lz * dim_y + ly;
+    if (row < 0 || row >= occ_h_) return;
+
+    const std::uint8_t r = occupied ? 255u : 0u;
+
+    const std::size_t pixel = static_cast<std::size_t>(row) * static_cast<std::size_t>(dim_x) + static_cast<std::size_t>(lx);
+    const std::size_t idx = pixel * 4u;
+    if (idx + 3u >= occ_rgba_.size()) return;
+
+    occ_rgba_[idx + 0] = r;
+    occ_rgba_[idx + 1] = 0u;
+    occ_rgba_[idx + 2] = 0u;
+    occ_rgba_[idx + 3] = 255u;
+
+    const std::uint8_t px[4] = { r, 0u, 0u, 255u };
+    const Rectangle rec = { static_cast<float>(lx), static_cast<float>(row), 1.0f, 1.0f };
+    UpdateTextureRec(occ_tex_, rec, px);
+}
+
 void LightingRaymarch::rebuild_and_upload_volume_(const voxel::World& world) {
     const int dim_x = std::max(1, settings_.volume_x);
     const int dim_y = std::max(1, settings_.volume_y);
@@ -320,6 +357,9 @@ void LightingRaymarch::apply_frame_uniforms() {
 
     const int max_steps = std::max(1, std::min(settings_.max_steps, 64));
     if (loc_max_steps_ >= 0) SetShaderValue(shader_, loc_max_steps_, &max_steps, SHADER_UNIFORM_INT);
+
+    const float light_gamma = (settings_.light_gamma <= 0.0f) ? 1.0f : settings_.light_gamma;
+    if (loc_light_gamma_ >= 0) SetShaderValue(shader_, loc_light_gamma_, &light_gamma, SHADER_UNIFORM_FLOAT);
 
     if (loc_occ_tex_ >= 0 && occ_tex_.id != 0) {
         SetShaderValueTexture(shader_, loc_occ_tex_, occ_tex_);

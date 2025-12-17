@@ -44,6 +44,13 @@ struct ClientConfig {
     ControlsConfig controls{};
     LoggingConfig logging{};
 
+    struct RenderConfig {
+        // Voxel mesh vertex lighting:
+        // - per-corner AO and smooth light sampling when true
+        // - flat lighting per face when false (debug/diagnostic)
+        bool voxel_smooth_lighting{true};
+    } render{};
+
     // Server-side (sv) log filtering for the embedded authoritative server.
     // Note: still configured via the client config file because the app embeds both.
     struct ServerLoggingConfig {
@@ -84,6 +91,9 @@ public:
     // Loads and merges values from file. If the file doesn't exist, keeps defaults.
     bool load_from_file(const std::string& path);
 
+    // Empty when no config file was found/read.
+    const std::string& loaded_from_path() const { return loaded_from_path_; }
+
     const ClientConfig& get() const { return config_; }
 
     // Convenience for common lookups.
@@ -96,6 +106,8 @@ private:
     Config();
 
     ClientConfig config_{};
+
+    std::string loaded_from_path_{};
 
     static std::string trim(std::string s);
     static std::string to_lower(std::string s);

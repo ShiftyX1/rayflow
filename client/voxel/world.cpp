@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <random>
 
+#include "block.hpp"
+#include "../renderer/lighting_raymarch.hpp"
+
 namespace voxel {
 
 namespace {
@@ -154,6 +157,12 @@ void World::set_block(int x, int y, int z, Block type) {
 
     // Client-only lighting cache: mark dirty so emissive/light-block changes update promptly.
     light_volume_dirty_ = true;
+
+    // Client-only raymarch shadow volume: update occupancy immediately to avoid shadow lag.
+    const bool occ = !is_transparent(static_cast<BlockType>(type));
+    if (renderer::LightingRaymarch::instance().ready()) {
+        renderer::LightingRaymarch::instance().notify_block_changed(x, y, z, occ);
+    }
 }
 
 Chunk* World::get_chunk(int chunk_x, int chunk_z) {
@@ -254,6 +263,29 @@ void World::update(const Vector3& player_position) {
     // Client-only lighting cache for rendering (Minecraft-style skylight + blocklight).
     if (light_volume_.update_if_needed(*this, player_position, light_volume_dirty_)) {
         light_volume_dirty_ = false;
+
+        // Lighting is baked into chunk mesh vertex data. When the lighting volume updates,
+        // re-mark affected chunks so their meshes pick up the new sky/block values.
+        const auto& s = light_volume_.settings();
+        const Vector3 origin_ws = light_volume_.volume_origin_ws();
+
+        const int min_x = static_cast<int>(std::floor(origin_ws.x));
+        const int min_z = static_cast<int>(std::floor(origin_ws.z));
+        const int max_x = min_x + s.volume_x - 1;
+        const int max_z = min_z + s.volume_z - 1;
+
+        const int min_cx = floor_div_int(min_x, CHUNK_WIDTH);
+        const int max_cx = floor_div_int(max_x, CHUNK_WIDTH);
+        const int min_cz = floor_div_int(min_z, CHUNK_DEPTH);
+        const int max_cz = floor_div_int(max_z, CHUNK_DEPTH);
+
+        for (auto& [key, chunk] : chunks_) {
+            const int cx = key.first;
+            const int cz = key.second;
+            if (cx >= min_cx && cx <= max_cx && cz >= min_cz && cz <= max_cz) {
+                chunk->mark_dirty();
+            }
+        }
     }
     
     // Update meshes for dirty chunks

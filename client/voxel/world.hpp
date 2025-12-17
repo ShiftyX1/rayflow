@@ -57,6 +57,9 @@ public:
     // Client-only render lighting (skylight + blocklight). Never used for gameplay.
     const LightVolume& light_volume() const { return light_volume_; }
     float sample_light01(int x, int y, int z) const { return light_volume_.sample_combined01(x, y, z); }
+
+    float sample_skylight01(int x, int y, int z) const { return light_volume_.sample_skylight01(x, y, z); }
+    float sample_blocklight01(int x, int y, int z) const { return light_volume_.sample_blocklight01(x, y, z); }
     
 private:
     void generate_chunk_terrain(Chunk& chunk);

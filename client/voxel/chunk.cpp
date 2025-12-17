@@ -94,6 +94,8 @@ void Chunk::set_block(int x, int y, int z, Block type) {
 void Chunk::generate_mesh(const World& world) {
     const auto t_total0 = std::chrono::steady_clock::now();
 
+    const bool smooth_lighting = core::Config::instance().get().render.voxel_smooth_lighting;
+
     cleanup_mesh();
 
     light_markers_ws_.clear();
@@ -176,7 +178,21 @@ void Chunk::generate_mesh(const World& world) {
         return world.sample_light01(wx, wy, wz);
     };
 
-    auto compute_corner_shade = [&](int face, int wx, int wy, int wz, int corner) -> float {
+    auto sample_sky01_ws = [&world](int wx, int wy, int wz) -> float {
+        return world.sample_skylight01(wx, wy, wz);
+    };
+
+    auto sample_block01_ws = [&world](int wx, int wy, int wz) -> float {
+        return world.sample_blocklight01(wx, wy, wz);
+    };
+
+    struct CornerLighting {
+        float ao;
+        float sky;
+        float block;
+    };
+
+    auto compute_corner_lighting = [&](int face, int wx, int wy, int wz, int corner) -> CornerLighting {
         // Adjacent cell outside the face.
         const int ax = wx + face_dir[face][0];
         const int ay = wy + face_dir[face][1];
@@ -203,24 +219,36 @@ void Chunk::generate_mesh(const World& world) {
         if (!(side1 && side2) && cornerOcc) occ++;
 
         const int ao_level = 3 - occ; // 0..3 (3 brightest)
-        static const float ao_table[4] = {0.45f, 0.65f, 0.85f, 1.0f};
+        // Keep AO subtle; it should read as corner shading, not a second sun shadow.
+        static const float ao_table[4] = {0.75f, 0.85f, 0.93f, 1.0f};
         const float ao = ao_table[ao_level];
 
-        const float l0 = sample_light01_ws(ax, ay, az);
-        const float l1 = sample_light01_ws(ax + ux, ay + uy, az + uz);
-        const float l2 = sample_light01_ws(ax + vx, ay + vy, az + vz);
-        const float l3 = sample_light01_ws(ax + ux + vx, ay + uy + vy, az + uz + vz);
+        // If smoothing is disabled, keep AO but sample light flat from the face-adjacent cell.
+        if (!smooth_lighting) {
+            const float sky = std::clamp(sample_sky01_ws(ax, ay, az), 0.0f, 1.0f);
+            const float block = std::clamp(sample_block01_ws(ax, ay, az), 0.0f, 1.0f);
+            return CornerLighting{ ao, sky, block };
+        }
 
-        float light = 0.25f * (l0 + l1 + l2 + l3);
+        // Smooth lighting: occlude diagonal/side samples to avoid pulling in bright light
+        // through a blocked corner (classic diagonal "light leak").
+        const float s0 = sample_sky01_ws(ax, ay, az);
+        const float s1 = side1 ? s0 : sample_sky01_ws(ax + ux, ay + uy, az + uz);
+        const float s2 = side2 ? s0 : sample_sky01_ws(ax + vx, ay + vy, az + vz);
+        const float s3 = (side1 && side2) ? s0 : (cornerOcc ? s0 : sample_sky01_ws(ax + ux + vx, ay + uy + vy, az + uz + vz));
 
-        // Keep a small baseline so fully unlit caves aren't pitch black.
-        constexpr float kMin = 0.08f;
-        light = kMin + (1.0f - kMin) * light;
+        const float b0 = sample_block01_ws(ax, ay, az);
+        const float b1 = side1 ? b0 : sample_block01_ws(ax + ux, ay + uy, az + uz);
+        const float b2 = side2 ? b0 : sample_block01_ws(ax + vx, ay + vy, az + vz);
+        const float b3 = (side1 && side2) ? b0 : (cornerOcc ? b0 : sample_block01_ws(ax + ux + vx, ay + uy + vy, az + uz + vz));
 
-        float shade = light * ao;
-        if (shade < 0.0f) shade = 0.0f;
-        if (shade > 1.0f) shade = 1.0f;
-        return shade;
+        float sky = 0.25f * (s0 + s1 + s2 + s3);
+        float block = 0.25f * (b0 + b1 + b2 + b3);
+
+        sky = std::clamp(sky, 0.0f, 1.0f);
+        block = std::clamp(block, 0.0f, 1.0f);
+
+        return CornerLighting{ ao, sky, block };
     };
     
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -272,11 +300,11 @@ void Chunk::generate_mesh(const World& world) {
                         (block_type == BlockType::Grass && face == 2) ? 1.0f :
                         0.0f;
 
-                    float cornerShade[4] = {
-                        compute_corner_shade(face, wx, wy, wz, 0),
-                        compute_corner_shade(face, wx, wy, wz, 1),
-                        compute_corner_shade(face, wx, wy, wz, 2),
-                        compute_corner_shade(face, wx, wy, wz, 3),
+                    CornerLighting corner[4] = {
+                        compute_corner_lighting(face, wx, wy, wz, 0),
+                        compute_corner_lighting(face, wx, wy, wz, 1),
+                        compute_corner_lighting(face, wx, wy, wz, 2),
+                        compute_corner_lighting(face, wx, wy, wz, 3),
                     };
                     
                     // Add 6 vertices for this face (2 triangles)
@@ -290,16 +318,20 @@ void Chunk::generate_mesh(const World& world) {
 
                         const int c = tri_corner_idx[v];
                         texcoords2.push_back(foliageMask);
-                        texcoords2.push_back(cornerShade[c]);
+                        texcoords2.push_back(corner[c].ao);
                         
                         normals.push_back(face_normals[face][0]);
                         normals.push_back(face_normals[face][1]);
                         normals.push_back(face_normals[face][2]);
 
-                        // Keep vertex color neutral; recolor is handled in the shader.
-                        colors.push_back(255);
-                        colors.push_back(255);
-                        colors.push_back(255);
+                        const unsigned char sky8 = static_cast<unsigned char>(std::clamp(corner[c].sky, 0.0f, 1.0f) * 255.0f);
+                        const unsigned char blk8 = static_cast<unsigned char>(std::clamp(corner[c].block, 0.0f, 1.0f) * 255.0f);
+                        const unsigned char ao8 = static_cast<unsigned char>(std::clamp(corner[c].ao, 0.0f, 1.0f) * 255.0f);
+
+                        // Pack skylight/blocklight into vertex color RG and AO into B (baked-lighting friendly).
+                        colors.push_back(sky8);
+                        colors.push_back(blk8);
+                        colors.push_back(ao8);
                         colors.push_back(255);
                     }
                 }
