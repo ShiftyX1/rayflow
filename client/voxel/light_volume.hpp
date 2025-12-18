@@ -29,6 +29,9 @@ public:
     // Returns true if the volume was rebuilt this call.
     bool update_if_needed(const World& world, const Vector3& center_pos_ws, bool force_rebuild);
 
+    // True if there is any queued relight work pending.
+    bool has_pending_relight() const { return relight_active_ || !pending_changes_.empty(); }
+
     // Incremental relight API (Minecraft-style).
     // When a block changes, call notify_block_changed() to queue relight work.
     // Then call process_pending_relight() periodically with a node budget.
@@ -79,6 +82,10 @@ private:
 
     void rebuild_(const World& world);
 
+    // Incremental rebuild (spread over multiple frames) to avoid long frame stalls.
+    void start_rebuild_(int new_origin_x, int new_origin_y, int new_origin_z, bool forced);
+    bool step_rebuild_(const World& world, float budget_ms);
+
     bool in_volume_(int wx, int wy, int wz, int& out_lx, int& out_ly, int& out_lz) const;
 
     Settings settings_{};
@@ -108,6 +115,32 @@ private:
     // Reused BFS queues to avoid per-rebuild allocations.
     std::vector<QueueNode> q_sky_{};
     std::vector<QueueNode> q_blk_{};
+
+    // Incremental rebuild (back buffers + progress).
+    enum class RebuildPhase : std::uint8_t { Scan = 0, BfsSky = 1, BfsBlk = 2 };
+    bool rebuild_active_{false};
+    bool rebuild_forced_{false};
+    float rebuild_work_ms_accum_{0.0f};
+    RebuildPhase rebuild_phase_{RebuildPhase::Scan};
+    std::size_t rebuild_scan_i_{0};
+    std::size_t rebuild_head_sky_{0};
+    std::size_t rebuild_head_blk_{0};
+    int rebuild_origin_x_{0};
+    int rebuild_origin_y_{0};
+    int rebuild_origin_z_{0};
+    Vector3 rebuild_origin_ws_{0.0f, 0.0f, 0.0f};
+
+    std::vector<std::uint8_t> skylight_back_{};
+    std::vector<std::uint8_t> blocklight_back_{};
+    std::vector<std::uint8_t> opaque_back_{};
+    std::vector<std::uint8_t> block_atten_back_{};
+    std::vector<std::uint8_t> sky_atten_back_{};
+    std::vector<std::uint8_t> sky_dim_vertical_back_{};
+    std::vector<QueueNode> q_sky_back_{};
+    std::vector<QueueNode> q_blk_back_{};
+
+    // Block changes observed while a rebuild is in-flight; applied after swap.
+    std::vector<PendingChange> pending_changes_during_rebuild_{};
 
     // Incremental relight state.
     std::vector<PendingChange> pending_changes_{};

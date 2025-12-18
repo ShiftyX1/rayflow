@@ -2,6 +2,7 @@
 #include <raylib.h>
 #include <cmath>
 #include <cstdio>
+#include <chrono>
 #include <random>
 #include <algorithm>
 
@@ -174,6 +175,27 @@ void World::set_block(int x, int y, int z, Block type) {
     const Block old_type = it->second->get_block(local_x, y, local_z);
     it->second->set_block(local_x, y, local_z, type);
 
+    // If we edited a block on a chunk edge, the adjacent chunk's mesh must be rebuilt
+    // too, otherwise the newly-exposed (or newly-hidden) neighbor face can be missing.
+    auto mark_chunk_dirty = [this](int cx, int cz) {
+        auto it2 = chunks_.find({cx, cz});
+        if (it2 != chunks_.end()) {
+            it2->second->mark_dirty();
+        }
+    };
+
+    if (local_x == 0) {
+        mark_chunk_dirty(chunk_x - 1, chunk_z);
+    } else if (local_x == CHUNK_WIDTH - 1) {
+        mark_chunk_dirty(chunk_x + 1, chunk_z);
+    }
+
+    if (local_z == 0) {
+        mark_chunk_dirty(chunk_x, chunk_z - 1);
+    } else if (local_z == CHUNK_DEPTH - 1) {
+        mark_chunk_dirty(chunk_x, chunk_z + 1);
+    }
+
     // Client-only lighting cache (Minecraft-style): queue incremental relight if the change is inside
     // the current volume; out-of-volume changes will be picked up naturally when the camera moves.
     if (light_volume_.ready()) {
@@ -308,8 +330,22 @@ void World::update(const Vector3& player_position) {
 
     // Incremental relight (bounded, budgeted): update light values without rebuilding the whole volume.
     if (light_volume_.ready()) {
-        const bool touched = light_volume_.process_pending_relight(*this, 8192);
-        if (touched) {
+        const auto relight_t0 = std::chrono::steady_clock::now();
+        bool touched_any = false;
+
+        // Aim for visually-instant AO/lighting on edits without risking frame hitches.
+        // We run multiple budgeted passes until either the queues are drained or we
+        // hit the per-frame time budget.
+        while (light_volume_.has_pending_relight()) {
+            const bool touched = light_volume_.process_pending_relight(*this, 32768);
+            touched_any = touched_any || touched;
+
+            const auto relight_t1 = std::chrono::steady_clock::now();
+            const float ms = std::chrono::duration<float, std::milli>(relight_t1 - relight_t0).count();
+            if (ms >= 2.0f) break;
+        }
+
+        if (touched_any) {
             int min_wx = 0, min_wy = 0, min_wz = 0;
             int max_wx = 0, max_wy = 0, max_wz = 0;
             if (light_volume_.consume_dirty_bounds(min_wx, min_wy, min_wz, max_wx, max_wy, max_wz)) {
