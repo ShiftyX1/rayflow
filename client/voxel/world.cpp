@@ -39,10 +39,12 @@ int floor_div_int(int a, int b) {
 
 World::World(unsigned int seed) : seed_(seed) {
     init_perlin();
+    load_voxel_shader();
     TraceLog(LOG_INFO, "World created with seed: %u (infinite chunk generation enabled)", seed);
 }
 
 World::~World() {
+    unload_voxel_shader();
     TraceLog(LOG_INFO, "World destroyed. Total chunks generated: %zu", chunks_.size());
 }
 
@@ -348,9 +350,40 @@ void World::unload_distant_chunks(const Vector3& player_position) {
 }
 
 void World::render(const Camera3D& camera) const {
+    (void)camera; // May be used for frustum culling later
+    
     for (const auto& [key, chunk] : chunks_) {
-        // Simple frustum culling could be added here
-        chunk->render();
+        // Render with voxel shader (AO) if available, otherwise use default
+        if (voxel_shader_loaded_) {
+            chunk->render(voxel_shader_);
+        } else {
+            chunk->render();
+        }
+    }
+}
+
+void World::load_voxel_shader() {
+    if (voxel_shader_loaded_) return;
+
+    // Look for shaders in the build directory (copied by CMake)
+    const char* vs_path = "shaders/voxel.vs";
+    const char* fs_path = "shaders/voxel.fs";
+
+    if (FileExists(vs_path) && FileExists(fs_path)) {
+        voxel_shader_ = LoadShader(vs_path, fs_path);
+        voxel_shader_loaded_ = true;
+        TraceLog(LOG_INFO, "Voxel shader loaded successfully");
+    } else {
+        TraceLog(LOG_WARNING, "Voxel shader not found, using default shader");
+        voxel_shader_loaded_ = false;
+    }
+}
+
+void World::unload_voxel_shader() {
+    if (voxel_shader_loaded_) {
+        UnloadShader(voxel_shader_);
+        voxel_shader_loaded_ = false;
+        TraceLog(LOG_INFO, "Voxel shader unloaded");
     }
 }
 

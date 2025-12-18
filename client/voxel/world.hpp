@@ -63,6 +63,12 @@ public:
     float sample_light01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 1.0f; }
     float sample_skylight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 1.0f; }
     float sample_blocklight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 0.0f; }
+
+    // Voxel shader for AO rendering
+    void load_voxel_shader();
+    void unload_voxel_shader();
+    Shader get_voxel_shader() const { return voxel_shader_; }
+    bool has_voxel_shader() const { return voxel_shader_loaded_; }
     
 private:
     void generate_chunk_terrain(Chunk& chunk);
@@ -90,6 +96,10 @@ private:
     mutable std::array<unsigned char, 512> perm_;
     mutable bool perm_initialized_{false};
     void init_perlin() const;
+
+    // Voxel shader for AO rendering
+    Shader voxel_shader_{};
+    bool voxel_shader_loaded_{false};
 };
 
 } // namespace voxel

@@ -174,12 +174,51 @@ void Chunk::generate_mesh(const World& world) {
 
     static const int tri_corner_idx[6] = {0, 1, 2, 0, 2, 3};
 
-    auto is_solid_ws = [&world](int wx, int wy, int wz) -> bool {
-        const BlockType bt = static_cast<BlockType>(world.get_block(wx, wy, wz));
-        return is_solid(bt);
+    // Minecraft-style per-vertex AO calculation.
+    // For each corner of a face, sample 3 neighbors: side1, side2, corner.
+    // AO level = 0 (darkest) to 3 (brightest).
+    // Returns float in [0,1] range for shader use.
+    auto calc_corner_ao = [&world](int wx, int wy, int wz,
+                                    const int* dir,
+                                    const int* u_axis,
+                                    const int* v_axis,
+                                    int u_sign, int v_sign) -> float {
+        // Position of the 3 neighbor blocks that affect this corner
+        const int side1_x = wx + dir[0] + u_axis[0] * u_sign;
+        const int side1_y = wy + dir[1] + u_axis[1] * u_sign;
+        const int side1_z = wz + dir[2] + u_axis[2] * u_sign;
+
+        const int side2_x = wx + dir[0] + v_axis[0] * v_sign;
+        const int side2_y = wy + dir[1] + v_axis[1] * v_sign;
+        const int side2_z = wz + dir[2] + v_axis[2] * v_sign;
+
+        const int corner_x = wx + dir[0] + u_axis[0] * u_sign + v_axis[0] * v_sign;
+        const int corner_y = wy + dir[1] + u_axis[1] * u_sign + v_axis[1] * v_sign;
+        const int corner_z = wz + dir[2] + u_axis[2] * u_sign + v_axis[2] * v_sign;
+
+        const bool s1 = is_solid(static_cast<BlockType>(world.get_block(side1_x, side1_y, side1_z)));
+        const bool s2 = is_solid(static_cast<BlockType>(world.get_block(side2_x, side2_y, side2_z)));
+        const bool c  = is_solid(static_cast<BlockType>(world.get_block(corner_x, corner_y, corner_z)));
+
+        // Minecraft AO formula:
+        // If both sides are solid, corner doesn't matter (fully occluded)
+        int ao_level;
+        if (s1 && s2) {
+            ao_level = 0;
+        } else {
+            ao_level = 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
+        }
+
+        // Convert to [0,1] range with a minimum brightness
+        // ao_level 0 -> 0.2, ao_level 3 -> 1.0
+        static const float ao_values[4] = { 0.2f, 0.5f, 0.75f, 1.0f };
+        return ao_values[ao_level];
     };
 
-    (void)is_solid_ws; // Unused when lighting/AO is disabled
+    // Corner u/v signs for each of the 4 corners of a quad
+    // Corners: 0=(-u,-v), 1=(-u,+v), 2=(+u,+v), 3=(+u,-v)
+    static const int corner_u_sign[4] = { -1, -1, +1, +1 };
+    static const int corner_v_sign[4] = { -1, +1, +1, -1 };
     
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
@@ -229,6 +268,19 @@ void Chunk::generate_mesh(const World& world) {
                         (block_type == BlockType::Leaves) ? 1.0f :
                         (block_type == BlockType::Grass && face == 2) ? 1.0f :
                         0.0f;
+
+                    // Pre-compute AO for all 4 corners of this face
+                    float corner_ao[4];
+                    for (int corner = 0; corner < 4; corner++) {
+                        corner_ao[corner] = calc_corner_ao(
+                            wx, wy, wz,
+                            face_dir[face],
+                            face_u[face],
+                            face_v[face],
+                            corner_u_sign[corner],
+                            corner_v_sign[corner]
+                        );
+                    }
                     
                     // Add 6 vertices for this face (2 triangles)
                     for (int v = 0; v < 6; v++) {
@@ -239,15 +291,18 @@ void Chunk::generate_mesh(const World& world) {
                         texcoords.push_back(u0 + face_uvs[face][v][0] * uv_size);
                         texcoords.push_back(v0 + face_uvs[face][v][1] * uv_size);
 
+                        // Get AO for this vertex's corner
                         const int c = tri_corner_idx[v];
+                        const float ao = corner_ao[c];
+
                         texcoords2.push_back(foliageMask);
-                        texcoords2.push_back(1.0f); // AO slot unused, set to 1.0
+                        texcoords2.push_back(ao);
                         
                         normals.push_back(face_normals[face][0]);
                         normals.push_back(face_normals[face][1]);
                         normals.push_back(face_normals[face][2]);
 
-                        // No lighting/AO - use full brightness (white)
+                        // Use vertex color for tint (foliage/grass)
                         unsigned char r = 255;
                         unsigned char g = 255;
                         unsigned char b = 255;
@@ -351,6 +406,21 @@ void Chunk::generate_mesh(const World& world) {
 void Chunk::render() const {
     if (has_mesh_) {
         DrawModel(model_, {0, 0, 0}, 1.0f, WHITE);
+    }
+
+    if (!light_markers_ws_.empty()) {
+        for (const auto& p : light_markers_ws_) {
+            DrawSphere(p, 0.18f, YELLOW);
+        }
+    }
+}
+
+void Chunk::render(Shader shader) const {
+    if (has_mesh_) {
+        // Temporarily set shader on model's material
+        Model model_copy = model_;
+        model_copy.materials[0].shader = shader;
+        DrawModel(model_copy, {0, 0, 0}, 1.0f, WHITE);
     }
 
     if (!light_markers_ws_.empty()) {
