@@ -1,5 +1,7 @@
 #include "block_registry.hpp"
 #include <cstdio>
+#include <algorithm>
+#include <cmath>
 
 namespace voxel {
 
@@ -23,6 +25,19 @@ bool BlockRegistry::init(const std::string& atlas_path) {
     
     atlas_tile_size_ = 16;
     atlas_tiles_per_row_ = atlas_texture_.width / atlas_tile_size_;
+
+    // MV-2: optional colormaps for foliage/grass recolor.
+    grass_colormap_ = LoadImage("textures/grasscolor.png");
+    grass_colormap_loaded_ = (grass_colormap_.data != nullptr);
+    if (!grass_colormap_loaded_) {
+        TraceLog(LOG_WARNING, "[voxel] grasscolor.png not found; grass recolor will use fallback");
+    }
+
+    foliage_colormap_ = LoadImage("textures/foliagecolor.png");
+    foliage_colormap_loaded_ = (foliage_colormap_.data != nullptr);
+    if (!foliage_colormap_loaded_) {
+        TraceLog(LOG_WARNING, "[voxel] foliagecolor.png not found; foliage recolor will use fallback");
+    }
     
     register_blocks();
     
@@ -35,8 +50,48 @@ bool BlockRegistry::init(const std::string& atlas_path) {
 void BlockRegistry::destroy() {
     if (initialized_) {
         UnloadTexture(atlas_texture_);
+
+        if (grass_colormap_loaded_) {
+            UnloadImage(grass_colormap_);
+            grass_colormap_loaded_ = false;
+        }
+        if (foliage_colormap_loaded_) {
+            UnloadImage(foliage_colormap_);
+            foliage_colormap_loaded_ = false;
+        }
+
         initialized_ = false;
     }
+}
+
+Color BlockRegistry::sample_colormap_(const Image& img, bool loaded, float temperature, Color fallback) {
+    if (!loaded || img.data == nullptr || img.width <= 0 || img.height <= 0) {
+        return fallback;
+    }
+
+    // Minecraft-style colormap lookup uses temperature/humidity mapped into [0..255].
+    // We only have temperature in MV-2; keep humidity fixed in the middle.
+    const float t = std::clamp(temperature, 0.0f, 1.0f);
+    const float humidity = 0.5f;
+
+    const int w = img.width;
+    const int h = img.height;
+
+    const int x = std::clamp(static_cast<int>(std::lround((1.0f - t) * static_cast<float>(w - 1))), 0, w - 1);
+    const int y = std::clamp(static_cast<int>(std::lround((1.0f - humidity) * static_cast<float>(h - 1))), 0, h - 1);
+
+    return GetImageColor(img, x, y);
+}
+
+Color BlockRegistry::sample_grass_color(float temperature) const {
+    // Fallback tuned to be obviously green if the colormap is missing.
+    const Color fallback{120, 200, 80, 255};
+    return sample_colormap_(grass_colormap_, grass_colormap_loaded_, temperature, fallback);
+}
+
+Color BlockRegistry::sample_foliage_color(float temperature) const {
+    const Color fallback{90, 180, 70, 255};
+    return sample_colormap_(foliage_colormap_, foliage_colormap_loaded_, temperature, fallback);
 }
 
 void BlockRegistry::register_blocks() {

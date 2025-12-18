@@ -52,6 +52,12 @@ public:
     void set_map_template(shared::maps::MapTemplate map);
     void clear_map_template();
 
+    // MV-2: render-only temperature used for foliage/grass recolor.
+    // Range: [0, 1] where 0=cold, 1=hot.
+    float temperature() const;
+    void set_temperature_override(float temperature);
+    void clear_temperature_override();
+
     void mark_all_chunks_dirty();
 
     // Client-only render lighting (skylight + blocklight). Never used for gameplay.
@@ -78,6 +84,10 @@ private:
     Vector3 last_player_position_{0, 0, 0};
 
     std::optional<shared::maps::MapTemplate> map_template_{};
+
+    // MV-2: editor/runtime override for render temperature.
+    // When set, it takes precedence over template temperature.
+    std::optional<float> temperature_override_{};
 
     // Client-only bounded lighting cache used by voxel mesh generation.
     LightVolume light_volume_{};

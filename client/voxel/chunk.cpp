@@ -1,13 +1,14 @@
 #include "chunk.hpp"
 #include "block_registry.hpp"
 #include "world.hpp"
-#include "../renderer/lighting_raymarch.hpp"
 #include "../core/config.hpp"
 #include <raylib.h>
 #include <cstring>
 #include <chrono>
 #include <vector>
 #include <cstdio>
+#include <algorithm>
+#include <cmath>
 
 namespace voxel {
 
@@ -94,7 +95,23 @@ void Chunk::set_block(int x, int y, int z, Block type) {
 void Chunk::generate_mesh(const World& world) {
     const auto t_total0 = std::chrono::steady_clock::now();
 
-    const bool smooth_lighting = core::Config::instance().get().render.voxel_smooth_lighting;
+    const auto& render_cfg = core::Config::instance().get().render;
+    const bool smooth_lighting = render_cfg.voxel_smooth_lighting;
+
+    const float light_ambient_min = std::clamp(render_cfg.voxel_light_ambient_min, 0.0f, 1.0f);
+    const float light_gamma = std::max(0.01f, render_cfg.voxel_light_gamma);
+    const float ao_strength = std::clamp(render_cfg.voxel_ao_strength, 0.0f, 1.0f);
+    const auto brightness_curve = [light_ambient_min, light_gamma](float combined01) -> float {
+        const float x = std::clamp(combined01, 0.0f, 1.0f);
+        const float curved = std::pow(x, light_gamma);
+        return light_ambient_min + (1.0f - light_ambient_min) * curved;
+    };
+
+    // MV-2: foliage/grass recolor is temperature-driven (render-only).
+    // We use vertexColor as a tint (raylib default shader behavior), so apply the tint here.
+    const float temperature = std::clamp(world.temperature(), 0.0f, 1.0f);
+    const Color grass_tint = BlockRegistry::instance().sample_grass_color(temperature);
+    const Color foliage_tint = BlockRegistry::instance().sample_foliage_color(temperature);
 
     cleanup_mesh();
 
@@ -324,14 +341,45 @@ void Chunk::generate_mesh(const World& world) {
                         normals.push_back(face_normals[face][1]);
                         normals.push_back(face_normals[face][2]);
 
-                        const unsigned char sky8 = static_cast<unsigned char>(std::clamp(corner[c].sky, 0.0f, 1.0f) * 255.0f);
-                        const unsigned char blk8 = static_cast<unsigned char>(std::clamp(corner[c].block, 0.0f, 1.0f) * 255.0f);
-                        const unsigned char ao8 = static_cast<unsigned char>(std::clamp(corner[c].ao, 0.0f, 1.0f) * 255.0f);
+                        const float sky = std::clamp(corner[c].sky, 0.0f, 1.0f);
+                        const float block = std::clamp(corner[c].block, 0.0f, 1.0f);
+                        const float ao = std::clamp(corner[c].ao, 0.0f, 1.0f);
 
-                        // Pack skylight/blocklight into vertex color RG and AO into B (baked-lighting friendly).
-                        colors.push_back(sky8);
-                        colors.push_back(blk8);
-                        colors.push_back(ao8);
+                        // Raylib's default mesh shader treats vertex color as an RGB tint.
+                        // Use grayscale brightness derived from Minecraft-style combined light,
+                        // then modulate by AO to keep corners subtly darker.
+                        const float combined = std::max(sky, block);
+
+                        // Shadow expressiveness (AO):
+                        // - Make AO more contrasty via a curve (pow with exponent > 1).
+                        // - Mix by ao_strength.
+                        // - Avoid further darkening when we're already at ambient_min (combined ~= 0),
+                        //   so deep shade doesn't collapse back into near-black.
+                        const float base_brightness = brightness_curve(combined);
+                        const float combined_curved01 = (base_brightness - light_ambient_min) / std::max(0.0001f, 1.0f - light_ambient_min);
+                        const float ao_influence = ao_strength * std::clamp(combined_curved01, 0.0f, 1.0f);
+
+                        const float ao_curved = std::pow(ao, 2.2f);
+                        const float ao_mix = (1.0f - ao_influence) + ao_influence * ao_curved;
+
+                        const float brightness = base_brightness * ao_mix;
+                        const unsigned char lit8 = static_cast<unsigned char>(std::clamp(brightness, 0.0f, 1.0f) * 255.0f);
+
+                        unsigned char r = lit8;
+                        unsigned char g = lit8;
+                        unsigned char b = lit8;
+
+                        // MV-2: apply temperature tint only to foliage/grass faces.
+                        if (foliageMask > 0.5f) {
+                            const Color tint = (block_type == BlockType::Grass) ? grass_tint : foliage_tint;
+                            r = static_cast<unsigned char>((static_cast<unsigned int>(lit8) * tint.r) / 255u);
+                            g = static_cast<unsigned char>((static_cast<unsigned int>(lit8) * tint.g) / 255u);
+                            b = static_cast<unsigned char>((static_cast<unsigned int>(lit8) * tint.b) / 255u);
+                        }
+
+                        colors.push_back(r);
+                        colors.push_back(g);
+                        colors.push_back(b);
                         colors.push_back(255);
                     }
                 }
@@ -397,11 +445,6 @@ void Chunk::generate_mesh(const World& world) {
     
     model_ = LoadModelFromMesh(mesh_);
     model_.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = registry.get_atlas_texture();
-
-    // Bind the client-only lighting shader (safe even if disabled; the shader itself gates behavior).
-    if (renderer::LightingRaymarch::instance().ready()) {
-        model_.materials[0].shader = renderer::LightingRaymarch::instance().shader();
-    }
     
     has_mesh_ = true;
     needs_mesh_update_ = false;

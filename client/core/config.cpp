@@ -289,6 +289,9 @@ void Config::apply_kv(const std::string& section, const std::string& key, const 
 
     if (sec == "render") {
         if (k == "voxel_smooth_lighting") config_.render.voxel_smooth_lighting = parse_bool(v, config_.render.voxel_smooth_lighting);
+        else if (k == "voxel_light_ambient_min") config_.render.voxel_light_ambient_min = parse_float_local(v, config_.render.voxel_light_ambient_min);
+        else if (k == "voxel_light_gamma") config_.render.voxel_light_gamma = parse_float_local(v, config_.render.voxel_light_gamma);
+        else if (k == "voxel_ao_strength") config_.render.voxel_ao_strength = parse_float_local(v, config_.render.voxel_ao_strength);
         return;
     }
 

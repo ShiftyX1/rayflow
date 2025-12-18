@@ -132,7 +132,7 @@ No special “offline bypass” calls from client to server.
 Maps must carry **visual-only** environment settings that affect rendering in both the main client and the Map Editor.
 
 ### Scope (MV-1)
-- Global lighting config for the client ray-march shader (directional sun/moon preset + intensities).
+- Global lighting config for client shading (directional sun/moon preset + intensities).
 - Skybox selection and rendering.
 
 ### Hard constraints
@@ -170,7 +170,7 @@ MV-2 backward/forward compatibility requirement:
 
 ### Runtime application (required)
 - When a template is loaded on the client (`world->set_map_template()`), the client must apply `VisualSettings`:
-  - Configure ray-marched global light using the map values.
+  - Configure global light using the map values.
   - Configure and render the selected skybox.
   - Apply `temperature` so grass/foliage tint matches the map.
 - The Map Editor must also apply these settings while editing.
@@ -188,7 +188,6 @@ Maps must support placing **light source markers**.
 
 ### Physics rules (required)
 - `BlockType::Light` must be **non-solid** (no collision) and treated as **transparent** for meshing.
-- Light blocks must not occlude ray-marched shadows (treat them as empty in the occupancy field).
 - Light blocks must not affect baked AO in BL-1 (they are markers only for now).
 
 ### Rendering rules (required)

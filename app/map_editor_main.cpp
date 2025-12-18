@@ -5,7 +5,6 @@
 #include "../client/ecs/systems/player_system.hpp"
 #include "../client/ecs/systems/render_system.hpp"
 #include "../client/net/client_session.hpp"
-#include "../client/renderer/lighting_raymarch.hpp"
 #include "../client/renderer/skybox.hpp"
 #include "../client/voxel/block_interaction.hpp"
 #include "../client/voxel/block_registry.hpp"
@@ -471,8 +470,6 @@ int main() {
 
     core::Config::instance().load_from_file("rayflow.conf");
     core::Logger::instance().init(core::Config::instance().logging());
-
-    renderer::LightingRaymarch::instance().init();
     renderer::Skybox::instance().init();
 
     if (!voxel::BlockRegistry::instance().init("textures/terrain.png")) {
@@ -560,13 +557,11 @@ int main() {
         skyboxParams.needsRefresh = true;
 
         // Apply MV-1 settings in-editor.
-        renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
-            visualSettings.timeOfDayHours,
-            visualSettings.useMoon,
-            visualSettings.sunIntensity,
-            visualSettings.ambientIntensity);
-        renderer::LightingRaymarch::instance().set_enabled(true);
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
+
+        // Apply MV-2 temperature recolor in-editor (render-only).
+        world->set_temperature_override(visualSettings.temperature);
+        world->mark_all_chunks_dirty();
 
         session->set_on_block_placed([&](const shared::proto::BlockPlaced& ev) {
             if (!world) return;
@@ -869,14 +864,12 @@ int main() {
         }
 
         world->update(transform.position);
-        renderer::LightingRaymarch::instance().update_volume_if_needed(*world, camera.position);
 
         BeginDrawing();
         ClearBackground(BLACK);
 
         BeginMode3D(camera);
         renderer::Skybox::instance().draw(camera);
-        renderer::LightingRaymarch::instance().apply_frame_uniforms();
         renderSystem->render(registry, camera);
         if (hit.hit) {
             draw_block_highlight(hit.x, hit.y, hit.z);
@@ -982,13 +975,16 @@ int main() {
             1.0f);
 
         // Apply settings live while editing.
-        renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
-            visualSettings.timeOfDayHours,
-            visualSettings.useMoon,
-            visualSettings.sunIntensity,
-            visualSettings.ambientIntensity);
-        renderer::LightingRaymarch::instance().set_temperature(visualSettings.temperature);
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
+
+        {
+            static float lastAppliedTemp = -1.0f;
+            if (world && std::fabs(lastAppliedTemp - visualSettings.temperature) > 0.001f) {
+                world->set_temperature_override(visualSettings.temperature);
+                world->mark_all_chunks_dirty();
+                lastAppliedTemp = visualSettings.temperature;
+            }
+        }
 
         // Skybox modal (MV-1): select panorama texture from textures/skybox/panorama.
         if (skyboxParams.open) {
@@ -1056,7 +1052,6 @@ int main() {
         EndDrawing();
     }
 
-    renderer::LightingRaymarch::instance().shutdown();
     renderer::Skybox::instance().shutdown();
     voxel::BlockRegistry::instance().destroy();
     core::Logger::instance().shutdown();

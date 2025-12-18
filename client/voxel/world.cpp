@@ -3,9 +3,9 @@
 #include <cmath>
 #include <cstdio>
 #include <random>
+#include <algorithm>
 
 #include "block.hpp"
-#include "../renderer/lighting_raymarch.hpp"
 
 namespace voxel {
 
@@ -53,6 +53,24 @@ void World::set_map_template(shared::maps::MapTemplate map) {
 void World::clear_map_template() {
     map_template_.reset();
     chunks_.clear();
+}
+
+float World::temperature() const {
+    if (temperature_override_.has_value()) {
+        return std::clamp(*temperature_override_, 0.0f, 1.0f);
+    }
+    if (map_template_.has_value()) {
+        return std::clamp(map_template_->visualSettings.temperature, 0.0f, 1.0f);
+    }
+    return 0.5f;
+}
+
+void World::set_temperature_override(float temperature) {
+    temperature_override_ = std::clamp(temperature, 0.0f, 1.0f);
+}
+
+void World::clear_temperature_override() {
+    temperature_override_.reset();
 }
 
 void World::mark_all_chunks_dirty() {
@@ -152,16 +170,16 @@ void World::set_block(int x, int y, int z, Block type) {
     
     int local_x = x - chunk_x * CHUNK_WIDTH;
     int local_z = z - chunk_z * CHUNK_DEPTH;
-    
+
+    const Block old_type = it->second->get_block(local_x, y, local_z);
     it->second->set_block(local_x, y, local_z, type);
 
-    // Client-only lighting cache: mark dirty so emissive/light-block changes update promptly.
-    light_volume_dirty_ = true;
-
-    // Client-only raymarch shadow volume: update occupancy immediately to avoid shadow lag.
-    const bool occ = !is_transparent(static_cast<BlockType>(type));
-    if (renderer::LightingRaymarch::instance().ready()) {
-        renderer::LightingRaymarch::instance().notify_block_changed(x, y, z, occ);
+    // Client-only lighting cache (Minecraft-style): queue incremental relight if the change is inside
+    // the current volume; out-of-volume changes will be picked up naturally when the camera moves.
+    if (light_volume_.ready()) {
+        light_volume_.notify_block_changed(x, y, z, static_cast<BlockType>(old_type), static_cast<BlockType>(type));
+    } else {
+        light_volume_dirty_ = true;
     }
 }
 
@@ -284,6 +302,32 @@ void World::update(const Vector3& player_position) {
             const int cz = key.second;
             if (cx >= min_cx && cx <= max_cx && cz >= min_cz && cz <= max_cz) {
                 chunk->mark_dirty();
+            }
+        }
+    }
+
+    // Incremental relight (bounded, budgeted): update light values without rebuilding the whole volume.
+    if (light_volume_.ready()) {
+        const bool touched = light_volume_.process_pending_relight(*this, 8192);
+        if (touched) {
+            int min_wx = 0, min_wy = 0, min_wz = 0;
+            int max_wx = 0, max_wy = 0, max_wz = 0;
+            if (light_volume_.consume_dirty_bounds(min_wx, min_wy, min_wz, max_wx, max_wy, max_wz)) {
+                (void)min_wy;
+                (void)max_wy;
+
+                const int min_cx = floor_div_int(min_wx, CHUNK_WIDTH);
+                const int max_cx = floor_div_int(max_wx, CHUNK_WIDTH);
+                const int min_cz = floor_div_int(min_wz, CHUNK_DEPTH);
+                const int max_cz = floor_div_int(max_wz, CHUNK_DEPTH);
+
+                for (auto& [key, chunk] : chunks_) {
+                    const int cx = key.first;
+                    const int cz = key.second;
+                    if (cx >= min_cx && cx <= max_cx && cz >= min_cz && cz <= max_cz) {
+                        chunk->mark_dirty();
+                    }
+                }
             }
         }
     }

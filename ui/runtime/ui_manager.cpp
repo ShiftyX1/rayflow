@@ -56,53 +56,18 @@ void UIManager::queue_command_if_changed(float prev, float next) {
     }
 }
 
-void UIManager::queue_command_if_changed(bool prev, bool next) {
-    if (prev != next) {
-        pending_commands_.emplace_back(SetRaymarchLightingEnabled{next});
-    }
-}
-
 void UIManager::render(const UIViewModel& vm) {
 #ifdef DEBUG_UI
     if (debug_mode_ == DebugMode::Interactive) {
         debug::DebugUIState state;
         state.show_player_info = show_player_info_;
         state.show_net_info = show_net_info_;
-        state.lighting_raymarch_shadows = lighting_raymarch_shadows_;
-        state.lighting_time_of_day_hours = lighting_time_of_day_hours_;
-        state.lighting_use_moon = lighting_use_moon_;
-        state.lighting_sun_intensity = lighting_sun_intensity_;
-        state.lighting_ambient_intensity = lighting_ambient_intensity_;
         state.camera_sensitivity = camera_sensitivity_;
 
         debug::DebugUIResult result = debug::draw_interactive(state, vm);
 
         show_player_info_ = result.state.show_player_info;
         show_net_info_ = result.state.show_net_info;
-
-        const bool prev_lighting = lighting_raymarch_shadows_;
-        lighting_raymarch_shadows_ = result.state.lighting_raymarch_shadows;
-        queue_command_if_changed(prev_lighting, lighting_raymarch_shadows_);
-
-        const float prev_tod = lighting_time_of_day_hours_;
-        const bool prev_moon = lighting_use_moon_;
-        const float prev_sun_i = lighting_sun_intensity_;
-        const float prev_amb_i = lighting_ambient_intensity_;
-
-        lighting_time_of_day_hours_ = result.state.lighting_time_of_day_hours;
-        lighting_use_moon_ = result.state.lighting_use_moon;
-        lighting_sun_intensity_ = result.state.lighting_sun_intensity;
-        lighting_ambient_intensity_ = result.state.lighting_ambient_intensity;
-
-        if (prev_tod != lighting_time_of_day_hours_ || prev_moon != lighting_use_moon_ ||
-            prev_sun_i != lighting_sun_intensity_ || prev_amb_i != lighting_ambient_intensity_) {
-            pending_commands_.emplace_back(SetRaymarchLightConfig{
-                lighting_time_of_day_hours_,
-                lighting_use_moon_,
-                lighting_sun_intensity_,
-                lighting_ambient_intensity_,
-            });
-        }
 
         const float prev_sens = camera_sensitivity_;
         camera_sensitivity_ = result.state.camera_sensitivity;

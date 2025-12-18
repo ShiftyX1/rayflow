@@ -94,7 +94,7 @@ When making changes, follow the detailed rules in:
 - .github/instructions/comments.instructions.md
 - .github/instructions/bedwars-gameplay.instructions.md
 - .github/instructions/migration-plan.instructions.md
-- .github/instructions/lighting-raymarch.instructions.md
+- .github/instructions/lighting-minecraft.instructions.md
 - .github/instructions/lighting-baked.instructions.md
 - .github/instructions/map-editor.instructions.md
 

@@ -1,4 +1,7 @@
-# Static / baked lighting — strict spec
+# Static / baked lighting — legacy spec
+
+NOTE: The lighting model assumptions in this document are **superseded** by `.github/instructions/lighting-minecraft.instructions.md`.
+Baked AO/lightmaps, if kept, must be treated as render-only modifiers on top of the Minecraft-style light fields.
 
 ## Purpose
 Enable **static (baked) lighting** for BedWars maps that are authored as **finite templates**.
@@ -56,13 +59,6 @@ At minimum:
 - **Template blocks:** must use baked lighting.
 - **Player-placed blocks:** use a cheap fallback (neutral AO / constant factor).
 - Baked lighting must not require per-frame updates.
-
-## Relationship to ray-marched shadows
-- Ray-marched shadows are a **debug/optional runtime effect**.
-- Baked lighting is the **baseline** look for shipped maps.
-- When both are enabled:
-  - Multiply terms conservatively: `final = albedo * (bakedAmbient + bakedDirect) * raymarchShadowFactor`.
-  - Never double-apply ambient.
 
 ## Bake settings (required)
 Map template must record:

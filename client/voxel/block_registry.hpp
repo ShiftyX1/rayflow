@@ -30,6 +30,12 @@ public:
     const BlockInfo& get_block_info(BlockType type) const;
     Rectangle get_texture_rect(BlockType type, int face) const;
     Texture2D get_atlas_texture() const { return atlas_texture_; }
+
+    // MV-2: temperature-driven recolor for foliage/grass.
+    // Returns an sRGB tint color sampled from textures/grasscolor.png and textures/foliagecolor.png.
+    // If colormaps are missing, returns a reasonable fallback.
+    Color sample_grass_color(float temperature) const;
+    Color sample_foliage_color(float temperature) const;
     
     bool is_initialized() const { return initialized_; }
     
@@ -46,6 +52,13 @@ private:
     Texture2D atlas_texture_{};
     int atlas_tile_size_{16};
     int atlas_tiles_per_row_{16};
+
+    Image grass_colormap_{};
+    Image foliage_colormap_{};
+    bool grass_colormap_loaded_{false};
+    bool foliage_colormap_loaded_{false};
+
+    static Color sample_colormap_(const Image& img, bool loaded, float temperature, Color fallback);
     bool initialized_{false};
 };
 

@@ -49,6 +49,17 @@ struct ClientConfig {
         // - per-corner AO and smooth light sampling when true
         // - flat lighting per face when false (debug/diagnostic)
         bool voxel_smooth_lighting{true};
+
+        // Render-only brightness curve for Minecraft-style combined light.
+        // Prevents fully black pixels in deep shade while keeping discrete 0..15 light values intact.
+        //
+        // brightness = ambient_min + (1 - ambient_min) * pow(combined01, gamma)
+        float voxel_light_ambient_min{0.08f};
+        float voxel_light_gamma{1.0f};
+
+        // Shadow expressiveness (render-only): how strongly AO darkens corners.
+        // 0 = disable AO darkening, 1 = current AO behavior.
+        float voxel_ao_strength{1.0f};
     } render{};
 
     // Server-side (sv) log filtering for the embedded authoritative server.

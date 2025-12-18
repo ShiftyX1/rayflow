@@ -9,7 +9,6 @@
 #include "../voxel/world.hpp"
 #include "../voxel/block_registry.hpp"
 #include "../voxel/block_interaction.hpp"
-#include "../renderer/lighting_raymarch.hpp"
 #include "../renderer/skybox.hpp"
 #include "../../shared/maps/runtime_paths.hpp"
 #include <cstdio>
@@ -40,9 +39,6 @@ bool Game::init(int width, int height, const char* title) {
              core::Config::instance().get().render.voxel_smooth_lighting ? "true" : "false");
 
     ui_.init();
-
-    // Client-only rendering feature (safe in offline/online): ray-marched lighting.
-    renderer::LightingRaymarch::instance().init();
     renderer::Skybox::instance().init();
 
     if (session_) {
@@ -143,18 +139,6 @@ void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
                 registry_.get<ecs::PlayerController>(player_entity_).camera_sensitivity = s->value;
             }
         }
-
-        if (const auto* l = std::get_if<ui::SetRaymarchLightingEnabled>(&cmd)) {
-            renderer::LightingRaymarch::instance().set_enabled(l->enabled);
-        }
-
-        if (const auto* c = std::get_if<ui::SetRaymarchLightConfig>(&cmd)) {
-            renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
-                c->time_of_day_hours,
-                c->use_moon,
-                c->sun_intensity,
-                c->ambient_intensity);
-        }
     }
 }
 
@@ -247,8 +231,6 @@ void Game::shutdown() {
     physics_system_.reset();
     player_system_.reset();
     render_system_.reset();
-
-    renderer::LightingRaymarch::instance().shutdown();
     renderer::Skybox::instance().shutdown();
 
     core::Logger::instance().shutdown();
@@ -312,13 +294,6 @@ void Game::update(float delta_time) {
 
                         if (const auto* mt = world_->map_template()) {
                             const auto& vs = mt->visualSettings;
-                            renderer::LightingRaymarch::instance().set_global_light_from_time_of_day(
-                                vs.timeOfDayHours,
-                                vs.useMoon,
-                                vs.sunIntensity,
-                                vs.ambientIntensity);
-                            renderer::LightingRaymarch::instance().set_temperature(vs.temperature);
-                            renderer::LightingRaymarch::instance().set_enabled(true);
                             renderer::Skybox::instance().set_kind(vs.skyboxKind);
                         }
 
@@ -334,7 +309,6 @@ void Game::update(float delta_time) {
                 }
 
                 // Reset MV-2 tint parameter back to neutral for procedural worlds.
-                renderer::LightingRaymarch::instance().set_temperature(0.5f);
             }
         }
     }
@@ -417,9 +391,6 @@ void Game::update(float delta_time) {
     // Update world (chunk loading/unloading)
     world_->update(transform.position);
 
-    // Update ray-marched lighting occupancy volume (rate-limited).
-    renderer::LightingRaymarch::instance().update_volume_if_needed(*world_, camera.position);
-
     // Build a fresh view-model for render() (debug overlays, stats, etc.)
     refresh_ui_view_model(delta_time);
 }
@@ -433,9 +404,6 @@ void Game::render() {
     BeginMode3D(camera);
 
     renderer::Skybox::instance().draw(camera);
-
-    // Update per-frame lighting shader uniforms before drawing voxel chunks.
-    renderer::LightingRaymarch::instance().apply_frame_uniforms();
     
     // Render world
     render_system_->render(registry_, camera);

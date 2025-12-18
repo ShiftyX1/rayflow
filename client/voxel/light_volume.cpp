@@ -11,16 +11,6 @@
 
 namespace voxel {
 
-namespace {
-
-inline bool is_opaque_for_light(BlockType bt) {
-    // Matches face-culling behavior: light passes through transparent blocks.
-    // Leaves are treated as transparent per shared::voxel::util::is_transparent.
-    return !is_transparent(bt);
-}
-
-} // namespace
-
 void LightVolume::set_settings(const Settings& s) {
     settings_ = s;
     have_volume_ = false;
@@ -28,8 +18,23 @@ void LightVolume::set_settings(const Settings& s) {
     skylight_.clear();
     blocklight_.clear();
     opaque_.clear();
+    block_atten_.clear();
+    sky_atten_.clear();
+    sky_dim_vertical_.clear();
     q_sky_.clear();
     q_blk_.clear();
+
+    pending_changes_.clear();
+    relight_active_ = false;
+    q_dec_sky_.clear();
+    q_inc_sky_.clear();
+    q_dec_blk_.clear();
+    q_inc_blk_.clear();
+    head_dec_sky_ = 0;
+    head_inc_sky_ = 0;
+    head_dec_blk_ = 0;
+    head_inc_blk_ = 0;
+    dirty_bounds_valid_ = false;
 }
 
 int LightVolume::floor_div_(int a, int b) {
@@ -76,6 +81,9 @@ bool LightVolume::update_if_needed(const World& world, const Vector3& center_pos
     if (skylight_.size() != volume_size) skylight_.resize(volume_size);
     if (blocklight_.size() != volume_size) blocklight_.resize(volume_size);
     if (opaque_.size() != volume_size) opaque_.resize(volume_size);
+    if (block_atten_.size() != volume_size) block_atten_.resize(volume_size);
+    if (sky_atten_.size() != volume_size) sky_atten_.resize(volume_size);
+    if (sky_dim_vertical_.size() != volume_size) sky_dim_vertical_.resize(volume_size);
     std::fill(skylight_.begin(), skylight_.end(), 0u);
     std::fill(blocklight_.begin(), blocklight_.end(), 0u);
 
@@ -99,7 +107,402 @@ bool LightVolume::update_if_needed(const World& world, const Vector3& center_pos
     have_volume_ = true;
     last_update_time_ = now;
 
+    // The volume's backing arrays were rebuilt, so any queued incremental relight
+    // work is now obsolete (the rebuild already reflects the authoritative world state).
+    pending_changes_.clear();
+    relight_active_ = false;
+    q_dec_sky_.clear();
+    q_inc_sky_.clear();
+    q_dec_blk_.clear();
+    q_inc_blk_.clear();
+    head_dec_sky_ = 0;
+    head_inc_sky_ = 0;
+    head_dec_blk_ = 0;
+    head_inc_blk_ = 0;
+    dirty_bounds_valid_ = false;
+
     return true;
+}
+
+bool LightVolume::in_volume_(int wx, int wy, int wz, int& out_lx, int& out_ly, int& out_lz) const {
+    if (!have_volume_) return false;
+
+    const int dim_x = std::max(1, settings_.volume_x);
+    const int dim_y = std::max(1, settings_.volume_y);
+    const int dim_z = std::max(1, settings_.volume_z);
+
+    const int lx = wx - origin_x_;
+    const int ly = wy - origin_y_;
+    const int lz = wz - origin_z_;
+
+    if (lx < 0 || ly < 0 || lz < 0) return false;
+    if (lx >= dim_x || ly >= dim_y || lz >= dim_z) return false;
+
+    out_lx = lx;
+    out_ly = ly;
+    out_lz = lz;
+    return true;
+}
+
+void LightVolume::notify_block_changed(int wx, int wy, int wz, BlockType old_type, BlockType new_type) {
+    if (!have_volume_) return;
+
+    int lx = 0, ly = 0, lz = 0;
+    if (!in_volume_(wx, wy, wz, lx, ly, lz)) return;
+
+    pending_changes_.push_back(PendingChange{ wx, wy, wz, old_type, new_type });
+}
+
+bool LightVolume::consume_dirty_bounds(int& out_min_wx, int& out_min_wy, int& out_min_wz,
+                                      int& out_max_wx, int& out_max_wy, int& out_max_wz) {
+    if (!dirty_bounds_valid_) return false;
+    out_min_wx = dirty_min_wx_;
+    out_min_wy = dirty_min_wy_;
+    out_min_wz = dirty_min_wz_;
+    out_max_wx = dirty_max_wx_;
+    out_max_wy = dirty_max_wy_;
+    out_max_wz = dirty_max_wz_;
+    dirty_bounds_valid_ = false;
+    return true;
+}
+
+bool LightVolume::process_pending_relight(const World& world, int budget_nodes) {
+    if (!have_volume_) return false;
+    if (budget_nodes <= 0) return false;
+
+    const int dim_x = std::max(1, settings_.volume_x);
+    const int dim_y = std::max(1, settings_.volume_y);
+    const int dim_z = std::max(1, settings_.volume_z);
+
+    const std::size_t stride_z = static_cast<std::size_t>(dim_x);
+    const std::size_t stride_y = static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_z);
+    const auto idx = [stride_z, stride_y](int x, int y, int z) -> std::size_t {
+        return static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * stride_z + static_cast<std::size_t>(y) * stride_y;
+    };
+
+    const std::size_t volume_size = static_cast<std::size_t>(dim_x) * static_cast<std::size_t>(dim_y) * static_cast<std::size_t>(dim_z);
+    if (q_dec_sky_.capacity() < volume_size) q_dec_sky_.reserve(volume_size);
+    if (q_inc_sky_.capacity() < volume_size) q_inc_sky_.reserve(volume_size);
+    if (q_dec_blk_.capacity() < volume_size) q_dec_blk_.reserve(volume_size);
+    if (q_inc_blk_.capacity() < volume_size) q_inc_blk_.reserve(volume_size);
+
+    bool any_changed = false;
+
+    auto note_dirty = [this](int wx, int wy, int wz) {
+        if (!dirty_bounds_valid_) {
+            dirty_bounds_valid_ = true;
+            dirty_min_wx_ = dirty_max_wx_ = wx;
+            dirty_min_wy_ = dirty_max_wy_ = wy;
+            dirty_min_wz_ = dirty_max_wz_ = wz;
+            return;
+        }
+        dirty_min_wx_ = std::min(dirty_min_wx_, wx);
+        dirty_min_wy_ = std::min(dirty_min_wy_, wy);
+        dirty_min_wz_ = std::min(dirty_min_wz_, wz);
+        dirty_max_wx_ = std::max(dirty_max_wx_, wx);
+        dirty_max_wy_ = std::max(dirty_max_wy_, wy);
+        dirty_max_wz_ = std::max(dirty_max_wz_, wz);
+    };
+
+    auto in_bounds = [dim_x, dim_y, dim_z](int x, int y, int z) {
+        return x >= 0 && y >= 0 && z >= 0 && x < dim_x && y < dim_y && z < dim_z;
+    };
+
+    auto seed_from_cell = [idx, this, &in_bounds](std::vector<QueueNode>& q, const std::vector<std::uint8_t>& channel, int x, int y, int z) {
+        if (!in_bounds(x, y, z)) return;
+        const std::size_t i = idx(x, y, z);
+        const std::uint8_t level = channel[i];
+        if (level == 0u) return;
+        q.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), level });
+    };
+
+    const int top_y = dim_y - 1;
+
+    // Initialize work for the next queued change (only when no active BFS is in flight).
+    if (!relight_active_) {
+        if (pending_changes_.empty()) return false;
+
+        active_change_ = pending_changes_.front();
+        pending_changes_.erase(pending_changes_.begin());
+        relight_active_ = true;
+
+        int lx = 0, ly = 0, lz = 0;
+        if (!in_volume_(active_change_.wx, active_change_.wy, active_change_.wz, lx, ly, lz)) {
+            relight_active_ = false;
+            return false;
+        }
+
+        const std::size_t ci = idx(lx, ly, lz);
+        const BlockType bt = static_cast<BlockType>(world.get_block(active_change_.wx, active_change_.wy, active_change_.wz));
+        const auto& props = shared::voxel::get_light_props(static_cast<shared::voxel::BlockType>(bt));
+
+        // Update cached props for this voxel to match the authoritative world state.
+        opaque_[ci] = props.opaqueForLight ? 1u : 0u;
+        block_atten_[ci] = props.blockAttenuation;
+        sky_atten_[ci] = props.skyAttenuation;
+        sky_dim_vertical_[ci] = props.skyDimVertical ? 1u : 0u;
+
+        // Reset queues/heads for this change.
+        q_dec_sky_.clear();
+        q_inc_sky_.clear();
+        q_dec_blk_.clear();
+        q_inc_blk_.clear();
+        head_dec_sky_ = 0;
+        head_inc_sky_ = 0;
+        head_dec_blk_ = 0;
+        head_inc_blk_ = 0;
+
+        // Blocklight: if this cell currently has blocklight and becomes opaque or loses emission,
+        // it can trigger a decrease. We do not attempt to classify precisely; we always seed a local
+        // decrease from the changed cell if it currently has light, then re-increase from neighbors.
+        const std::uint8_t old_blk = blocklight_[ci];
+        if (old_blk != 0u) {
+            blocklight_[ci] = 0u;
+            q_dec_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly), static_cast<std::uint16_t>(lz), old_blk });
+            note_dirty(active_change_.wx, active_change_.wy, active_change_.wz);
+            any_changed = true;
+        }
+
+        // Skylight: if this cell currently has skylight and becomes opaque, it can trigger a decrease.
+        // Skylight is seeded from the top of each (x,z) column. When a block changes,
+        // re-scan the column to update vertical injection and seed BFS for sideways spread.
+        std::uint8_t column_level = 0u;
+        for (int cy = top_y; cy >= 0; --cy) {
+            const std::size_t i = idx(lx, cy, lz);
+
+            const std::uint8_t old_level = skylight_[i];
+
+            if (opaque_[i] != 0u) {
+                column_level = 0u;
+            } else {
+                if (cy == top_y) {
+                    column_level = 15u;
+                } else {
+                    const std::uint8_t extra = sky_atten_[i];
+                    const std::uint8_t base = (sky_dim_vertical_[i] != 0u) ? 1u : 0u;
+                    const std::uint8_t cost = static_cast<std::uint8_t>(base + extra);
+                    column_level = (column_level > cost) ? static_cast<std::uint8_t>(column_level - cost) : 0u;
+                }
+            }
+
+            if (old_level == column_level) continue;
+
+            skylight_[i] = column_level;
+            note_dirty(origin_x_ + lx, origin_y_ + cy, origin_z_ + lz);
+            any_changed = true;
+
+            if (old_level > column_level) {
+                q_dec_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(cy), static_cast<std::uint16_t>(lz), old_level });
+            } else {
+                q_inc_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(cy), static_cast<std::uint16_t>(lz), column_level });
+            }
+        }
+
+        // Always seed increase from the changed cell neighborhood (after any local clears).
+        seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz);
+        seed_from_cell(q_inc_blk_, blocklight_, lx + 1, ly, lz);
+        seed_from_cell(q_inc_blk_, blocklight_, lx - 1, ly, lz);
+        seed_from_cell(q_inc_blk_, blocklight_, lx, ly + 1, lz);
+        seed_from_cell(q_inc_blk_, blocklight_, lx, ly - 1, lz);
+        seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz + 1);
+        seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz - 1);
+
+        seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz);
+        seed_from_cell(q_inc_sky_, skylight_, lx + 1, ly, lz);
+        seed_from_cell(q_inc_sky_, skylight_, lx - 1, ly, lz);
+        seed_from_cell(q_inc_sky_, skylight_, lx, ly + 1, lz);
+        seed_from_cell(q_inc_sky_, skylight_, lx, ly - 1, lz);
+        seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz + 1);
+        seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz - 1);
+
+        // Apply emissive seed for blocklight in the changed cell (if transparent).
+        if (opaque_[ci] == 0u && props.emission > 0u) {
+            if (props.emission > blocklight_[ci]) {
+                blocklight_[ci] = props.emission;
+                q_inc_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly), static_cast<std::uint16_t>(lz), props.emission });
+                note_dirty(active_change_.wx, active_change_.wy, active_change_.wz);
+                any_changed = true;
+            }
+        }
+    }
+
+    auto sky_cost = [idx, this](int nx, int ny, int nz, bool is_down) -> std::uint8_t {
+        const std::size_t i = idx(nx, ny, nz);
+        const std::uint8_t extra = sky_atten_[i];
+        const std::uint8_t base = is_down ? (sky_dim_vertical_[i] != 0u ? 1u : 0u) : 1u;
+        return static_cast<std::uint8_t>(base + extra);
+    };
+
+    auto blk_cost = [idx, this](int nx, int ny, int nz) -> std::uint8_t {
+        const std::size_t i = idx(nx, ny, nz);
+        return static_cast<std::uint8_t>(1u + block_atten_[i]);
+    };
+
+    auto neighbors6 = [](int x, int y, int z, int out_xyz[6][3]) {
+        out_xyz[0][0] = x + 1; out_xyz[0][1] = y;     out_xyz[0][2] = z;
+        out_xyz[1][0] = x - 1; out_xyz[1][1] = y;     out_xyz[1][2] = z;
+        out_xyz[2][0] = x;     out_xyz[2][1] = y + 1; out_xyz[2][2] = z;
+        out_xyz[3][0] = x;     out_xyz[3][1] = y - 1; out_xyz[3][2] = z;
+        out_xyz[4][0] = x;     out_xyz[4][1] = y;     out_xyz[4][2] = z + 1;
+        out_xyz[5][0] = x;     out_xyz[5][1] = y;     out_xyz[5][2] = z - 1;
+    };
+
+    // Decrease propagation (blocklight)
+    while (budget_nodes > 0 && head_dec_blk_ < q_dec_blk_.size()) {
+        const QueueNode n = q_dec_blk_[head_dec_blk_++];
+        --budget_nodes;
+
+        const int x = static_cast<int>(n.x);
+        const int y = static_cast<int>(n.y);
+        const int z = static_cast<int>(n.z);
+
+        int neigh[6][3];
+        neighbors6(x, y, z, neigh);
+
+        for (int k = 0; k < 6; ++k) {
+            const int nx = neigh[k][0];
+            const int ny = neigh[k][1];
+            const int nz = neigh[k][2];
+            if (!in_bounds(nx, ny, nz)) continue;
+
+            const std::size_t ni = idx(nx, ny, nz);
+            const std::uint8_t nl = blocklight_[ni];
+            if (nl == 0u) continue;
+
+            const std::uint8_t cost = blk_cost(nx, ny, nz);
+            const std::uint8_t expected = (n.level > cost) ? static_cast<std::uint8_t>(n.level - cost) : 0u;
+            if (expected == 0u) continue;
+
+            if (nl <= expected) {
+                blocklight_[ni] = 0u;
+                q_dec_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(nx), static_cast<std::uint16_t>(ny), static_cast<std::uint16_t>(nz), nl });
+                note_dirty(origin_x_ + nx, origin_y_ + ny, origin_z_ + nz);
+                any_changed = true;
+            } else {
+                q_inc_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(nx), static_cast<std::uint16_t>(ny), static_cast<std::uint16_t>(nz), nl });
+            }
+        }
+    }
+
+    // Decrease propagation (skylight)
+    while (budget_nodes > 0 && head_dec_sky_ < q_dec_sky_.size()) {
+        const QueueNode n = q_dec_sky_[head_dec_sky_++];
+        --budget_nodes;
+
+        const int x = static_cast<int>(n.x);
+        const int y = static_cast<int>(n.y);
+        const int z = static_cast<int>(n.z);
+
+        int neigh[6][3];
+        neighbors6(x, y, z, neigh);
+
+        for (int k = 0; k < 6; ++k) {
+            const int nx = neigh[k][0];
+            const int ny = neigh[k][1];
+            const int nz = neigh[k][2];
+            if (!in_bounds(nx, ny, nz)) continue;
+
+            const std::size_t ni = idx(nx, ny, nz);
+            const std::uint8_t nl = skylight_[ni];
+            if (nl == 0u) continue;
+
+            const bool is_down = (ny == y - 1);
+            const std::uint8_t cost = sky_cost(nx, ny, nz, is_down);
+            const std::uint8_t expected = (n.level > cost) ? static_cast<std::uint8_t>(n.level - cost) : 0u;
+            if (expected == 0u) continue;
+
+            if (nl <= expected) {
+                skylight_[ni] = 0u;
+                q_dec_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(nx), static_cast<std::uint16_t>(ny), static_cast<std::uint16_t>(nz), nl });
+                note_dirty(origin_x_ + nx, origin_y_ + ny, origin_z_ + nz);
+                any_changed = true;
+            } else {
+                q_inc_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(nx), static_cast<std::uint16_t>(ny), static_cast<std::uint16_t>(nz), nl });
+            }
+        }
+    }
+
+    // Increase propagation (skylight)
+    while (budget_nodes > 0 && head_inc_sky_ < q_inc_sky_.size()) {
+        const QueueNode n = q_inc_sky_[head_inc_sky_++];
+        --budget_nodes;
+
+        const int x = static_cast<int>(n.x);
+        const int y = static_cast<int>(n.y);
+        const int z = static_cast<int>(n.z);
+
+        int neigh[6][3];
+        neighbors6(x, y, z, neigh);
+
+        for (int k = 0; k < 6; ++k) {
+            const int nx = neigh[k][0];
+            const int ny = neigh[k][1];
+            const int nz = neigh[k][2];
+            if (!in_bounds(nx, ny, nz)) continue;
+
+            const std::size_t ni = idx(nx, ny, nz);
+            if (opaque_[ni] != 0u) continue;
+
+            const bool is_down = (ny == y - 1);
+            const std::uint8_t cost = sky_cost(nx, ny, nz, is_down);
+            const std::uint8_t candidate = (n.level > cost) ? static_cast<std::uint8_t>(n.level - cost) : 0u;
+            if (candidate == 0u) continue;
+
+            if (candidate > skylight_[ni]) {
+                skylight_[ni] = candidate;
+                q_inc_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(nx), static_cast<std::uint16_t>(ny), static_cast<std::uint16_t>(nz), candidate });
+                note_dirty(origin_x_ + nx, origin_y_ + ny, origin_z_ + nz);
+                any_changed = true;
+            }
+        }
+    }
+
+    // Increase propagation (blocklight)
+    while (budget_nodes > 0 && head_inc_blk_ < q_inc_blk_.size()) {
+        const QueueNode n = q_inc_blk_[head_inc_blk_++];
+        --budget_nodes;
+
+        const int x = static_cast<int>(n.x);
+        const int y = static_cast<int>(n.y);
+        const int z = static_cast<int>(n.z);
+
+        int neigh[6][3];
+        neighbors6(x, y, z, neigh);
+
+        for (int k = 0; k < 6; ++k) {
+            const int nx = neigh[k][0];
+            const int ny = neigh[k][1];
+            const int nz = neigh[k][2];
+            if (!in_bounds(nx, ny, nz)) continue;
+
+            const std::size_t ni = idx(nx, ny, nz);
+            if (opaque_[ni] != 0u) continue;
+
+            const std::uint8_t cost = blk_cost(nx, ny, nz);
+            const std::uint8_t candidate = (n.level > cost) ? static_cast<std::uint8_t>(n.level - cost) : 0u;
+            if (candidate == 0u) continue;
+
+            if (candidate > blocklight_[ni]) {
+                blocklight_[ni] = candidate;
+                q_inc_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(nx), static_cast<std::uint16_t>(ny), static_cast<std::uint16_t>(nz), candidate });
+                note_dirty(origin_x_ + nx, origin_y_ + ny, origin_z_ + nz);
+                any_changed = true;
+            }
+        }
+    }
+
+    // If all queues are drained, finish this change.
+    if (head_dec_blk_ >= q_dec_blk_.size() && head_dec_sky_ >= q_dec_sky_.size() &&
+        head_inc_blk_ >= q_inc_blk_.size() && head_inc_sky_ >= q_inc_sky_.size()) {
+        relight_active_ = false;
+        q_dec_blk_.clear();
+        q_dec_sky_.clear();
+        q_inc_blk_.clear();
+        q_inc_sky_.clear();
+        head_dec_blk_ = head_dec_sky_ = head_inc_blk_ = head_inc_sky_ = 0;
+    }
+
+    return any_changed;
 }
 
 void LightVolume::rebuild_(const World& world) {
@@ -130,37 +533,67 @@ void LightVolume::rebuild_(const World& world) {
                 const int wz = origin_z_ + z;
 
                 const BlockType bt = static_cast<BlockType>(world.get_block(wx, wy, wz));
-                const bool opaque = is_opaque_for_light(bt);
+                const auto& props = shared::voxel::get_light_props(static_cast<shared::voxel::BlockType>(bt));
+                const bool opaque = props.opaqueForLight;
                 const std::size_t i = idx(x, y, z);
                 opaque_[i] = opaque ? 1u : 0u;
+                block_atten_[i] = props.blockAttenuation;
+                sky_atten_[i] = props.skyAttenuation;
+                sky_dim_vertical_[i] = props.skyDimVertical ? 1u : 0u;
 
                 if (!opaque && y == top_y) {
                     skylight_[i] = 15u;
                     q_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), 15u });
                 }
 
-                if (bt == BlockType::Light) {
-                    blocklight_[i] = 15u;
-                    q_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), 15u });
+                if (props.emission > 0u && !opaque) {
+                    blocklight_[i] = props.emission;
+                    q_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), props.emission });
                 }
             }
         }
     }
 
-    auto try_push = [idx, dim_x, dim_y, dim_z, this](
-                        std::vector<QueueNode>& q,
-                        std::vector<std::uint8_t>& channel,
-                        int x, int y, int z,
-                        std::uint8_t new_level) {
-        if (new_level == 0) return;
+    auto try_push_sky = [idx, dim_x, dim_y, dim_z, this](
+                            std::vector<QueueNode>& q,
+                            int x, int y, int z,
+                            std::uint8_t from_level,
+                            bool is_down) {
+        if (from_level == 0) return;
         if (x < 0 || y < 0 || z < 0) return;
         if (x >= dim_x || y >= dim_y || z >= dim_z) return;
 
         const std::size_t i = idx(x, y, z);
         if (opaque_[i] != 0u) return;
-        if (new_level <= channel[i]) return;
 
-        channel[i] = new_level;
+        const std::uint8_t extra = sky_atten_[i];
+        const std::uint8_t base = is_down ? (sky_dim_vertical_[i] != 0u ? 1u : 0u) : 1u;
+        const std::uint8_t cost = static_cast<std::uint8_t>(base + extra);
+        const std::uint8_t new_level = (from_level > cost) ? static_cast<std::uint8_t>(from_level - cost) : 0u;
+        if (new_level == 0u) return;
+        if (new_level <= skylight_[i]) return;
+
+        skylight_[i] = new_level;
+        q.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), new_level });
+    };
+
+    auto try_push_blk = [idx, dim_x, dim_y, dim_z, this](
+                            std::vector<QueueNode>& q,
+                            int x, int y, int z,
+                            std::uint8_t from_level) {
+        if (from_level <= 1u) return;
+        if (x < 0 || y < 0 || z < 0) return;
+        if (x >= dim_x || y >= dim_y || z >= dim_z) return;
+
+        const std::size_t i = idx(x, y, z);
+        if (opaque_[i] != 0u) return;
+
+        const std::uint8_t cost = static_cast<std::uint8_t>(1u + block_atten_[i]);
+        const std::uint8_t new_level = (from_level > cost) ? static_cast<std::uint8_t>(from_level - cost) : 0u;
+        if (new_level == 0u) return;
+        if (new_level <= blocklight_[i]) return;
+
+        blocklight_[i] = new_level;
         q.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), new_level });
     };
 
@@ -175,36 +608,34 @@ void LightVolume::rebuild_(const World& world) {
         const int z = static_cast<int>(n.z);
 
         // 6-neighborhood
-        // Downward keeps same level, others attenuate.
-        const std::uint8_t level_down = n.level;
-        const std::uint8_t level_side = (n.level > 0) ? static_cast<std::uint8_t>(n.level - 1u) : 0u;
-
-        try_push(q_sky_, skylight_, x, y - 1, z, level_down);
-        try_push(q_sky_, skylight_, x + 1, y, z, level_side);
-        try_push(q_sky_, skylight_, x - 1, y, z, level_side);
-        try_push(q_sky_, skylight_, x, y, z + 1, level_side);
-        try_push(q_sky_, skylight_, x, y, z - 1, level_side);
-        try_push(q_sky_, skylight_, x, y + 1, z, level_side);
+        // Minecraft-style skylight:
+        // - downward keeps same level through normal transparent blocks
+        // - "vertical dim" blocks (leaves/water) reduce by 1 when going downward into them
+        // - all non-down directions reduce by 1 (plus any extra sky attenuation)
+        try_push_sky(q_sky_, x, y - 1, z, n.level, true);
+        try_push_sky(q_sky_, x + 1, y, z, n.level, false);
+        try_push_sky(q_sky_, x - 1, y, z, n.level, false);
+        try_push_sky(q_sky_, x, y, z + 1, n.level, false);
+        try_push_sky(q_sky_, x, y, z - 1, n.level, false);
+        try_push_sky(q_sky_, x, y + 1, z, n.level, false);
     }
 
     // BFS blocklight
     for (std::size_t head = 0; head < q_blk_.size(); ++head) {
         const QueueNode n = q_blk_[head];
 
-        if (n.level <= 1) continue;
+        if (n.level <= 1u) continue;
 
         const int x = static_cast<int>(n.x);
         const int y = static_cast<int>(n.y);
         const int z = static_cast<int>(n.z);
 
-        const std::uint8_t next = static_cast<std::uint8_t>(n.level - 1u);
-
-        try_push(q_blk_, blocklight_, x + 1, y, z, next);
-        try_push(q_blk_, blocklight_, x - 1, y, z, next);
-        try_push(q_blk_, blocklight_, x, y + 1, z, next);
-        try_push(q_blk_, blocklight_, x, y - 1, z, next);
-        try_push(q_blk_, blocklight_, x, y, z + 1, next);
-        try_push(q_blk_, blocklight_, x, y, z - 1, next);
+        try_push_blk(q_blk_, x + 1, y, z, n.level);
+        try_push_blk(q_blk_, x - 1, y, z, n.level);
+        try_push_blk(q_blk_, x, y + 1, z, n.level);
+        try_push_blk(q_blk_, x, y - 1, z, n.level);
+        try_push_blk(q_blk_, x, y, z + 1, n.level);
+        try_push_blk(q_blk_, x, y, z - 1, n.level);
     }
 }
 

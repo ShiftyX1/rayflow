@@ -66,7 +66,7 @@ DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& v
     out.state = current;
 
     const int w = 360;
-    const int h = 270;
+    const int h = 190;
     Rectangle panel = { static_cast<float>(vm.screen_width - w - 10), 10.0f, static_cast<float>(w), static_cast<float>(h) };
 
     GuiPanel(panel, "Debug UI (F1)");
@@ -105,19 +105,6 @@ DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& v
 
     row.y += row_h + gap_y + 4.0f;
 
-    // Checkbox: Lighting raymarch shadows
-    {
-        Rectangle cb = { row.x, row.y, check_size, check_size };
-        Rectangle label = { row.x + check_size + label_pad, row.y + 2.0f, row.width - check_size - label_pad, row_h };
-
-        bool checked = out.state.lighting_raymarch_shadows;
-        GuiCheckBox(cb, "", &checked);
-        GuiLabel(label, "Lighting: Raymarch Shadows");
-        out.state.lighting_raymarch_shadows = checked;
-    }
-
-    row.y += row_h + gap_y + 4.0f;
-
     // Slider: camera sensitivity
     {
         Rectangle label = { row.x, row.y, row.width, 18.0f };
@@ -128,83 +115,6 @@ DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& v
         float value = out.state.camera_sensitivity;
         GuiSliderBar(slider, "", TextFormat("%.3f", value), &value, 0.02f, 0.5f);
         out.state.camera_sensitivity = value;
-    }
-
-    // Separate debug window: Lighting
-    {
-        const int lw = 360;
-        const int lh = 240;
-        Rectangle lightPanel = { static_cast<float>(vm.screen_width - lw - 10), panel.y + panel.height + 10.0f, static_cast<float>(lw), static_cast<float>(lh) };
-
-        GuiPanel(lightPanel, "Lighting");
-
-        Rectangle r = { lightPanel.x + padding, lightPanel.y + 30, lightPanel.width - padding * 2.0f, row_h };
-
-        // Toggle: enable raymarch shadows
-        {
-            Rectangle cb = { r.x, r.y, check_size, check_size };
-            Rectangle label = { r.x + check_size + label_pad, r.y + 2.0f, r.width - check_size - label_pad, row_h };
-
-            bool checked = out.state.lighting_raymarch_shadows;
-            GuiCheckBox(cb, "", &checked);
-            GuiLabel(label, "Raymarch shadows");
-            out.state.lighting_raymarch_shadows = checked;
-        }
-
-        r.y += row_h + gap_y;
-
-        // Toggle: moon
-        {
-            Rectangle cb = { r.x, r.y, check_size, check_size };
-            Rectangle label = { r.x + check_size + label_pad, r.y + 2.0f, r.width - check_size - label_pad, row_h };
-
-            bool checked = out.state.lighting_use_moon;
-            GuiCheckBox(cb, "", &checked);
-            GuiLabel(label, "Use moon (night)");
-            out.state.lighting_use_moon = checked;
-        }
-
-        r.y += row_h + gap_y + 4.0f;
-
-        // Slider: time of day
-        {
-            Rectangle label = { r.x, r.y, r.width, 18.0f };
-            GuiLabel(label, "Time of day (hours)");
-            r.y += 18.0f + 4.0f;
-
-            Rectangle slider = { r.x, r.y, r.width, 18.0f };
-            float v = out.state.lighting_time_of_day_hours;
-            GuiSliderBar(slider, "", TextFormat("%.1f", v), &v, 0.0f, 24.0f);
-            out.state.lighting_time_of_day_hours = v;
-        }
-
-        r.y += 18.0f + gap_y + 4.0f;
-
-        // Slider: sun intensity
-        {
-            Rectangle label = { r.x, r.y, r.width, 18.0f };
-            GuiLabel(label, "Sun/Moon intensity");
-            r.y += 18.0f + 4.0f;
-
-            Rectangle slider = { r.x, r.y, r.width, 18.0f };
-            float v = out.state.lighting_sun_intensity;
-            GuiSliderBar(slider, "", TextFormat("%.2f", v), &v, 0.0f, 2.0f);
-            out.state.lighting_sun_intensity = v;
-        }
-
-        r.y += 18.0f + gap_y + 4.0f;
-
-        // Slider: ambient intensity
-        {
-            Rectangle label = { r.x, r.y, r.width, 18.0f };
-            GuiLabel(label, "Ambient intensity");
-            r.y += 18.0f + 4.0f;
-
-            Rectangle slider = { r.x, r.y, r.width, 18.0f };
-            float v = out.state.lighting_ambient_intensity;
-            GuiSliderBar(slider, "", TextFormat("%.2f", v), &v, 0.0f, 1.0f);
-            out.state.lighting_ambient_intensity = v;
-        }
     }
 
     // Non-panel overlays

@@ -95,12 +95,28 @@ Client rendering toggles. These are **visual only**.
 
 Keys:
 - `voxel_smooth_lighting` (bool)
+- `voxel_light_ambient_min` (float, 0..1)
+- `voxel_light_gamma` (float, > 0)
+- `voxel_ao_strength` (float, 0..1)
 
 Semantics:
 - When `true`:
   - Voxel chunk meshes use smooth per-corner sky/block light sampling.
 - When `false`:
   - Voxel chunk meshes keep AO, but use flat per-face sky/block light (no per-corner smoothing).
+
+Brightness curve (render-only):
+- Combined light $combined \in [0,1]$ is remapped to brightness via:
+  $$brightness = ambient\_min + (1-ambient\_min) * combined^{gamma}$$
+- This keeps discrete light values intact, but avoids fully-black shading when `combined == 0`.
+
+AO strength (render-only):
+- AO uses a contrast curve and is mixed by `strength`:
+  $$ao\_curved = ao^{2.2}$$
+  $$ao\_mix = (1 - influence) + influence * ao\_curved$$
+- `strength = 0` removes AO darkening (multiplier becomes 1).
+- `strength = 1` makes AO more expressive/contrasty.
+- `influence` is reduced automatically when the surface is only lit by `voxel_light_ambient_min` (so deep shade doesn't collapse into near-black again).
 
 Use-cases:
 - Diagnose diagonal light leaks at non-perfect corners.
