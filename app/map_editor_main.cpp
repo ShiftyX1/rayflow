@@ -15,6 +15,7 @@
 #include "../server/core/server.hpp"
 
 #include "../ui/raygui.h"
+#include "map_editor_style.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -468,6 +469,10 @@ int main() {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
 
+    // Initialize custom UI styling
+    editor_ui::InitEditorFonts();
+    editor_ui::ApplyEditorStyle();
+
     core::Config::instance().load_from_file("rayflow.conf");
     core::Logger::instance().init(core::Config::instance().logging());
     renderer::Skybox::instance().init();
@@ -614,136 +619,245 @@ int main() {
         // --- INIT/CREATE/OPEN SCREENS ---
         if (mode == AppMode::Init || mode == AppMode::CreateModal || mode == AppMode::OpenModal) {
             BeginDrawing();
-            ClearBackground(Color{30, 30, 30, 255});
+            ClearBackground(editor_ui::kBgDark);
 
-            GuiLabel(Rectangle{(float)screenWidth * 0.5f - 140, 80, 280, 30}, "Rayflow Map Editor");
+            // Draw background pattern/decoration
+            for (int i = 0; i < 20; i++) {
+                float alpha = 0.03f + (float)i * 0.002f;
+                DrawCircle(
+                    screenWidth / 2 + (int)(std::sin(i * 0.5f) * 300),
+                    screenHeight / 2 + (int)(std::cos(i * 0.7f) * 200),
+                    100.0f + i * 20.0f,
+                    Fade(editor_ui::kAccentPrimary, alpha)
+                );
+            }
+
+            // Title section
+            const char* titleText = "RAYFLOW MAP EDITOR";
+            const auto& fonts = editor_ui::GetFonts();
+            Vector2 titleSize = fonts.loaded ? MeasureTextEx(fonts.bold, titleText, 32, 2) : Vector2{(float)MeasureText(titleText, 32), 32};
+            float titleX = (screenWidth - titleSize.x) / 2.0f;
+
+            if (fonts.loaded) {
+                DrawTextEx(fonts.bold, titleText, {titleX, 60}, 32, 2, editor_ui::kTextPrimary);
+            } else {
+                DrawText(titleText, (int)titleX, 60, 32, editor_ui::kTextPrimary);
+            }
+
+            // Subtitle
+            const char* subtitleText = "Create and edit voxel maps for BedWars";
+            Vector2 subSize = fonts.loaded ? MeasureTextEx(fonts.regular, subtitleText, 16, 1) : Vector2{(float)MeasureText(subtitleText, 16), 16};
+            float subX = (screenWidth - subSize.x) / 2.0f;
+            if (fonts.loaded) {
+                DrawTextEx(fonts.regular, subtitleText, {subX, 100}, 16, 1, editor_ui::kTextMuted);
+            } else {
+                DrawText(subtitleText, (int)subX, 100, 16, editor_ui::kTextMuted);
+            }
 
             if (mode == AppMode::Init) {
-                if (GuiButton(Rectangle{(float)screenWidth * 0.5f - 150, 160, 300, 40}, "Create new map")) {
+                // Main action buttons centered
+                const float btnWidth = 320.0f;
+                const float btnHeight = 50.0f;
+                const float btnGap = 16.0f;
+                const float btnX = (screenWidth - btnWidth) / 2.0f;
+                float btnY = screenHeight / 2.0f - 40.0f;
+
+                // Create new map button (primary)
+                if (editor_ui::StyledButton({btnX, btnY, btnWidth, btnHeight}, "Create New Map", ICON_FILE_NEW, true)) {
                     mode = AppMode::CreateModal;
                 }
-                if (GuiButton(Rectangle{(float)screenWidth * 0.5f - 150, 210, 300, 40}, "Open existing map")) {
+
+                btnY += btnHeight + btnGap;
+
+                // Open existing button (secondary)
+                if (editor_ui::StyledButton({btnX, btnY, btnWidth, btnHeight}, "Open Existing Map", ICON_FOLDER_OPEN, false)) {
                     openParams.needsRefresh = true;
                     mode = AppMode::OpenModal;
                 }
+
+                // Footer with version/info
+                const char* footerText = "v1.0  |  Press F1 for help";
+                Vector2 footerSize = {(float)MeasureText(footerText, 12), 12.0f};
+                DrawText(footerText, (int)((screenWidth - footerSize.x) / 2), screenHeight - 40, 12, editor_ui::kTextMuted);
             }
 
             // Create modal
             if (mode == AppMode::CreateModal) {
-                DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.55f));
-                const Rectangle win{(float)screenWidth * 0.5f - 220, (float)screenHeight * 0.5f - 160, 440, 320};
-                GuiPanel(win, "Create new map");
+                editor_ui::DrawModalOverlay(screenWidth, screenHeight);
 
-                GuiLabel(Rectangle{win.x + 20, win.y + 40, 80, 24}, "mapId:");
-                if (GuiTextBox(Rectangle{win.x + 100, win.y + 40, 320, 24}, createParams.mapId, sizeof(createParams.mapId), createParams.editMapId)) {
-                    createParams.editMapId = !createParams.editMapId;
-                }
+                const float modalWidth = 500.0f;
+                const float modalHeight = 400.0f;
+                const Rectangle win{
+                    (screenWidth - modalWidth) / 2.0f,
+                    (screenHeight - modalHeight) / 2.0f,
+                    modalWidth,
+                    modalHeight
+                };
+                editor_ui::DrawModalWindow(win, "Create New Map");
 
-                if (GuiValueBox(Rectangle{win.x + 20, win.y + 74, 400, 24}, "version", &createParams.version, 0, 9999, createParams.editVersion)) {
-                    createParams.editVersion = !createParams.editVersion;
-                }
+                // Content area starts after title bar
+                editor_ui::VerticalLayout layout(win.x + 24, win.y + 56, win.width - 48, 10);
 
-                if (GuiValueBox(Rectangle{win.x + 20, win.y + 108, 195, 24}, "sizeXChunks", &createParams.sizeXChunks, 0, 512, createParams.editSizeX)) {
-                    createParams.editSizeX = !createParams.editSizeX;
-                }
-                if (GuiValueBox(Rectangle{win.x + 225, win.y + 108, 195, 24}, "sizeZChunks", &createParams.sizeZChunks, 0, 512, createParams.editSizeZ)) {
-                    createParams.editSizeZ = !createParams.editSizeZ;
-                }
+                // Map ID section
+                editor_ui::DrawSectionHeader(layout.NextRow(24), "Map Identity", ICON_INFO);
+                layout.AddSpace(4);
 
-                GuiLabel(Rectangle{win.x + 20, win.y + 142, 120, 24}, "template:");
-                if (GuiDropdownBox(Rectangle{win.x + 140, win.y + 142, 280, 24}, newTemplateItems.c_str(), &createParams.templateKind, newTemplateDropdownEdit)) {
-                    newTemplateDropdownEdit = !newTemplateDropdownEdit;
-                }
+                editor_ui::StyledTextBox(layout.NextRow(32), "Map ID", createParams.mapId, sizeof(createParams.mapId), &createParams.editMapId);
+                editor_ui::StyledValueBox(layout.NextRow(32), "Version", &createParams.version, 1, 9999, &createParams.editVersion);
 
-                const bool canCreate = (createParams.mapId[0] != '\0') && (createParams.version > 0) && (createParams.sizeXChunks > 0) && (createParams.sizeZChunks > 0);
-                if (GuiButton(Rectangle{win.x + 20, win.y + 260, 190, 36}, "Cancel")) {
+                layout.AddSpace(8);
+
+                // Dimensions section
+                editor_ui::DrawSectionHeader(layout.NextRow(24), "Dimensions", ICON_BOX_GRID);
+                layout.AddSpace(4);
+
+                Rectangle sizeRow = layout.NextRow(32);
+                float halfWidth = (sizeRow.width - 16) / 2.0f;
+                editor_ui::StyledValueBox({sizeRow.x, sizeRow.y, halfWidth, sizeRow.height}, "Width", &createParams.sizeXChunks, 1, 64, &createParams.editSizeX);
+                editor_ui::StyledValueBox({sizeRow.x + halfWidth + 16, sizeRow.y, halfWidth, sizeRow.height}, "Depth", &createParams.sizeZChunks, 1, 64, &createParams.editSizeZ);
+
+                layout.AddSpace(8);
+
+                // Template section
+                editor_ui::DrawSectionHeader(layout.NextRow(24), "Starting Template", ICON_LAYERS);
+                layout.AddSpace(4);
+
+                // Reserve space for dropdown (drawn last for z-order)
+                Rectangle templateDropdownBounds = layout.NextRow(32);
+                editor_ui::DrawStyledLabel({templateDropdownBounds.x, templateDropdownBounds.y, 80, templateDropdownBounds.height}, "Template");
+
+                // Buttons at bottom
+                layout.AddSpace(24);
+                const float buttonWidth = (win.width - 48 - 16) / 2.0f;
+                const float buttonY = win.y + win.height - 60;
+
+                if (editor_ui::StyledButton({win.x + 24, buttonY, buttonWidth, 40}, "Cancel", ICON_CROSS, false)) {
                     pendingLoadedMap.reset();
                     mode = AppMode::Init;
                 }
-                if (GuiButton(Rectangle{win.x + 230, win.y + 260, 190, 36}, canCreate ? "Create" : "Create (fill required)") && canCreate) {
-                    pendingLoadedMap.reset();
-                    shared::maps::MapTemplate empty = make_empty_template_from_create(createParams);
-                    chunkMinX = empty.bounds.chunkMinX;
-                    chunkMinZ = empty.bounds.chunkMinZ;
-                    chunkMaxX = empty.bounds.chunkMaxX;
-                    chunkMaxZ = empty.bounds.chunkMaxZ;
 
-                    // Pre-generate template ops for server upload.
-                    if (static_cast<NewMapTemplateKind>(createParams.templateKind) == NewMapTemplateKind::FloatingIsland) {
-                        enqueue_template_floating_island(empty, pendingUploadOps);
-                    } else {
-                        enqueue_template_random_chunks(empty, pendingUploadOps);
+                const bool canCreate = (createParams.mapId[0] != '\0') && (createParams.version > 0) && (createParams.sizeXChunks > 0) && (createParams.sizeZChunks > 0);
+                GuiSetState(canCreate ? STATE_NORMAL : STATE_DISABLED);
+                if (editor_ui::StyledButton({win.x + 24 + buttonWidth + 16, buttonY, buttonWidth, 40}, "Create Map", ICON_OK_TICK, true)) {
+                    if (canCreate) {
+                        pendingLoadedMap.reset();
+                        shared::maps::MapTemplate empty = make_empty_template_from_create(createParams);
+                        chunkMinX = empty.bounds.chunkMinX;
+                        chunkMinZ = empty.bounds.chunkMinZ;
+                        chunkMaxX = empty.bounds.chunkMaxX;
+                        chunkMaxZ = empty.bounds.chunkMaxZ;
+
+                        if (static_cast<NewMapTemplateKind>(createParams.templateKind) == NewMapTemplateKind::FloatingIsland) {
+                            enqueue_template_floating_island(empty, pendingUploadOps);
+                        } else {
+                            enqueue_template_random_chunks(empty, pendingUploadOps);
+                        }
+                        uploadCursor = 0;
+
+                        enter_editor();
                     }
-                    uploadCursor = 0;
+                }
+                GuiSetState(STATE_NORMAL);
 
-                    enter_editor();
+                // Deferred dropdown for correct z-order
+                {
+                    Rectangle dropBounds = {
+                        templateDropdownBounds.x + 80,
+                        templateDropdownBounds.y,
+                        templateDropdownBounds.width - 80,
+                        templateDropdownBounds.height
+                    };
+                    if (GuiDropdownBox(dropBounds, newTemplateItems.c_str(), &createParams.templateKind, newTemplateDropdownEdit)) {
+                        newTemplateDropdownEdit = !newTemplateDropdownEdit;
+                    }
                 }
             }
 
             // Open modal
             if (mode == AppMode::OpenModal) {
-                DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.55f));
-                const Rectangle win{(float)screenWidth * 0.5f - 240, (float)screenHeight * 0.5f - 140, 480, 280};
-                GuiPanel(win, "Open existing map");
+                editor_ui::DrawModalOverlay(screenWidth, screenHeight);
+
+                const float modalWidth = 540.0f;
+                const float modalHeight = 420.0f;
+                const Rectangle win{
+                    (screenWidth - modalWidth) / 2.0f,
+                    (screenHeight - modalHeight) / 2.0f,
+                    modalWidth,
+                    modalHeight
+                };
+                editor_ui::DrawModalWindow(win, "Open Existing Map");
 
                 if (openParams.needsRefresh) {
                     refresh_open_params(openParams);
                     openParams.needsRefresh = false;
                 }
 
-                {
-                    std::string baseLabel = std::string("dir: ") + openParams.baseDir.string();
-                    GuiLabel(Rectangle{win.x + 20, win.y + 40, 440, 20}, baseLabel.c_str());
-                }
+                // Content area
+                editor_ui::VerticalLayout layout(win.x + 24, win.y + 56, win.width - 48, 8);
 
-                GuiListView(Rectangle{win.x + 20, win.y + 64, 440, 120}, openParams.listText.c_str(), &openParams.scrollIndex, &openParams.active);
+                // Directory info
+                std::string dirLabel = "Directory: " + openParams.baseDir.string();
+                editor_ui::DrawStyledLabel(layout.NextRow(20), dirLabel.c_str(), true);
 
+                layout.AddSpace(8);
+
+                // File list
+                Rectangle listBounds = layout.NextRow(200);
+                editor_ui::StyledListView(listBounds, openParams.listText.c_str(), &openParams.scrollIndex, &openParams.active);
+
+                layout.AddSpace(8);
+
+                // Selection info
                 const bool hasSelection = (openParams.active >= 0) && (openParams.active < static_cast<int>(openParams.files.size()));
                 if (hasSelection) {
-                    const std::string selectedLabel = std::string("selected: ") + openParams.files[static_cast<std::size_t>(openParams.active)].string();
-                    GuiLabel(Rectangle{win.x + 20, win.y + 188, 440, 18}, selectedLabel.c_str());
+                    std::string selectedLabel = "Selected: " + openParams.files[static_cast<std::size_t>(openParams.active)].filename().string();
+                    editor_ui::DrawStyledLabel(layout.NextRow(20), selectedLabel.c_str(), false);
                 } else {
-                    GuiLabel(Rectangle{win.x + 20, win.y + 188, 440, 18}, "selected: (none)");
+                    editor_ui::DrawStyledLabel(layout.NextRow(20), "No file selected", true);
                 }
 
-                if (GuiButton(Rectangle{win.x + 20, win.y + 210, 140, 36}, "Refresh")) {
+                // Buttons
+                const float buttonWidth = (win.width - 48 - 32) / 3.0f;
+                const float buttonY = win.y + win.height - 60;
+
+                if (editor_ui::StyledButton({win.x + 24, buttonY, buttonWidth, 40}, "Refresh", ICON_RESTART, false)) {
                     openParams.needsRefresh = true;
                 }
 
-                if (GuiButton(Rectangle{win.x + 170, win.y + 210, 140, 36}, "Cancel")) {
+                if (editor_ui::StyledButton({win.x + 24 + buttonWidth + 16, buttonY, buttonWidth, 40}, "Cancel", ICON_CROSS, false)) {
                     mode = AppMode::Init;
                 }
 
-                if (GuiButton(Rectangle{win.x + 320, win.y + 210, 140, 36}, hasSelection ? "Open" : "Open (select file)")) {
-                    if (!hasSelection) {
-                        // Nothing selected.
-                    } else {
-                    shared::maps::MapTemplate map;
-                    std::string err;
-                    const std::string path = openParams.files[static_cast<std::size_t>(openParams.active)].string();
-                    if (shared::maps::read_rfmap(path.c_str(), &map, &err)) {
-                        pendingLoadedMap = map;
-                        visualSettings = map.visualSettings;
-                        std::snprintf(createParams.mapId, sizeof(createParams.mapId), "%s", map.mapId.c_str());
-                        createParams.version = static_cast<int>(map.version);
-                        chunkMinX = map.bounds.chunkMinX;
-                        chunkMinZ = map.bounds.chunkMinZ;
-                        chunkMaxX = map.bounds.chunkMaxX;
-                        chunkMaxZ = map.bounds.chunkMaxZ;
+                GuiSetState(hasSelection ? STATE_NORMAL : STATE_DISABLED);
+                if (editor_ui::StyledButton({win.x + 24 + (buttonWidth + 16) * 2, buttonY, buttonWidth, 40}, "Open", ICON_FOLDER_FILE_OPEN, true)) {
+                    if (hasSelection) {
+                        shared::maps::MapTemplate map;
+                        std::string err;
+                        const std::string path = openParams.files[static_cast<std::size_t>(openParams.active)].string();
+                        if (shared::maps::read_rfmap(path.c_str(), &map, &err)) {
+                            pendingLoadedMap = map;
+                            visualSettings = map.visualSettings;
+                            std::snprintf(createParams.mapId, sizeof(createParams.mapId), "%s", map.mapId.c_str());
+                            createParams.version = static_cast<int>(map.version);
+                            chunkMinX = map.bounds.chunkMinX;
+                            chunkMinZ = map.bounds.chunkMinZ;
+                            chunkMaxX = map.bounds.chunkMaxX;
+                            chunkMaxZ = map.bounds.chunkMaxZ;
 
-                        skyboxParams.needsRefresh = true;
+                            skyboxParams.needsRefresh = true;
 
-                        enqueue_ops_from_rfmap(map, pendingUploadOps);
-                        uploadCursor = 0;
+                            enqueue_ops_from_rfmap(map, pendingUploadOps);
+                            uploadCursor = 0;
 
-                        enter_editor();
-                    } else {
-                        lastReject.reset();
-                        lastExport.reset();
-                        TraceLog(LOG_WARNING, "[editor] failed to open map %s: %s", path.c_str(), err.c_str());
-                    }
+                            enter_editor();
+                        } else {
+                            lastReject.reset();
+                            lastExport.reset();
+                            TraceLog(LOG_WARNING, "[editor] failed to open map %s: %s", path.c_str(), err.c_str());
+                        }
                     }
                 }
+                GuiSetState(STATE_NORMAL);
             }
 
             EndDrawing();
@@ -877,115 +991,97 @@ int main() {
         }
         EndMode3D();
 
-        const Rectangle panel{10, 10, 320, 420};
-        GuiPanel(panel, "Map Editor");
+        // =====================================================================
+        // Editor Side Panel (new styled UI)
+        // =====================================================================
+        const float panelWidth = 340.0f;
+        const float panelHeight = static_cast<float>(screenHeight) - 20.0f;
+        const Rectangle panel{10, 10, panelWidth, panelHeight};
 
-        Rectangle r{20, 40, 300, 24};
-        GuiLabel(r, "Block:");
-        r.y += 22;
-        if (GuiDropdownBox(Rectangle{20, r.y, 300, 24}, dropdownItems.c_str(), &activeBlockIndex, dropdownEditMode)) {
-            dropdownEditMode = !dropdownEditMode;
-        }
+        // Panel background with transparency
+        DrawRectangleRec(panel, Fade(editor_ui::kBgPanel, 0.95f));
+        DrawRectangleLinesEx(panel, 1.0f, editor_ui::kBorderNormal);
 
-        r.y += 34;
-        GuiLabel(Rectangle{20, r.y, 80, 24}, "mapId:");
-        if (GuiTextBox(Rectangle{100, r.y, 220, 24}, createParams.mapId, sizeof(createParams.mapId), createParams.editMapId)) {
-            createParams.editMapId = !createParams.editMapId;
-        }
-
-        r.y += 30;
-        if (GuiValueBox(Rectangle{20, r.y, 300, 24}, "version", &createParams.version, 0, 9999, createParams.editVersion)) {
-            createParams.editVersion = !createParams.editVersion;
-        }
-
-        r.y += 30;
-        if (GuiValueBox(Rectangle{20, r.y, 145, 24}, "minX", &chunkMinX, -512, 512, editMinX)) editMinX = !editMinX;
-        if (GuiValueBox(Rectangle{175, r.y, 145, 24}, "minZ", &chunkMinZ, -512, 512, editMinZ)) editMinZ = !editMinZ;
-
-        r.y += 30;
-        if (GuiValueBox(Rectangle{20, r.y, 145, 24}, "maxX", &chunkMaxX, -512, 512, editMaxX)) editMaxX = !editMaxX;
-        if (GuiValueBox(Rectangle{175, r.y, 145, 24}, "maxZ", &chunkMaxZ, -512, 512, editMaxZ)) editMaxZ = !editMaxZ;
-
-        r.y += 34;
-        if (GuiButton(Rectangle{20, r.y, 300, 28}, "Export")) {
-            session->send_try_export_map(
-                createParams.mapId,
-                static_cast<std::uint32_t>(createParams.version),
-                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ,
-                static_cast<std::uint8_t>(visualSettings.skyboxKind),
-                visualSettings.timeOfDayHours,
-                visualSettings.useMoon,
-                visualSettings.sunIntensity,
-                visualSettings.ambientIntensity,
-                visualSettings.temperature,
-                visualSettings.humidity);
-        }
-
-        // --- MV-1: visual settings UI ---
-        r.y += 40;
-        GuiLabel(Rectangle{20, r.y, 300, 20}, "Visual settings");
-
-        r.y += 22;
-        GuiLabel(Rectangle{20, r.y, 80, 24}, "Skybox:");
+        // Panel header
         {
+            Rectangle headerRect = {panel.x, panel.y, panel.width, 44.0f};
+            DrawRectangleRec(headerRect, editor_ui::kBgPanelLight);
+            DrawLineEx({panel.x, panel.y + 44.0f}, {panel.x + panel.width, panel.y + 44.0f}, 1.0f, editor_ui::kSeparator);
+
+            const char* headerText = "MAP EDITOR";
+            const auto& fonts = editor_ui::GetFonts();
+            if (fonts.loaded) {
+                DrawTextEx(fonts.bold, headerText, {panel.x + 16, panel.y + 12}, 18, 1, editor_ui::kTextPrimary);
+            } else {
+                DrawText(headerText, (int)(panel.x + 16), (int)(panel.y + 12), 18, editor_ui::kTextPrimary);
+            }
+
+            // Mode indicator (editing/flying)
+            const char* modeText = cursorEnabled ? "UI MODE" : "EDIT MODE";
+            Color modeColor = cursorEnabled ? editor_ui::kWarning : editor_ui::kSuccess;
+            float modeX = panel.x + panel.width - 16 - MeasureText(modeText, 12);
+            DrawText(modeText, (int)modeX, (int)(panel.y + 16), 12, modeColor);
+        }
+
+        editor_ui::VerticalLayout layout(panel.x + 16, panel.y + 60, panel.width - 32, 6);
+
+        // ---- BLOCK PALETTE SECTION ----
+        editor_ui::DrawSectionHeader(layout.NextRow(24), "Block Palette", ICON_BOX);
+        layout.AddSpace(4);
+
+        // Reserve space for dropdown (drawn later for correct z-order)
+        Rectangle blockDropdownBounds = layout.NextRow(32);
+        editor_ui::DrawStyledLabel({blockDropdownBounds.x, blockDropdownBounds.y, 80, blockDropdownBounds.height}, "Block");
+
+        layout.AddSpace(12);
+
+        // ---- MAP INFO SECTION ----
+        editor_ui::DrawSectionHeader(layout.NextRow(24), "Map Properties", ICON_INFO);
+        layout.AddSpace(4);
+
+        editor_ui::StyledTextBox(layout.NextRow(32), "Map ID", createParams.mapId, sizeof(createParams.mapId), &createParams.editMapId);
+        editor_ui::StyledValueBox(layout.NextRow(32), "Version", &createParams.version, 1, 9999, &createParams.editVersion);
+
+        layout.AddSpace(12);
+
+        // ---- BOUNDS SECTION ----
+        editor_ui::DrawSectionHeader(layout.NextRow(24), "Export Bounds (Chunks)", ICON_BOX_GRID);
+        layout.AddSpace(4);
+
+        Rectangle boundsRow1 = layout.NextRow(32);
+        float halfW = (boundsRow1.width - 12) / 2.0f;
+        editor_ui::StyledValueBox({boundsRow1.x, boundsRow1.y, halfW, boundsRow1.height}, "Min X", &chunkMinX, -512, 512, &editMinX);
+        editor_ui::StyledValueBox({boundsRow1.x + halfW + 12, boundsRow1.y, halfW, boundsRow1.height}, "Min Z", &chunkMinZ, -512, 512, &editMinZ);
+
+        Rectangle boundsRow2 = layout.NextRow(32);
+        editor_ui::StyledValueBox({boundsRow2.x, boundsRow2.y, halfW, boundsRow2.height}, "Max X", &chunkMaxX, -512, 512, &editMaxX);
+        editor_ui::StyledValueBox({boundsRow2.x + halfW + 12, boundsRow2.y, halfW, boundsRow2.height}, "Max Z", &chunkMaxZ, -512, 512, &editMaxZ);
+
+        layout.AddSpace(12);
+
+        // ---- VISUAL SETTINGS SECTION ----
+        editor_ui::DrawSectionHeader(layout.NextRow(24), "Visual Settings", ICON_COLOR_PICKER);
+        layout.AddSpace(4);
+
+        // Skybox selector
+        {
+            Rectangle skyboxRow = layout.NextRow(32);
+            editor_ui::DrawStyledLabel({skyboxRow.x, skyboxRow.y, 70, skyboxRow.height}, "Skybox");
+
             const std::uint8_t skyId = static_cast<std::uint8_t>(visualSettings.skyboxKind);
-            const char* label = (skyId == 0) ? "None" : TextFormat("Panorama_Sky_%02u", static_cast<unsigned>(skyId));
-            GuiLabel(Rectangle{100, r.y, 150, 24}, label);
+            const char* skyLabel = (skyId == 0) ? "None" : TextFormat("Sky %02u", static_cast<unsigned>(skyId));
+            DrawText(skyLabel, (int)(skyboxRow.x + 75), (int)(skyboxRow.y + 8), 14, editor_ui::kTextPrimary);
+
+            if (editor_ui::StyledButton({skyboxRow.x + skyboxRow.width - 80, skyboxRow.y, 80, skyboxRow.height}, "Choose", ICON_LENS, false)) {
+                skyboxParams.needsRefresh = true;
+                skyboxParams.open = true;
+            }
         }
-        if (GuiButton(Rectangle{250, r.y, 70, 24}, "Choose")) {
-            skyboxParams.needsRefresh = true;
-            skyboxParams.open = true;
-        }
 
-        r.y += 30;
-        GuiSliderBar(
-            Rectangle{20, r.y, 300, 20},
-            "Time",
-            TextFormat("%.1f", visualSettings.timeOfDayHours),
-            &visualSettings.timeOfDayHours,
-            0.0f,
-            24.0f);
+        editor_ui::StyledSlider(layout.NextRow(28), "Temp", &visualSettings.temperature, 0.0f, 1.0f, "%.2f");
+        editor_ui::StyledSlider(layout.NextRow(28), "Humidity", &visualSettings.humidity, 0.0f, 1.0f, "%.2f");
 
-        r.y += 28;
-        GuiCheckBox(Rectangle{20, r.y, 20, 20}, "Use moon", &visualSettings.useMoon);
-
-        r.y += 28;
-        GuiSliderBar(
-            Rectangle{20, r.y, 300, 20},
-            "Sun",
-            TextFormat("%.2f", visualSettings.sunIntensity),
-            &visualSettings.sunIntensity,
-            0.0f,
-            10.0f);
-
-        r.y += 28;
-        GuiSliderBar(
-            Rectangle{20, r.y, 300, 20},
-            "Ambient",
-            TextFormat("%.2f", visualSettings.ambientIntensity),
-            &visualSettings.ambientIntensity,
-            0.0f,
-            5.0f);
-
-        r.y += 28;
-        GuiSliderBar(
-            Rectangle{20, r.y, 300, 20},
-            "Temp",
-            TextFormat("%.2f", visualSettings.temperature),
-            &visualSettings.temperature,
-            0.0f,
-            1.0f);
-
-        r.y += 28;
-        GuiSliderBar(
-            Rectangle{20, r.y, 300, 20},
-            "Humidity",
-            TextFormat("%.2f", visualSettings.humidity),
-            &visualSettings.humidity,
-            0.0f,
-            1.0f);
-
-        // Apply settings live while editing.
+        // Apply settings live
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
         {
@@ -1002,11 +1098,74 @@ int main() {
             }
         }
 
-        // Skybox modal (MV-1): select panorama texture from textures/skybox/panorama.
+        layout.AddSpace(16);
+
+        // ---- EXPORT SECTION ----
+        editor_ui::DrawSeparator(panel.x + 16, layout.GetY(), panel.width - 32);
+        layout.AddSpace(12);
+
+        if (editor_ui::StyledButton(layout.NextRow(42), "Export Map", ICON_FILE_SAVE, true)) {
+            session->send_try_export_map(
+                createParams.mapId,
+                static_cast<std::uint32_t>(createParams.version),
+                chunkMinX, chunkMinZ, chunkMaxX, chunkMaxZ,
+                static_cast<std::uint8_t>(visualSettings.skyboxKind),
+                visualSettings.timeOfDayHours,
+                visualSettings.useMoon,
+                visualSettings.sunIntensity,
+                visualSettings.ambientIntensity,
+                visualSettings.temperature,
+                visualSettings.humidity);
+        }
+
+        // Status message
+        layout.AddSpace(4);
+        if (lastExport.has_value()) {
+            const char* statusText = lastExport->ok ? "Export successful!" : "Export failed";
+            Color statusColor = lastExport->ok ? editor_ui::kSuccess : editor_ui::kError;
+            DrawText(statusText, (int)(panel.x + 16), (int)layout.GetY(), 14, statusColor);
+        } else if (lastReject.has_value()) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "Action rejected (code: %u)", static_cast<unsigned>(lastReject->reason));
+            DrawText(buf, (int)(panel.x + 16), (int)layout.GetY(), 14, editor_ui::kWarning);
+        }
+
+        // ---- BOTTOM HELP TEXT ----
+        {
+            const char* helpText = "TAB: Toggle cursor | LMB: Place | RMB: Remove";
+            float helpY = panel.y + panel.height - 28;
+            DrawRectangle((int)panel.x, (int)(helpY - 4), (int)panel.width, 32, editor_ui::kBgPanelLight);
+            DrawText(helpText, (int)(panel.x + 12), (int)helpY, 11, editor_ui::kTextMuted);
+        }
+
+        // ---- DEFERRED DROPDOWN (drawn last for correct z-order) ----
+        {
+            Rectangle dropBounds = {
+                blockDropdownBounds.x + 80,
+                blockDropdownBounds.y,
+                blockDropdownBounds.width - 80,
+                blockDropdownBounds.height
+            };
+            if (GuiDropdownBox(dropBounds, dropdownItems.c_str(), &activeBlockIndex, dropdownEditMode)) {
+                dropdownEditMode = !dropdownEditMode;
+            }
+        }
+
+        // =====================================================================
+        // Skybox selection modal
+        // =====================================================================
         if (skyboxParams.open) {
-            DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, 0.55f));
-            const Rectangle win{(float)screenWidth * 0.5f - 260, (float)screenHeight * 0.5f - 170, 520, 340};
-            GuiPanel(win, "Select skybox");
+            editor_ui::DrawModalOverlay(screenWidth, screenHeight);
+
+            const float modalWidth = 480.0f;
+            const float modalHeight = 380.0f;
+            const Rectangle win{
+                (screenWidth - modalWidth) / 2.0f,
+                (screenHeight - modalHeight) / 2.0f,
+                modalWidth,
+                modalHeight
+            };
+            editor_ui::DrawModalWindow(win, "Select Skybox");
 
             const std::uint8_t currentId = static_cast<std::uint8_t>(visualSettings.skyboxKind);
             if (skyboxParams.needsRefresh) {
@@ -1014,53 +1173,49 @@ int main() {
                 skyboxParams.needsRefresh = false;
             }
 
-            {
-                std::string baseLabel = std::string("dir: ") + skyboxParams.baseDir.string();
-                GuiLabel(Rectangle{win.x + 20, win.y + 40, 480, 20}, baseLabel.c_str());
-            }
+            editor_ui::VerticalLayout modalLayout(win.x + 24, win.y + 56, win.width - 48, 8);
 
-            GuiListView(
-                Rectangle{win.x + 20, win.y + 64, 480, 180},
-                skyboxParams.listText.c_str(),
-                &skyboxParams.scrollIndex,
-                &skyboxParams.active);
+            std::string dirLabel = "Directory: " + skyboxParams.baseDir.string();
+            editor_ui::DrawStyledLabel(modalLayout.NextRow(20), dirLabel.c_str(), true);
 
+            modalLayout.AddSpace(4);
+            editor_ui::StyledListView(modalLayout.NextRow(180), skyboxParams.listText.c_str(), &skyboxParams.scrollIndex, &skyboxParams.active);
+
+            modalLayout.AddSpace(4);
             const bool hasSelection = (skyboxParams.active >= 0) && (skyboxParams.active < static_cast<int>(skyboxParams.ids.size()));
             if (hasSelection) {
                 const std::uint8_t id = skyboxParams.ids[static_cast<std::size_t>(skyboxParams.active)];
-                const char* sel = (id == 0) ? "selected: None" : TextFormat("selected: Panorama_Sky_%02u", static_cast<unsigned>(id));
-                GuiLabel(Rectangle{win.x + 20, win.y + 252, 480, 18}, sel);
+                const char* sel = (id == 0) ? "Selected: None" : TextFormat("Selected: Panorama_Sky_%02u", static_cast<unsigned>(id));
+                editor_ui::DrawStyledLabel(modalLayout.NextRow(20), sel, false);
             } else {
-                GuiLabel(Rectangle{win.x + 20, win.y + 252, 480, 18}, "selected: (none)");
+                editor_ui::DrawStyledLabel(modalLayout.NextRow(20), "No selection", true);
             }
 
-            if (GuiButton(Rectangle{win.x + 20, win.y + 274, 140, 36}, "Refresh")) {
+            const float buttonWidth = (win.width - 48 - 32) / 3.0f;
+            const float buttonY = win.y + win.height - 60;
+
+            if (editor_ui::StyledButton({win.x + 24, buttonY, buttonWidth, 40}, "Refresh", ICON_RESTART, false)) {
                 skyboxParams.needsRefresh = true;
             }
 
-            if (GuiButton(Rectangle{win.x + 170, win.y + 274, 140, 36}, "Cancel")) {
+            if (editor_ui::StyledButton({win.x + 24 + buttonWidth + 16, buttonY, buttonWidth, 40}, "Cancel", ICON_CROSS, false)) {
                 skyboxParams.open = false;
             }
 
-            if (GuiButton(Rectangle{win.x + 320, win.y + 274, 180, 36}, hasSelection ? "Select" : "Select (choose)")) {
+            GuiSetState(hasSelection ? STATE_NORMAL : STATE_DISABLED);
+            if (editor_ui::StyledButton({win.x + 24 + (buttonWidth + 16) * 2, buttonY, buttonWidth, 40}, "Select", ICON_OK_TICK, true)) {
                 if (hasSelection) {
                     const std::uint8_t id = skyboxParams.ids[static_cast<std::size_t>(skyboxParams.active)];
                     visualSettings.skyboxKind = static_cast<shared::maps::MapTemplate::SkyboxKind>(id);
                     skyboxParams.open = false;
                 }
             }
+            GuiSetState(STATE_NORMAL);
         }
 
-        if (lastExport.has_value()) {
-            char buf[256];
-            std::snprintf(buf, sizeof(buf), "Export: ok=%d reason=%u", lastExport->ok ? 1 : 0, static_cast<unsigned>(lastExport->reason));
-            GuiLabel(Rectangle{20, r.y + 34, 300, 20}, buf);
-        } else if (lastReject.has_value()) {
-            char buf[256];
-            std::snprintf(buf, sizeof(buf), "Last reject: reason=%u", static_cast<unsigned>(lastReject->reason));
-            GuiLabel(Rectangle{20, r.y + 34, 300, 20}, buf);
-        }
-
+        // =====================================================================
+        // Crosshair (when in edit mode)
+        // =====================================================================
         if (!cursorEnabled) {
             voxel::BlockInteraction::render_crosshair(screenWidth, screenHeight);
         }
@@ -1071,6 +1226,7 @@ int main() {
     renderer::Skybox::instance().shutdown();
     voxel::BlockRegistry::instance().destroy();
     core::Logger::instance().shutdown();
+    editor_ui::ShutdownEditorFonts();
 
     CloseWindow();
 

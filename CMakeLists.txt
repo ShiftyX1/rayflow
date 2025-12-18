@@ -147,6 +147,7 @@ if (RAYFLOW_BUILD_MAP_EDITOR)
     # Map editor executable (shares the same client renderer stack).
     add_executable(rayflow_map_editor
         app/map_editor_main.cpp
+        app/map_editor_style.cpp
     )
 
     target_link_libraries(rayflow_map_editor PRIVATE client_lib server_lib shared_lib)
