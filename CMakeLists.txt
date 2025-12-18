@@ -102,7 +102,6 @@ add_library(client_lib STATIC
     client/ecs/systems/player_system.cpp
     client/voxel/world.cpp
     client/voxel/chunk.cpp
-    client/voxel/light_volume.cpp
     client/voxel/block_registry.cpp
     client/voxel/block_interaction.cpp
     client/voxel/texture_atlas.cpp

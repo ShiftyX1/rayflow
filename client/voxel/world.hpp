@@ -1,7 +1,6 @@
 #pragma once
 
 #include "chunk.hpp"
-#include "light_volume.hpp"
 #include <raylib.h>
 #include <unordered_map>
 #include <memory>
@@ -60,12 +59,10 @@ public:
 
     void mark_all_chunks_dirty();
 
-    // Client-only render lighting (skylight + blocklight). Never used for gameplay.
-    const LightVolume& light_volume() const { return light_volume_; }
-    float sample_light01(int x, int y, int z) const { return light_volume_.sample_combined01(x, y, z); }
-
-    float sample_skylight01(int x, int y, int z) const { return light_volume_.sample_skylight01(x, y, z); }
-    float sample_blocklight01(int x, int y, int z) const { return light_volume_.sample_blocklight01(x, y, z); }
+    // Lighting disabled - return full brightness
+    float sample_light01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 1.0f; }
+    float sample_skylight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 1.0f; }
+    float sample_blocklight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 0.0f; }
     
 private:
     void generate_chunk_terrain(Chunk& chunk);
@@ -88,11 +85,6 @@ private:
     // MV-2: editor/runtime override for render temperature.
     // When set, it takes precedence over template temperature.
     std::optional<float> temperature_override_{};
-
-    // Client-only bounded lighting cache used by voxel mesh generation.
-    LightVolume light_volume_{};
-
-    bool light_volume_dirty_{true};
     
     // Perlin noise permutation table
     mutable std::array<unsigned char, 512> perm_;
