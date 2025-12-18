@@ -369,9 +369,21 @@ void World::update(const Vector3& player_position) {
     }
     
     // Update meshes for dirty chunks
-    for (auto& [key, chunk] : chunks_) {
-        if (chunk->needs_mesh_update()) {
+    {
+        // IMPORTANT: generating many chunk meshes in a single frame can stall for seconds.
+        // Keep mesh rebuild work budgeted per-frame so lighting/chunk streaming stays responsive.
+        constexpr float kMeshBudgetMs = 4.0f;
+        const auto t0 = std::chrono::steady_clock::now();
+
+        for (auto& [key, chunk] : chunks_) {
+            (void)key;
+            if (!chunk->needs_mesh_update()) continue;
+
             chunk->generate_mesh(*this);
+
+            const auto t1 = std::chrono::steady_clock::now();
+            const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+            if (ms >= kMeshBudgetMs) break;
         }
     }
     

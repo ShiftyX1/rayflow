@@ -19,7 +19,9 @@ public:
         int volume_y{96};
         int volume_z{64};
 
-        int origin_step_voxels{4};
+        // Snap the volume origin in world-space to reduce rebuild frequency when the
+        // camera/player moves (typically we only need to rebuild when crossing chunk boundaries).
+        int origin_step_voxels{16};
         float max_update_hz{2.0f};
     };
 

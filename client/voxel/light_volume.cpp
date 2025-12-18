@@ -77,16 +77,16 @@ bool LightVolume::update_if_needed(const World& world, const Vector3& center_pos
     const double min_dt = (settings_.max_update_hz <= 0.0f) ? 0.0 : (1.0 / static_cast<double>(settings_.max_update_hz));
     const bool rate_ok = (now - last_update_time_) >= min_dt;
 
-    // If we're already rebuilding, keep stepping every frame (ignore rate limiter).
-    // This prevents long stalls by spreading the work across frames.
+    // When the volume is missing (startup) or explicitly forced, spend more time per frame
+    // so we converge faster and avoid long periods of incorrect/black lighting.
+    const float rebuild_budget_ms = (!have_volume_ || force_rebuild) ? 6.0f : 2.0f;
+
     if (rebuild_active_) {
-        // If the desired origin moved again (camera motion), restart the rebuild to the latest origin.
         if (ox != rebuild_origin_x_ || oy != rebuild_origin_y_ || oz != rebuild_origin_z_) {
             start_rebuild_(ox, oy, oz, rebuild_forced_ || force_rebuild);
         }
 
-        // Small per-frame budget (ms) to keep AO/lighting responsive without stutters.
-        if (step_rebuild_(world, 2.0f)) {
+        if (step_rebuild_(world, rebuild_budget_ms)) {
             last_update_time_ = now;
             return true;
         }
@@ -98,7 +98,7 @@ bool LightVolume::update_if_needed(const World& world, const Vector3& center_pos
     }
 
     start_rebuild_(ox, oy, oz, force_rebuild);
-    if (step_rebuild_(world, 2.0f)) {
+    if (step_rebuild_(world, rebuild_budget_ms)) {
         last_update_time_ = now;
         return true;
     }
@@ -168,8 +168,6 @@ void LightVolume::start_rebuild_(int new_origin_x, int new_origin_y, int new_ori
     q_sky_back_.clear();
     q_blk_back_.clear();
 
-    // Collect all block edits that happen while the rebuild is running so we can
-    // replay them against the freshly rebuilt buffers after swap.
     pending_changes_during_rebuild_.clear();
 }
 
@@ -194,7 +192,6 @@ bool LightVolume::step_rebuild_(const World& world, float budget_ms) {
         return ms < budget_ms;
     };
 
-    // Phase 1: scan world blocks and seed sources.
     while (rebuild_phase_ == RebuildPhase::Scan && rebuild_scan_i_ < volume_size && budget_ok()) {
         const std::size_t i = rebuild_scan_i_++;
 
@@ -276,7 +273,6 @@ bool LightVolume::step_rebuild_(const World& world, float budget_ms) {
         q.push_back(QueueNode{ static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y), static_cast<std::uint16_t>(z), new_level });
     };
 
-    // Phase 2: skylight BFS.
     while (rebuild_phase_ == RebuildPhase::BfsSky && rebuild_head_sky_ < q_sky_back_.size() && budget_ok()) {
         const QueueNode n = q_sky_back_[rebuild_head_sky_++];
         if (n.level == 0) continue;
@@ -298,7 +294,6 @@ bool LightVolume::step_rebuild_(const World& world, float budget_ms) {
         rebuild_head_blk_ = 0;
     }
 
-    // Phase 3: blocklight BFS.
     while (rebuild_phase_ == RebuildPhase::BfsBlk && rebuild_head_blk_ < q_blk_back_.size() && budget_ok()) {
         const QueueNode n = q_blk_back_[rebuild_head_blk_++];
         if (n.level <= 1u) continue;
@@ -321,7 +316,6 @@ bool LightVolume::step_rebuild_(const World& world, float budget_ms) {
         return false;
     }
 
-    // Done: swap in the rebuilt buffers.
     const auto t1 = std::chrono::steady_clock::now();
     rebuild_work_ms_accum_ += std::chrono::duration<float, std::milli>(t1 - t0).count();
     const float ms = rebuild_work_ms_accum_;
@@ -354,13 +348,11 @@ bool LightVolume::step_rebuild_(const World& world, float budget_ms) {
     have_volume_ = true;
     rebuild_active_ = false;
 
-    // Re-queue any edits that happened while we were rebuilding.
     if (!pending_changes_during_rebuild_.empty()) {
         pending_changes_.insert(pending_changes_.end(), pending_changes_during_rebuild_.begin(), pending_changes_during_rebuild_.end());
         pending_changes_during_rebuild_.clear();
     }
 
-    // Reset incremental relight in-flight state (it must restart against the new buffers).
     relight_active_ = false;
     q_dec_sky_.clear();
     q_inc_sky_.clear();
@@ -440,31 +432,9 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
 
     const int top_y = dim_y - 1;
 
-    // Initialize work for the next queued change (only when no active BFS is in flight).
     if (!relight_active_) {
         if (pending_changes_.empty()) return false;
 
-        active_change_ = pending_changes_.front();
-        pending_changes_.erase(pending_changes_.begin());
-        relight_active_ = true;
-
-        int lx = 0, ly = 0, lz = 0;
-        if (!in_volume_(active_change_.wx, active_change_.wy, active_change_.wz, lx, ly, lz)) {
-            relight_active_ = false;
-            return false;
-        }
-
-        const std::size_t ci = idx(lx, ly, lz);
-        const BlockType bt = static_cast<BlockType>(world.get_block(active_change_.wx, active_change_.wy, active_change_.wz));
-        const auto& props = shared::voxel::get_light_props(static_cast<shared::voxel::BlockType>(bt));
-
-        // Update cached props for this voxel to match the authoritative world state.
-        opaque_[ci] = props.opaqueForLight ? 1u : 0u;
-        block_atten_[ci] = props.blockAttenuation;
-        sky_atten_[ci] = props.skyAttenuation;
-        sky_dim_vertical_[ci] = props.skyDimVertical ? 1u : 0u;
-
-        // Reset queues/heads for this change.
         q_dec_sky_.clear();
         q_inc_sky_.clear();
         q_dec_blk_.clear();
@@ -474,78 +444,137 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
         head_dec_blk_ = 0;
         head_inc_blk_ = 0;
 
-        // Blocklight: if this cell currently has blocklight and becomes opaque or loses emission,
-        // it can trigger a decrease. We do not attempt to classify precisely; we always seed a local
-        // decrease from the changed cell if it currently has light, then re-increase from neighbors.
-        const std::uint8_t old_blk = blocklight_[ci];
-        if (old_blk != 0u) {
-            blocklight_[ci] = 0u;
-            q_dec_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly), static_cast<std::uint16_t>(lz), old_blk });
-            note_dirty(active_change_.wx, active_change_.wy, active_change_.wz);
-            any_changed = true;
-        }
+        struct ChangeL {
+            int wx, wy, wz;
+            int lx, ly, lz;
+            shared::voxel::BlockLightProps props;
+        };
 
-        // Skylight: if this cell currently has skylight and becomes opaque, it can trigger a decrease.
-        // Skylight is seeded from the top of each (x,z) column. When a block changes,
-        // re-scan the column to update vertical injection and seed BFS for sideways spread.
-        std::uint8_t column_level = 0u;
-        for (int cy = top_y; cy >= 0; --cy) {
-            const std::size_t i = idx(lx, cy, lz);
+        struct Col {
+            std::uint16_t lx;
+            std::uint16_t lz;
+        };
 
-            const std::uint8_t old_level = skylight_[i];
+        constexpr std::size_t kBatchMax = 256;
+        const std::size_t take = std::min(kBatchMax, pending_changes_.size());
 
-            if (opaque_[i] != 0u) {
-                column_level = 0u;
-            } else {
-                if (cy == top_y) {
-                    column_level = 15u;
-                } else {
-                    const std::uint8_t extra = sky_atten_[i];
-                    const std::uint8_t base = (sky_dim_vertical_[i] != 0u) ? 1u : 0u;
-                    const std::uint8_t cost = static_cast<std::uint8_t>(base + extra);
-                    column_level = (column_level > cost) ? static_cast<std::uint8_t>(column_level - cost) : 0u;
-                }
+        std::vector<ChangeL> changes;
+        changes.reserve(take);
+
+        std::vector<Col> columns;
+        columns.reserve(take);
+
+        for (std::size_t n = 0; n < take; ++n) {
+            const PendingChange& ch = pending_changes_[n];
+
+            int lx = 0, ly = 0, lz = 0;
+            if (!in_volume_(ch.wx, ch.wy, ch.wz, lx, ly, lz)) {
+                continue;
             }
 
-            if (old_level == column_level) continue;
+            const BlockType bt = static_cast<BlockType>(world.get_block(ch.wx, ch.wy, ch.wz));
+            const auto& props = shared::voxel::get_light_props(static_cast<shared::voxel::BlockType>(bt));
 
-            skylight_[i] = column_level;
-            note_dirty(origin_x_ + lx, origin_y_ + cy, origin_z_ + lz);
-            any_changed = true;
-
-            if (old_level > column_level) {
-                q_dec_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(cy), static_cast<std::uint16_t>(lz), old_level });
-            } else {
-                q_inc_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(cy), static_cast<std::uint16_t>(lz), column_level });
-            }
+            changes.push_back(ChangeL{ ch.wx, ch.wy, ch.wz, lx, ly, lz, props });
+            columns.push_back(Col{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(lz) });
         }
 
-        // Always seed increase from the changed cell neighborhood (after any local clears).
-        seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz);
-        seed_from_cell(q_inc_blk_, blocklight_, lx + 1, ly, lz);
-        seed_from_cell(q_inc_blk_, blocklight_, lx - 1, ly, lz);
-        seed_from_cell(q_inc_blk_, blocklight_, lx, ly + 1, lz);
-        seed_from_cell(q_inc_blk_, blocklight_, lx, ly - 1, lz);
-        seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz + 1);
-        seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz - 1);
+        pending_changes_.erase(pending_changes_.begin(), pending_changes_.begin() + static_cast<std::ptrdiff_t>(take));
+        if (changes.empty()) return false;
 
-        seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz);
-        seed_from_cell(q_inc_sky_, skylight_, lx + 1, ly, lz);
-        seed_from_cell(q_inc_sky_, skylight_, lx - 1, ly, lz);
-        seed_from_cell(q_inc_sky_, skylight_, lx, ly + 1, lz);
-        seed_from_cell(q_inc_sky_, skylight_, lx, ly - 1, lz);
-        seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz + 1);
-        seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz - 1);
+        for (const auto& ch : changes) {
+            const std::size_t ci = idx(ch.lx, ch.ly, ch.lz);
+            opaque_[ci] = ch.props.opaqueForLight ? 1u : 0u;
+            block_atten_[ci] = ch.props.blockAttenuation;
+            sky_atten_[ci] = ch.props.skyAttenuation;
+            sky_dim_vertical_[ci] = ch.props.skyDimVertical ? 1u : 0u;
 
-        // Apply emissive seed for blocklight in the changed cell (if transparent).
-        if (opaque_[ci] == 0u && props.emission > 0u) {
-            if (props.emission > blocklight_[ci]) {
-                blocklight_[ci] = props.emission;
-                q_inc_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly), static_cast<std::uint16_t>(lz), props.emission });
-                note_dirty(active_change_.wx, active_change_.wy, active_change_.wz);
+            const std::uint8_t old_blk = blocklight_[ci];
+            if (old_blk != 0u) {
+                blocklight_[ci] = 0u;
+                q_dec_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(ch.lx), static_cast<std::uint16_t>(ch.ly), static_cast<std::uint16_t>(ch.lz), old_blk });
+                note_dirty(ch.wx, ch.wy, ch.wz);
                 any_changed = true;
             }
         }
+
+        std::sort(columns.begin(), columns.end(), [](const Col& a, const Col& b) {
+            if (a.lx != b.lx) return a.lx < b.lx;
+            return a.lz < b.lz;
+        });
+        columns.erase(std::unique(columns.begin(), columns.end(), [](const Col& a, const Col& b) {
+            return a.lx == b.lx && a.lz == b.lz;
+        }), columns.end());
+
+        for (const Col& c : columns) {
+            const int lx = static_cast<int>(c.lx);
+            const int lz = static_cast<int>(c.lz);
+
+            std::uint8_t column_level = 0u;
+            for (int cy = top_y; cy >= 0; --cy) {
+                const std::size_t i = idx(lx, cy, lz);
+                const std::uint8_t old_level = skylight_[i];
+
+                if (opaque_[i] != 0u) {
+                    column_level = 0u;
+                } else {
+                    if (cy == top_y) {
+                        column_level = 15u;
+                    } else {
+                        const std::uint8_t extra = sky_atten_[i];
+                        const std::uint8_t base = (sky_dim_vertical_[i] != 0u) ? 1u : 0u;
+                        const std::uint8_t cost = static_cast<std::uint8_t>(base + extra);
+                        column_level = (column_level > cost) ? static_cast<std::uint8_t>(column_level - cost) : 0u;
+                    }
+                }
+
+                if (old_level == column_level) continue;
+
+                skylight_[i] = column_level;
+                note_dirty(origin_x_ + lx, origin_y_ + cy, origin_z_ + lz);
+                any_changed = true;
+
+                if (old_level > column_level) {
+                    q_dec_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(cy), static_cast<std::uint16_t>(lz), old_level });
+                } else {
+                    q_inc_sky_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(cy), static_cast<std::uint16_t>(lz), column_level });
+                }
+            }
+        }
+
+        for (const auto& ch : changes) {
+            const int lx = ch.lx;
+            const int ly = ch.ly;
+            const int lz = ch.lz;
+
+            seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz);
+            seed_from_cell(q_inc_blk_, blocklight_, lx + 1, ly, lz);
+            seed_from_cell(q_inc_blk_, blocklight_, lx - 1, ly, lz);
+            seed_from_cell(q_inc_blk_, blocklight_, lx, ly + 1, lz);
+            seed_from_cell(q_inc_blk_, blocklight_, lx, ly - 1, lz);
+            seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz + 1);
+            seed_from_cell(q_inc_blk_, blocklight_, lx, ly, lz - 1);
+
+            seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz);
+            seed_from_cell(q_inc_sky_, skylight_, lx + 1, ly, lz);
+            seed_from_cell(q_inc_sky_, skylight_, lx - 1, ly, lz);
+            seed_from_cell(q_inc_sky_, skylight_, lx, ly + 1, lz);
+            seed_from_cell(q_inc_sky_, skylight_, lx, ly - 1, lz);
+            seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz + 1);
+            seed_from_cell(q_inc_sky_, skylight_, lx, ly, lz - 1);
+
+            const std::size_t ci = idx(lx, ly, lz);
+            if (opaque_[ci] == 0u && ch.props.emission > 0u) {
+                if (ch.props.emission > blocklight_[ci]) {
+                    blocklight_[ci] = ch.props.emission;
+                    q_inc_blk_.push_back(QueueNode{ static_cast<std::uint16_t>(lx), static_cast<std::uint16_t>(ly), static_cast<std::uint16_t>(lz), ch.props.emission });
+                    note_dirty(ch.wx, ch.wy, ch.wz);
+                    any_changed = true;
+                }
+            }
+        }
+
+        relight_active_ = true;
     }
 
     auto sky_cost = [idx, this](int nx, int ny, int nz, bool is_down) -> std::uint8_t {
@@ -569,7 +598,6 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
         out_xyz[5][0] = x;     out_xyz[5][1] = y;     out_xyz[5][2] = z - 1;
     };
 
-    // Decrease propagation (blocklight)
     while (budget_nodes > 0 && head_dec_blk_ < q_dec_blk_.size()) {
         const QueueNode n = q_dec_blk_[head_dec_blk_++];
         --budget_nodes;
@@ -606,7 +634,6 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
         }
     }
 
-    // Decrease propagation (skylight)
     while (budget_nodes > 0 && head_dec_sky_ < q_dec_sky_.size()) {
         const QueueNode n = q_dec_sky_[head_dec_sky_++];
         --budget_nodes;
@@ -644,7 +671,6 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
         }
     }
 
-    // Increase propagation (skylight)
     while (budget_nodes > 0 && head_inc_sky_ < q_inc_sky_.size()) {
         const QueueNode n = q_inc_sky_[head_inc_sky_++];
         --budget_nodes;
@@ -679,7 +705,6 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
         }
     }
 
-    // Increase propagation (blocklight)
     while (budget_nodes > 0 && head_inc_blk_ < q_inc_blk_.size()) {
         const QueueNode n = q_inc_blk_[head_inc_blk_++];
         --budget_nodes;
