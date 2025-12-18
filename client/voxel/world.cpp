@@ -336,13 +336,16 @@ void World::update(const Vector3& player_position) {
         // Aim for visually-instant AO/lighting on edits without risking frame hitches.
         // We run multiple budgeted passes until either the queues are drained or we
         // hit the per-frame time budget.
+        // When there are pending block changes, use a higher budget (4ms) for faster visual feedback.
+        // Otherwise use a lower budget (2ms) for background propagation.
+        const float relight_budget_ms = light_volume_.has_pending_relight() ? 4.0f : 2.0f;
         while (light_volume_.has_pending_relight()) {
             const bool touched = light_volume_.process_pending_relight(*this, 32768);
             touched_any = touched_any || touched;
 
             const auto relight_t1 = std::chrono::steady_clock::now();
             const float ms = std::chrono::duration<float, std::milli>(relight_t1 - relight_t0).count();
-            if (ms >= 2.0f) break;
+            if (ms >= relight_budget_ms) break;
         }
 
         if (touched_any) {

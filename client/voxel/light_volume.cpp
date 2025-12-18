@@ -444,6 +444,22 @@ bool LightVolume::process_pending_relight(const World& world, int budget_nodes) 
         head_dec_blk_ = 0;
         head_inc_blk_ = 0;
 
+        // Sort pending changes by distance from volume center (camera-prioritized relight).
+        // Closer changes are processed first for instant visual feedback.
+        const int center_wx = origin_x_ + dim_x / 2;
+        const int center_wy = origin_y_ + dim_y / 2;
+        const int center_wz = origin_z_ + dim_z / 2;
+        std::sort(pending_changes_.begin(), pending_changes_.end(),
+            [center_wx, center_wy, center_wz](const PendingChange& a, const PendingChange& b) {
+                const int da = (a.wx - center_wx) * (a.wx - center_wx) +
+                               (a.wy - center_wy) * (a.wy - center_wy) +
+                               (a.wz - center_wz) * (a.wz - center_wz);
+                const int db = (b.wx - center_wx) * (b.wx - center_wx) +
+                               (b.wy - center_wy) * (b.wy - center_wy) +
+                               (b.wz - center_wz) * (b.wz - center_wz);
+                return da < db;
+            });
+
         struct ChangeL {
             int wx, wy, wz;
             int lx, ly, lz;
@@ -897,9 +913,22 @@ std::uint8_t LightVolume::sample_combined(int wx, int wy, int wz) const {
     const int ly = wy - origin_y_;
     const int lz = wz - origin_z_;
 
-    // Clamp out-of-volume samples to the edge to avoid:
-    // - dark seams when the camera moves
-    // - artificial skylight leaking into interiors via corner averaging
+    // Check if completely outside volume.
+    const bool outside_x = lx < 0 || lx >= dim_x;
+    const bool outside_y = ly < 0 || ly >= dim_y;
+    const bool outside_z = lz < 0 || lz >= dim_z;
+
+    if (outside_x || outside_y || outside_z) {
+        // Fallback for blocks outside volume:
+        // - Blocks above volume top: assume open sky (skylight=15)
+        // - Blocks below/beside: use edge sample to avoid dark seams
+        if (ly >= dim_y) {
+            // Above volume top - likely open sky, return full skylight.
+            return 15u;
+        }
+        // For other out-of-bounds, clamp to edge sample.
+    }
+
     const int cx = std::clamp(lx, 0, dim_x - 1);
     const int cy = std::clamp(ly, 0, dim_y - 1);
     const int cz = std::clamp(lz, 0, dim_z - 1);
@@ -923,6 +952,11 @@ std::uint8_t LightVolume::sample_skylight(int wx, int wy, int wz) const {
     const int lx = wx - origin_x_;
     const int ly = wy - origin_y_;
     const int lz = wz - origin_z_;
+
+    // Fallback for blocks above volume top: assume open sky.
+    if (ly >= dim_y) {
+        return 15u;
+    }
 
     const int cx = std::clamp(lx, 0, dim_x - 1);
     const int cy = std::clamp(ly, 0, dim_y - 1);
