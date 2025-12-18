@@ -30,6 +30,7 @@ public:
     // Mesh generation
     void generate_mesh(const World& world);
     void render() const;
+    void render(Shader shader) const;  // Render with custom shader (AO)
     
     // Getters
     int get_chunk_x() const { return chunk_x_; }

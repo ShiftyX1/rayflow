@@ -39,10 +39,12 @@ int floor_div_int(int a, int b) {
 
 World::World(unsigned int seed) : seed_(seed) {
     init_perlin();
+    load_voxel_shader();
     TraceLog(LOG_INFO, "World created with seed: %u (infinite chunk generation enabled)", seed);
 }
 
 World::~World() {
+    unload_voxel_shader();
     TraceLog(LOG_INFO, "World destroyed. Total chunks generated: %zu", chunks_.size());
 }
 
@@ -195,14 +197,6 @@ void World::set_block(int x, int y, int z, Block type) {
     } else if (local_z == CHUNK_DEPTH - 1) {
         mark_chunk_dirty(chunk_x, chunk_z + 1);
     }
-
-    // Client-only lighting cache (Minecraft-style): queue incremental relight if the change is inside
-    // the current volume; out-of-volume changes will be picked up naturally when the camera moves.
-    if (light_volume_.ready()) {
-        light_volume_.notify_block_changed(x, y, z, static_cast<BlockType>(old_type), static_cast<BlockType>(type));
-    } else {
-        light_volume_dirty_ = true;
-    }
 }
 
 Chunk* World::get_chunk(int chunk_x, int chunk_z) {
@@ -299,77 +293,6 @@ void World::generate_chunk_terrain(Chunk& chunk) {
 void World::update(const Vector3& player_position) {
     load_chunks_around_player(player_position);
     unload_distant_chunks(player_position);
-
-    // Client-only lighting cache for rendering (Minecraft-style skylight + blocklight).
-    if (light_volume_.update_if_needed(*this, player_position, light_volume_dirty_)) {
-        light_volume_dirty_ = false;
-
-        // Lighting is baked into chunk mesh vertex data. When the lighting volume updates,
-        // re-mark affected chunks so their meshes pick up the new sky/block values.
-        const auto& s = light_volume_.settings();
-        const Vector3 origin_ws = light_volume_.volume_origin_ws();
-
-        const int min_x = static_cast<int>(std::floor(origin_ws.x));
-        const int min_z = static_cast<int>(std::floor(origin_ws.z));
-        const int max_x = min_x + s.volume_x - 1;
-        const int max_z = min_z + s.volume_z - 1;
-
-        const int min_cx = floor_div_int(min_x, CHUNK_WIDTH);
-        const int max_cx = floor_div_int(max_x, CHUNK_WIDTH);
-        const int min_cz = floor_div_int(min_z, CHUNK_DEPTH);
-        const int max_cz = floor_div_int(max_z, CHUNK_DEPTH);
-
-        for (auto& [key, chunk] : chunks_) {
-            const int cx = key.first;
-            const int cz = key.second;
-            if (cx >= min_cx && cx <= max_cx && cz >= min_cz && cz <= max_cz) {
-                chunk->mark_dirty();
-            }
-        }
-    }
-
-    // Incremental relight (bounded, budgeted): update light values without rebuilding the whole volume.
-    if (light_volume_.ready()) {
-        const auto relight_t0 = std::chrono::steady_clock::now();
-        bool touched_any = false;
-
-        // Aim for visually-instant AO/lighting on edits without risking frame hitches.
-        // We run multiple budgeted passes until either the queues are drained or we
-        // hit the per-frame time budget.
-        // When there are pending block changes, use a higher budget (4ms) for faster visual feedback.
-        // Otherwise use a lower budget (2ms) for background propagation.
-        const float relight_budget_ms = light_volume_.has_pending_relight() ? 4.0f : 2.0f;
-        while (light_volume_.has_pending_relight()) {
-            const bool touched = light_volume_.process_pending_relight(*this, 32768);
-            touched_any = touched_any || touched;
-
-            const auto relight_t1 = std::chrono::steady_clock::now();
-            const float ms = std::chrono::duration<float, std::milli>(relight_t1 - relight_t0).count();
-            if (ms >= relight_budget_ms) break;
-        }
-
-        if (touched_any) {
-            int min_wx = 0, min_wy = 0, min_wz = 0;
-            int max_wx = 0, max_wy = 0, max_wz = 0;
-            if (light_volume_.consume_dirty_bounds(min_wx, min_wy, min_wz, max_wx, max_wy, max_wz)) {
-                (void)min_wy;
-                (void)max_wy;
-
-                const int min_cx = floor_div_int(min_wx, CHUNK_WIDTH);
-                const int max_cx = floor_div_int(max_wx, CHUNK_WIDTH);
-                const int min_cz = floor_div_int(min_wz, CHUNK_DEPTH);
-                const int max_cz = floor_div_int(max_wz, CHUNK_DEPTH);
-
-                for (auto& [key, chunk] : chunks_) {
-                    const int cx = key.first;
-                    const int cz = key.second;
-                    if (cx >= min_cx && cx <= max_cx && cz >= min_cz && cz <= max_cz) {
-                        chunk->mark_dirty();
-                    }
-                }
-            }
-        }
-    }
     
     // Update meshes for dirty chunks
     {
@@ -427,9 +350,40 @@ void World::unload_distant_chunks(const Vector3& player_position) {
 }
 
 void World::render(const Camera3D& camera) const {
+    (void)camera; // May be used for frustum culling later
+    
     for (const auto& [key, chunk] : chunks_) {
-        // Simple frustum culling could be added here
-        chunk->render();
+        // Render with voxel shader (AO) if available, otherwise use default
+        if (voxel_shader_loaded_) {
+            chunk->render(voxel_shader_);
+        } else {
+            chunk->render();
+        }
+    }
+}
+
+void World::load_voxel_shader() {
+    if (voxel_shader_loaded_) return;
+
+    // Look for shaders in the build directory (copied by CMake)
+    const char* vs_path = "shaders/voxel.vs";
+    const char* fs_path = "shaders/voxel.fs";
+
+    if (FileExists(vs_path) && FileExists(fs_path)) {
+        voxel_shader_ = LoadShader(vs_path, fs_path);
+        voxel_shader_loaded_ = true;
+        TraceLog(LOG_INFO, "Voxel shader loaded successfully");
+    } else {
+        TraceLog(LOG_WARNING, "Voxel shader not found, using default shader");
+        voxel_shader_loaded_ = false;
+    }
+}
+
+void World::unload_voxel_shader() {
+    if (voxel_shader_loaded_) {
+        UnloadShader(voxel_shader_);
+        voxel_shader_loaded_ = false;
+        TraceLog(LOG_INFO, "Voxel shader unloaded");
     }
 }
 

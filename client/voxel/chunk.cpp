@@ -95,18 +95,6 @@ void Chunk::set_block(int x, int y, int z, Block type) {
 void Chunk::generate_mesh(const World& world) {
     const auto t_total0 = std::chrono::steady_clock::now();
 
-    const auto& render_cfg = core::Config::instance().get().render;
-    const bool smooth_lighting = render_cfg.voxel_smooth_lighting;
-
-    const float light_ambient_min = std::clamp(render_cfg.voxel_light_ambient_min, 0.0f, 1.0f);
-    const float light_gamma = std::max(0.01f, render_cfg.voxel_light_gamma);
-    const float ao_strength = std::clamp(render_cfg.voxel_ao_strength, 0.0f, 1.0f);
-    const auto brightness_curve = [light_ambient_min, light_gamma](float combined01) -> float {
-        const float x = std::clamp(combined01, 0.0f, 1.0f);
-        const float curved = std::pow(x, light_gamma);
-        return light_ambient_min + (1.0f - light_ambient_min) * curved;
-    };
-
     // MV-2: foliage/grass recolor is temperature-driven (render-only).
     // We use vertexColor as a tint (raylib default shader behavior), so apply the tint here.
     const float temperature = std::clamp(world.temperature(), 0.0f, 1.0f);
@@ -186,87 +174,51 @@ void Chunk::generate_mesh(const World& world) {
 
     static const int tri_corner_idx[6] = {0, 1, 2, 0, 2, 3};
 
-    auto is_solid_ws = [&world](int wx, int wy, int wz) -> bool {
-        const BlockType bt = static_cast<BlockType>(world.get_block(wx, wy, wz));
-        return is_solid(bt);
-    };
+    // Minecraft-style per-vertex AO calculation.
+    // For each corner of a face, sample 3 neighbors: side1, side2, corner.
+    // AO level = 0 (darkest) to 3 (brightest).
+    // Returns float in [0,1] range for shader use.
+    auto calc_corner_ao = [&world](int wx, int wy, int wz,
+                                    const int* dir,
+                                    const int* u_axis,
+                                    const int* v_axis,
+                                    int u_sign, int v_sign) -> float {
+        // Position of the 3 neighbor blocks that affect this corner
+        const int side1_x = wx + dir[0] + u_axis[0] * u_sign;
+        const int side1_y = wy + dir[1] + u_axis[1] * u_sign;
+        const int side1_z = wz + dir[2] + u_axis[2] * u_sign;
 
-    auto sample_light01_ws = [&world](int wx, int wy, int wz) -> float {
-        return world.sample_light01(wx, wy, wz);
-    };
+        const int side2_x = wx + dir[0] + v_axis[0] * v_sign;
+        const int side2_y = wy + dir[1] + v_axis[1] * v_sign;
+        const int side2_z = wz + dir[2] + v_axis[2] * v_sign;
 
-    auto sample_sky01_ws = [&world](int wx, int wy, int wz) -> float {
-        return world.sample_skylight01(wx, wy, wz);
-    };
+        const int corner_x = wx + dir[0] + u_axis[0] * u_sign + v_axis[0] * v_sign;
+        const int corner_y = wy + dir[1] + u_axis[1] * u_sign + v_axis[1] * v_sign;
+        const int corner_z = wz + dir[2] + u_axis[2] * u_sign + v_axis[2] * v_sign;
 
-    auto sample_block01_ws = [&world](int wx, int wy, int wz) -> float {
-        return world.sample_blocklight01(wx, wy, wz);
-    };
+        const bool s1 = is_solid(static_cast<BlockType>(world.get_block(side1_x, side1_y, side1_z)));
+        const bool s2 = is_solid(static_cast<BlockType>(world.get_block(side2_x, side2_y, side2_z)));
+        const bool c  = is_solid(static_cast<BlockType>(world.get_block(corner_x, corner_y, corner_z)));
 
-    struct CornerLighting {
-        float ao;
-        float sky;
-        float block;
-    };
-
-    auto compute_corner_lighting = [&](int face, int wx, int wy, int wz, int corner) -> CornerLighting {
-        // Adjacent cell outside the face.
-        const int ax = wx + face_dir[face][0];
-        const int ay = wy + face_dir[face][1];
-        const int az = wz + face_dir[face][2];
-
-        const int su = (corner == 2 || corner == 3) ? 1 : -1;
-        const int sv = (corner == 1 || corner == 2) ? 1 : -1;
-
-        const int ux = face_u[face][0] * su;
-        const int uy = face_u[face][1] * su;
-        const int uz = face_u[face][2] * su;
-
-        const int vx = face_v[face][0] * sv;
-        const int vy = face_v[face][1] * sv;
-        const int vz = face_v[face][2] * sv;
-
-        const bool side1 = is_solid_ws(ax + ux, ay + uy, az + uz);
-        const bool side2 = is_solid_ws(ax + vx, ay + vy, az + vz);
-        const bool cornerOcc = is_solid_ws(ax + ux + vx, ay + uy + vy, az + uz + vz);
-
-        int occ = 0;
-        if (side1) occ++;
-        if (side2) occ++;
-        if (!(side1 && side2) && cornerOcc) occ++;
-
-        const int ao_level = 3 - occ; // 0..3 (3 brightest)
-        // Keep AO subtle; it should read as corner shading, not a second sun shadow.
-        static const float ao_table[4] = {0.75f, 0.85f, 0.93f, 1.0f};
-        const float ao = ao_table[ao_level];
-
-        // If smoothing is disabled, keep AO but sample light flat from the face-adjacent cell.
-        if (!smooth_lighting) {
-            const float sky = std::clamp(sample_sky01_ws(ax, ay, az), 0.0f, 1.0f);
-            const float block = std::clamp(sample_block01_ws(ax, ay, az), 0.0f, 1.0f);
-            return CornerLighting{ ao, sky, block };
+        // Minecraft AO formula:
+        // If both sides are solid, corner doesn't matter (fully occluded)
+        int ao_level;
+        if (s1 && s2) {
+            ao_level = 0;
+        } else {
+            ao_level = 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
         }
 
-        // Smooth lighting: occlude diagonal/side samples to avoid pulling in bright light
-        // through a blocked corner (classic diagonal "light leak").
-        const float s0 = sample_sky01_ws(ax, ay, az);
-        const float s1 = side1 ? s0 : sample_sky01_ws(ax + ux, ay + uy, az + uz);
-        const float s2 = side2 ? s0 : sample_sky01_ws(ax + vx, ay + vy, az + vz);
-        const float s3 = (side1 && side2) ? s0 : (cornerOcc ? s0 : sample_sky01_ws(ax + ux + vx, ay + uy + vy, az + uz + vz));
-
-        const float b0 = sample_block01_ws(ax, ay, az);
-        const float b1 = side1 ? b0 : sample_block01_ws(ax + ux, ay + uy, az + uz);
-        const float b2 = side2 ? b0 : sample_block01_ws(ax + vx, ay + vy, az + vz);
-        const float b3 = (side1 && side2) ? b0 : (cornerOcc ? b0 : sample_block01_ws(ax + ux + vx, ay + uy + vy, az + uz + vz));
-
-        float sky = 0.25f * (s0 + s1 + s2 + s3);
-        float block = 0.25f * (b0 + b1 + b2 + b3);
-
-        sky = std::clamp(sky, 0.0f, 1.0f);
-        block = std::clamp(block, 0.0f, 1.0f);
-
-        return CornerLighting{ ao, sky, block };
+        // Convert to [0,1] range with a minimum brightness
+        // ao_level 0 -> 0.2, ao_level 3 -> 1.0
+        static const float ao_values[4] = { 0.2f, 0.5f, 0.75f, 1.0f };
+        return ao_values[ao_level];
     };
+
+    // Corner u/v signs for each of the 4 corners of a quad
+    // Corners: 0=(-u,-v), 1=(-u,+v), 2=(+u,+v), 3=(+u,-v)
+    static const int corner_u_sign[4] = { -1, -1, +1, +1 };
+    static const int corner_v_sign[4] = { -1, +1, +1, -1 };
     
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
@@ -317,12 +269,18 @@ void Chunk::generate_mesh(const World& world) {
                         (block_type == BlockType::Grass && face == 2) ? 1.0f :
                         0.0f;
 
-                    CornerLighting corner[4] = {
-                        compute_corner_lighting(face, wx, wy, wz, 0),
-                        compute_corner_lighting(face, wx, wy, wz, 1),
-                        compute_corner_lighting(face, wx, wy, wz, 2),
-                        compute_corner_lighting(face, wx, wy, wz, 3),
-                    };
+                    // Pre-compute AO for all 4 corners of this face
+                    float corner_ao[4];
+                    for (int corner = 0; corner < 4; corner++) {
+                        corner_ao[corner] = calc_corner_ao(
+                            wx, wy, wz,
+                            face_dir[face],
+                            face_u[face],
+                            face_v[face],
+                            corner_u_sign[corner],
+                            corner_v_sign[corner]
+                        );
+                    }
                     
                     // Add 6 vertices for this face (2 triangles)
                     for (int v = 0; v < 6; v++) {
@@ -333,48 +291,28 @@ void Chunk::generate_mesh(const World& world) {
                         texcoords.push_back(u0 + face_uvs[face][v][0] * uv_size);
                         texcoords.push_back(v0 + face_uvs[face][v][1] * uv_size);
 
+                        // Get AO for this vertex's corner
                         const int c = tri_corner_idx[v];
+                        const float ao = corner_ao[c];
+
                         texcoords2.push_back(foliageMask);
-                        texcoords2.push_back(corner[c].ao);
+                        texcoords2.push_back(ao);
                         
                         normals.push_back(face_normals[face][0]);
                         normals.push_back(face_normals[face][1]);
                         normals.push_back(face_normals[face][2]);
 
-                        const float sky = std::clamp(corner[c].sky, 0.0f, 1.0f);
-                        const float block = std::clamp(corner[c].block, 0.0f, 1.0f);
-                        const float ao = std::clamp(corner[c].ao, 0.0f, 1.0f);
-
-                        // Raylib's default mesh shader treats vertex color as an RGB tint.
-                        // Use grayscale brightness derived from Minecraft-style combined light,
-                        // then modulate by AO to keep corners subtly darker.
-                        const float combined = std::max(sky, block);
-
-                        // Shadow expressiveness (AO):
-                        // - Make AO more contrasty via a curve (pow with exponent > 1).
-                        // - Mix by ao_strength.
-                        // - Avoid further darkening when we're already at ambient_min (combined ~= 0),
-                        //   so deep shade doesn't collapse back into near-black.
-                        const float base_brightness = brightness_curve(combined);
-                        const float combined_curved01 = (base_brightness - light_ambient_min) / std::max(0.0001f, 1.0f - light_ambient_min);
-                        const float ao_influence = ao_strength * std::clamp(combined_curved01, 0.0f, 1.0f);
-
-                        const float ao_curved = std::pow(ao, 2.2f);
-                        const float ao_mix = (1.0f - ao_influence) + ao_influence * ao_curved;
-
-                        const float brightness = base_brightness * ao_mix;
-                        const unsigned char lit8 = static_cast<unsigned char>(std::clamp(brightness, 0.0f, 1.0f) * 255.0f);
-
-                        unsigned char r = lit8;
-                        unsigned char g = lit8;
-                        unsigned char b = lit8;
+                        // Use vertex color for tint (foliage/grass)
+                        unsigned char r = 255;
+                        unsigned char g = 255;
+                        unsigned char b = 255;
 
                         // MV-2: apply temperature tint only to foliage/grass faces.
                         if (foliageMask > 0.5f) {
                             const Color tint = (block_type == BlockType::Grass) ? grass_tint : foliage_tint;
-                            r = static_cast<unsigned char>((static_cast<unsigned int>(lit8) * tint.r) / 255u);
-                            g = static_cast<unsigned char>((static_cast<unsigned int>(lit8) * tint.g) / 255u);
-                            b = static_cast<unsigned char>((static_cast<unsigned int>(lit8) * tint.b) / 255u);
+                            r = tint.r;
+                            g = tint.g;
+                            b = tint.b;
                         }
 
                         colors.push_back(r);
@@ -468,6 +406,21 @@ void Chunk::generate_mesh(const World& world) {
 void Chunk::render() const {
     if (has_mesh_) {
         DrawModel(model_, {0, 0, 0}, 1.0f, WHITE);
+    }
+
+    if (!light_markers_ws_.empty()) {
+        for (const auto& p : light_markers_ws_) {
+            DrawSphere(p, 0.18f, YELLOW);
+        }
+    }
+}
+
+void Chunk::render(Shader shader) const {
+    if (has_mesh_) {
+        // Temporarily set shader on model's material
+        Model model_copy = model_;
+        model_copy.materials[0].shader = shader;
+        DrawModel(model_copy, {0, 0, 0}, 1.0f, WHITE);
     }
 
     if (!light_markers_ws_.empty()) {
