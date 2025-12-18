@@ -174,7 +174,7 @@
 
   <h2>6. Standard Sections</h2>
 
-  <h3>6.1 <code>VIS0</code> — Visual Settings (MV-1 + MV-2)</h3>
+  <h3>6.1 <code>VIS0</code> — Visual Settings (MV-1 + MV-2 + MV-3)</h3>
   <p>
     Visual settings are render-only environment parameters. They must not affect authoritative simulation.
   </p>
@@ -200,20 +200,33 @@
     <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
     <tr><td>+16</td><td>temperature</td><td>f32</td><td>
       Range [0, 1], default 0.5.
+      Affects <strong>only</strong> foliage/grass rendering color (together with humidity).
+    </td></tr>
+  </table>
+
+  <h4>MV-3 extension</h4>
+  <p class="muted">If payload size is at least 24 bytes, MV-3 adds one field.</p>
+  <table>
+    <tr><th>Offset</th><th>Field</th><th>Type</th><th>Description</th></tr>
+    <tr><td>+20</td><td>humidity</td><td>f32</td><td>
+      Range [0, 1], default 1.0.
       Affects <strong>only</strong> foliage/grass rendering color:
       <ul>
         <li><code>Leaves</code>: all faces</li>
         <li><code>Grass</code>: top face only</li>
       </ul>
-      Effect is a <strong>full recolor</strong> (not a subtle tint).
+      The colormap lookup uses the Minecraft formula: <code>adjusted_humidity = humidity * temperature</code>
+      to ensure coordinates stay within the valid triangular region of the colormap texture.
     </td></tr>
   </table>
 
   <h4>Compatibility rules</h4>
   <ul>
-    <li>If <code>VIS0</code> is missing: defaults apply (Day, 12:00, no moon, sun=1, ambient=0.25, temperature=0.5).</li>
-    <li>If <code>VIS0.size &gt;= 16</code> and <code>&lt; 20</code>: MV-1 values read; temperature stays default (0.5).</li>
-    <li>If <code>VIS0.size &gt; 20</code>: known prefix read; remaining bytes are skipped.</li>
+    <li>If <code>VIS0</code> is missing: defaults apply (Day, 12:00, no moon, sun=1, ambient=0.25, temperature=0.5, humidity=1.0).</li>
+    <li>If <code>VIS0.size &gt;= 16</code> and <code>&lt; 20</code>: MV-1 values read; temperature=0.5, humidity=1.0.</li>
+    <li>If <code>VIS0.size &gt;= 20</code> and <code>&lt; 24</code>: MV-1 + MV-2 values read; humidity=1.0.</li>
+    <li>If <code>VIS0.size &gt;= 24</code>: MV-1 + MV-2 + MV-3 values read.</li>
+    <li>If <code>VIS0.size &gt; 24</code>: known prefix read; remaining bytes are skipped.</li>
   </ul>
 
   <h3>6.2 <code>PRO0</code> — Protection allow-list (MT-1)</h3>

@@ -71,7 +71,8 @@ void ClientSession::send_try_export_map(const std::string& mapId,
                                        bool useMoon,
                                        float sunIntensity,
                                        float ambientIntensity,
-                                       float temperature) {
+                                       float temperature,
+                                       float humidity) {
     shared::proto::TryExportMap req;
     req.seq = ++actionSeq_;
     req.mapId = mapId;
@@ -86,6 +87,7 @@ void ClientSession::send_try_export_map(const std::string& mapId,
     req.sunIntensity = sunIntensity;
     req.ambientIntensity = ambientIntensity;
     req.temperature = temperature;
+    req.humidity = humidity;
     endpoint_->send(std::move(req));
 }
 

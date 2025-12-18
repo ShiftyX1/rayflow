@@ -836,6 +836,11 @@ void Server::handle_message_(shared::proto::Message& msg) {
             if (temp < 0.0f) temp = 0.0f;
             if (temp > 1.0f) temp = 1.0f;
             exportReq.visualSettings.temperature = temp;
+
+            float hum = req.humidity;
+            if (hum < 0.0f) hum = 0.0f;
+            if (hum > 1.0f) hum = 1.0f;
+            exportReq.visualSettings.humidity = hum;
         }
 
         std::string err;

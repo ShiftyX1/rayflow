@@ -64,34 +64,33 @@ void BlockRegistry::destroy() {
     }
 }
 
-Color BlockRegistry::sample_colormap_(const Image& img, bool loaded, float temperature, Color fallback) {
+Color BlockRegistry::sample_colormap_(const Image& img, bool loaded, float temperature, float humidity, Color fallback) {
     if (!loaded || img.data == nullptr || img.width <= 0 || img.height <= 0) {
         return fallback;
     }
 
-    // Minecraft-style colormap lookup uses temperature/humidity mapped into [0..255].
-    // We only have temperature in MV-2; keep humidity fixed in the middle.
     const float t = std::clamp(temperature, 0.0f, 1.0f);
-    const float humidity = 0.5f;
+    const float h = std::clamp(humidity, 0.0f, 1.0f);
+    const float adjusted_humidity = h * t;  // MC formula: keeps us in the triangle
 
     const int w = img.width;
-    const int h = img.height;
+    const int hh = img.height;
 
     const int x = std::clamp(static_cast<int>(std::lround((1.0f - t) * static_cast<float>(w - 1))), 0, w - 1);
-    const int y = std::clamp(static_cast<int>(std::lround((1.0f - humidity) * static_cast<float>(h - 1))), 0, h - 1);
+    const int y = std::clamp(static_cast<int>(std::lround((1.0f - adjusted_humidity) * static_cast<float>(hh - 1))), 0, hh - 1);
 
     return GetImageColor(img, x, y);
 }
 
-Color BlockRegistry::sample_grass_color(float temperature) const {
+Color BlockRegistry::sample_grass_color(float temperature, float humidity) const {
     // Fallback tuned to be obviously green if the colormap is missing.
     const Color fallback{120, 200, 80, 255};
-    return sample_colormap_(grass_colormap_, grass_colormap_loaded_, temperature, fallback);
+    return sample_colormap_(grass_colormap_, grass_colormap_loaded_, temperature, humidity, fallback);
 }
 
-Color BlockRegistry::sample_foliage_color(float temperature) const {
+Color BlockRegistry::sample_foliage_color(float temperature, float humidity) const {
     const Color fallback{90, 180, 70, 255};
-    return sample_colormap_(foliage_colormap_, foliage_colormap_loaded_, temperature, fallback);
+    return sample_colormap_(foliage_colormap_, foliage_colormap_loaded_, temperature, humidity, fallback);
 }
 
 void BlockRegistry::register_blocks() {

@@ -76,6 +76,24 @@ void World::clear_temperature_override() {
     temperature_override_.reset();
 }
 
+float World::humidity() const {
+    if (humidity_override_.has_value()) {
+        return std::clamp(*humidity_override_, 0.0f, 1.0f);
+    }
+    if (map_template_.has_value()) {
+        return std::clamp(map_template_->visualSettings.humidity, 0.0f, 1.0f);
+    }
+    return 1.0f;
+}
+
+void World::set_humidity_override(float humidity) {
+    humidity_override_ = std::clamp(humidity, 0.0f, 1.0f);
+}
+
+void World::clear_humidity_override() {
+    humidity_override_.reset();
+}
+
 void World::mark_all_chunks_dirty() {
     for (auto& [key, chunk] : chunks_) {
         (void)key;

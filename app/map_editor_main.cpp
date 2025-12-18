@@ -559,8 +559,9 @@ int main() {
         // Apply MV-1 settings in-editor.
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
-        // Apply MV-2 temperature recolor in-editor (render-only).
+        // Apply MV-2/MV-3 temperature/humidity recolor in-editor (render-only).
         world->set_temperature_override(visualSettings.temperature);
+        world->set_humidity_override(visualSettings.humidity);
         world->mark_all_chunks_dirty();
 
         session->set_on_block_placed([&](const shared::proto::BlockPlaced& ev) {
@@ -916,7 +917,8 @@ int main() {
                 visualSettings.useMoon,
                 visualSettings.sunIntensity,
                 visualSettings.ambientIntensity,
-                visualSettings.temperature);
+                visualSettings.temperature,
+                visualSettings.humidity);
         }
 
         // --- MV-1: visual settings UI ---
@@ -974,15 +976,29 @@ int main() {
             0.0f,
             1.0f);
 
+        r.y += 28;
+        GuiSliderBar(
+            Rectangle{20, r.y, 300, 20},
+            "Humidity",
+            TextFormat("%.2f", visualSettings.humidity),
+            &visualSettings.humidity,
+            0.0f,
+            1.0f);
+
         // Apply settings live while editing.
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
         {
             static float lastAppliedTemp = -1.0f;
-            if (world && std::fabs(lastAppliedTemp - visualSettings.temperature) > 0.001f) {
+            static float lastAppliedHum = -1.0f;
+            const bool tempChanged = (world && std::fabs(lastAppliedTemp - visualSettings.temperature) > 0.001f);
+            const bool humChanged = (world && std::fabs(lastAppliedHum - visualSettings.humidity) > 0.001f);
+            if (tempChanged || humChanged) {
                 world->set_temperature_override(visualSettings.temperature);
+                world->set_humidity_override(visualSettings.humidity);
                 world->mark_all_chunks_dirty();
                 lastAppliedTemp = visualSettings.temperature;
+                lastAppliedHum = visualSettings.humidity;
             }
         }
 

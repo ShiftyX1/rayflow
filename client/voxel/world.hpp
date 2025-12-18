@@ -57,6 +57,12 @@ public:
     void set_temperature_override(float temperature);
     void clear_temperature_override();
 
+    // MV-3: render-only humidity used for foliage/grass recolor.
+    // Range: [0, 1] where 0=dry, 1=wet.
+    float humidity() const;
+    void set_humidity_override(float humidity);
+    void clear_humidity_override();
+
     void mark_all_chunks_dirty();
 
     // Lighting disabled - return full brightness
@@ -91,6 +97,9 @@ private:
     // MV-2: editor/runtime override for render temperature.
     // When set, it takes precedence over template temperature.
     std::optional<float> temperature_override_{};
+
+    // MV-3: editor/runtime override for render humidity.
+    std::optional<float> humidity_override_{};
     
     // Perlin noise permutation table
     mutable std::array<unsigned char, 512> perm_;

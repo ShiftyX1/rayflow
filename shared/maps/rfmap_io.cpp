@@ -22,7 +22,8 @@ constexpr std::uint32_t make_tag(char a, char b, char c, char d) {
 
 constexpr std::uint32_t kSectionTagVisualSettings = make_tag('V', 'I', 'S', '0');
 constexpr std::uint32_t kVisualSettingsPayloadMinSize = 16; // MV-1 payload prefix
-constexpr std::uint32_t kVisualSettingsPayloadSize = 20;    // MV-2 payload (adds temperature)
+constexpr std::uint32_t kVisualSettingsPayloadSizeV2 = 20;  // MV-2 payload (adds temperature)
+constexpr std::uint32_t kVisualSettingsPayloadSize = 24;    // MV-3 payload (adds humidity)
 
 // MT-1: template protection allow-list by BlockType id.
 constexpr std::uint32_t kSectionTagProtection = make_tag('P', 'R', 'O', '0');
@@ -300,7 +301,8 @@ bool write_rfmap(const std::filesystem::path& path,
         !write_f32_le(out, vs.timeOfDayHours) ||
         !write_f32_le(out, vs.sunIntensity) ||
         !write_f32_le(out, vs.ambientIntensity) ||
-        !write_f32_le(out, vs.temperature)) {
+        !write_f32_le(out, vs.temperature) ||
+        !write_f32_le(out, vs.humidity)) {
         if (outError) *outError = "failed to write VisualSettings payload";
         return false;
     }
@@ -487,6 +489,8 @@ bool read_rfmap(const std::filesystem::path& path,
 
                     // MV-2 optional
                     float temp = map.visualSettings.temperature;
+                    // MV-3 optional
+                    float hum = map.visualSettings.humidity;
 
                     if (!read_u8(in, &skybox) || !read_u8(in, &useMoon) || !read_u16_le(in, &reserved) ||
                         !read_f32_le(in, &timeOfDay) || !read_f32_le(in, &sunI) || !read_f32_le(in, &ambI)) {
@@ -494,9 +498,16 @@ bool read_rfmap(const std::filesystem::path& path,
                         return false;
                     }
 
-                    if (size >= kVisualSettingsPayloadSize) {
+                    if (size >= kVisualSettingsPayloadSizeV2) {
                         if (!read_f32_le(in, &temp)) {
                             if (outError) *outError = "failed to read VisualSettings temperature";
+                            return false;
+                        }
+                    }
+
+                    if (size >= kVisualSettingsPayloadSize) {
+                        if (!read_f32_le(in, &hum)) {
+                            if (outError) *outError = "failed to read VisualSettings humidity";
                             return false;
                         }
                     }
@@ -507,8 +518,11 @@ bool read_rfmap(const std::filesystem::path& path,
                     map.visualSettings.sunIntensity = sunI;
                     map.visualSettings.ambientIntensity = ambI;
                     map.visualSettings.temperature = temp;
+                    map.visualSettings.humidity = hum;
 
-                    const std::uint32_t consumed = (size >= kVisualSettingsPayloadSize) ? kVisualSettingsPayloadSize : kVisualSettingsPayloadMinSize;
+                    const std::uint32_t consumed = (size >= kVisualSettingsPayloadSize) ? kVisualSettingsPayloadSize :
+                                                   (size >= kVisualSettingsPayloadSizeV2) ? kVisualSettingsPayloadSizeV2 :
+                                                   kVisualSettingsPayloadMinSize;
                     const std::uint32_t remaining = size - consumed;
                     if (remaining > 0) {
                         in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);

@@ -95,11 +95,12 @@ void Chunk::set_block(int x, int y, int z, Block type) {
 void Chunk::generate_mesh(const World& world) {
     const auto t_total0 = std::chrono::steady_clock::now();
 
-    // MV-2: foliage/grass recolor is temperature-driven (render-only).
+    // MV-2/MV-3: foliage/grass recolor is temperature/humidity-driven (render-only).
     // We use vertexColor as a tint (raylib default shader behavior), so apply the tint here.
     const float temperature = std::clamp(world.temperature(), 0.0f, 1.0f);
-    const Color grass_tint = BlockRegistry::instance().sample_grass_color(temperature);
-    const Color foliage_tint = BlockRegistry::instance().sample_foliage_color(temperature);
+    const float humidity = std::clamp(world.humidity(), 0.0f, 1.0f);
+    const Color grass_tint = BlockRegistry::instance().sample_grass_color(temperature, humidity);
+    const Color foliage_tint = BlockRegistry::instance().sample_foliage_color(temperature, humidity);
 
     cleanup_mesh();
 

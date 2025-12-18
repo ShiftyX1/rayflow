@@ -140,6 +140,10 @@ struct TryExportMap {
     // MV-2: global temperature used for grass/foliage tint in rendering.
     // Range: [0, 1] where 0=cold, 1=hot.
     float temperature{0.5f};
+
+    // MV-3: global humidity used for grass/foliage tint in rendering.
+    // Range: [0, 1] where 0=dry, 1=wet.
+    float humidity{1.0f};
 };
 
 // Server -> Client: result of TryExportMap.

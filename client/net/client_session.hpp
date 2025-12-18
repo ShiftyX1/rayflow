@@ -32,7 +32,8 @@ public:
                              bool useMoon,
                              float sunIntensity,
                              float ambientIntensity,
-                             float temperature);
+                             float temperature,
+                             float humidity);
 
     void set_on_block_placed(std::function<void(const shared::proto::BlockPlaced&)> cb) { onBlockPlaced_ = std::move(cb); }
     void set_on_block_broken(std::function<void(const shared::proto::BlockBroken&)> cb) { onBlockBroken_ = std::move(cb); }
