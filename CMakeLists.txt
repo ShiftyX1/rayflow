@@ -188,3 +188,10 @@ elseif (WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32)
     endif()
 endif()
+
+option(RAYFLOW_BUILD_TESTS "Build unit and integration tests" OFF)
+
+if (RAYFLOW_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

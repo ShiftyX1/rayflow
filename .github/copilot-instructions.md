@@ -97,4 +97,5 @@ When making changes, follow the detailed rules in:
 - .github/instructions/lighting-minecraft.instructions.md
 - .github/instructions/lighting-baked.instructions.md
 - .github/instructions/map-editor.instructions.md
+- .github/instructions/testing.instructions.md
 

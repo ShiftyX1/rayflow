@@ -21,6 +21,10 @@
             "path": "shared/"
         },
         {
+            "name": "🧪 Test",
+            "path": "tests/"
+        },
+        {
             "name": " Github",
             "path": ".github/",
         },
