@@ -22,6 +22,7 @@ public:
 
 private:
     void queue_command_if_changed(float prev, float next);
+    void handle_ui_click(const std::string& action);
 
     enum class DebugMode {
         Off,
@@ -39,9 +40,16 @@ private:
     std::vector<UICommand> pending_commands_{};
     UIFrameOutput last_frame_{};
 
+    // Main menu UI (XML + CSS-lite)
+    xmlui::UIDocument main_menu_{};
+    bool main_menu_loaded_{false};
+
     // Player HUD (XML + CSS-lite)
     xmlui::UIDocument hud_{};
     bool hud_loaded_{false};
+
+    // Cached view model (for layout)
+    UIViewModel cached_vm_{};
 };
 
 } // namespace ui

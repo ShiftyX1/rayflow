@@ -19,11 +19,33 @@ enum class UIAnchor {
     BottomRight,
 };
 
+enum class UIDirection {
+    Row,
+    Column,
+};
+
+enum class UIAlign {
+    Start,
+    Center,
+    End,
+};
+
 struct UIBox {
     int left{0};
     int top{0};
     int right{0};
     int bottom{0};
+};
+
+struct UIColor {
+    unsigned char r{255};
+    unsigned char g{255};
+    unsigned char b{255};
+    unsigned char a{255};
+
+    bool operator==(const UIColor& other) const {
+        return r == other.r && g == other.g && b == other.b && a == other.a;
+    }
 };
 
 struct UIStyle {
@@ -35,6 +57,22 @@ struct UIStyle {
 
     int gap{0};
     UIAnchor anchor{UIAnchor::TopLeft};
+
+    UIDirection direction{UIDirection::Column};
+    UIAlign align_items{UIAlign::Start};
+    UIAlign justify_content{UIAlign::Start};
+    bool grow{false};
+
+    int font_size{20};
+    UIColor color{255, 255, 255, 255};
+
+    std::optional<UIColor> background_color{};
+
+    int border_width{0};
+    UIColor border_color{100, 100, 100, 255};
+    int border_radius{0};
+
+    bool visible{true};
 };
 
 struct CSSSelector {

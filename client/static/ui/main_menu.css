@@ -1,0 +1,62 @@
+
+.fullscreen-menu {
+  anchor: center;
+  width: 400;
+  height: 450;
+  padding: 40;
+  gap: 20;
+  direction: column;
+  background-color: #1a1a2ecc;
+  border-radius: 16;
+  border-width: 2;
+  border-color: #4a4a6a;
+}
+
+.game-title {
+  font-size: 48;
+  color: #ffffff;
+  anchor: top;
+}
+
+.game-subtitle {
+  font-size: 20;
+  color: #888899;
+}
+
+.menu-buttons {
+  gap: 12;
+  direction: column;
+  padding: 20;
+}
+
+.menu-button {
+  width: 280;
+  height: 50;
+  font-size: 22;
+  color: white;
+  background-color: #3a3a5a;
+  border-radius: 8;
+  border-width: 1;
+  border-color: #5a5a7a;
+  padding: 12;
+}
+
+#btn-play {
+  background-color: #2a5a3a;
+  border-color: #4a8a5a;
+}
+
+#btn-quit {
+  background-color: #5a2a3a;
+  border-color: #8a4a5a;
+}
+
+#btn-credits {
+  background-color: #3a3a7a;
+  border-color: #5a5a9a;
+}
+
+.version-text {
+  font-size: 14;
+  color: #666677;
+}

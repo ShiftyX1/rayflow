@@ -2,6 +2,21 @@
 
 All UI below must live in `ui/` and be driven by game state. UI must never own gameplay truth; it only renders, collects input, and sends requests to the game layer.
 
+> **For detailed AI agent instructions, see [ui-framework.instructions.md](ui-framework.instructions.md)**
+
+## Quick Reference: What Requires Recompile?
+
+| Change Type | Recompile? | Files to Modify |
+|-------------|------------|-----------------|
+| Layout (add/move nodes) | No | `client/static/ui/*.xml` |
+| Styles (colors, sizes) | No | `client/static/ui/*.css` |
+| Textures | No | `client/static/textures/ui/` |
+| New node type | **Yes** | `ui/runtime/xmlui/ui_document.cpp` |
+| New CSS property | **Yes** | `ui/runtime/xmlui/css_lite.cpp` |
+| New action handler | **Yes** | `ui/runtime/ui_manager.cpp` |
+| New game screen | **Yes** | Multiple files (see guide) |
+| New view model data | **Yes** | `ui/runtime/ui_view_model.hpp` |
+
 # Phases
 - Phase 1 (Debug UI): use raygui for developer-only panels.
 - Phase 2 (Player UI): build a custom retained-mode UI (XML + styles) for the actual player-facing interface.
@@ -109,9 +124,141 @@ Debug output must support **two mutually exclusive modes**:
 -	ui/debug/ — raygui panels and debug overlays
 -	ui/runtime/ — custom UI core (node tree, style, layout, events)
 -	ui/screens/ — screen controllers (MainMenuUI, PauseUI, HUDUI, InventoryUI)
--	assets/ui/ — XML layouts + CSS-lite styles (+ optional future scripts)
+-	client/static/ui/ — XML layouts + CSS-lite styles (source, copied to build/ui/)
 
 # Acceptance criteria
 - Debug UI can be toggled and removed from release.
 - Player UI can build a main menu from XML+styles, with clickable buttons and keyboard/gamepad navigation.
 - All gameplay state changes triggered by UI go through commands and are validated by the game layer, not by UI.
+
+# Roadmap
+
+## Completed (Dec 2025)
+- [x] Basic XML+CSS runtime (Panel, Text, Button, Row, Column, Spacer, HealthBar)
+- [x] CSS selectors (type, id, class)
+- [x] Layout system (direction, gap, padding, anchor)
+- [x] Visual properties (background-color, color, font-size, border-*)
+- [x] Main menu screen with game state machine
+- [x] Button interaction (hover, pressed states)
+- [x] UICommand system for game communication
+
+## Planned (Priority Order)
+
+### Phase 1: Core UI Improvements
+- [ ] Hot reload for XML/CSS (F5 key)
+- [ ] Keyboard/gamepad navigation (focus system)
+- [ ] Settings screen with actual settings
+- [ ] Pause menu
+- [ ] Resolution/DPI scaling system
+
+### Phase 2: New Node Types
+- [ ] Image node (static image display)
+- [ ] Slider node (for settings)
+- [ ] Checkbox node (for toggles)
+- [ ] TextInput node (for chat/name entry)
+- [ ] ProgressBar node (for loading/cooldowns)
+- [ ] List/ScrollPanel node (for server browser)
+
+### Phase 3: Animation System
+- [ ] CSS transitions (property interpolation)
+- [ ] Keyframe animations
+- [ ] Easing functions
+- [ ] Enter/exit animations for screens
+
+### Phase 4: Lua Scripting
+- [ ] Lua runtime integration (LuaJIT or plain Lua 5.4)
+- [ ] Safe sandbox (no file/network access)
+- [ ] UI manipulation API (`ui.set_text`, `ui.animate`, etc.)
+- [ ] Read-only view model access
+- [ ] Event hooks (on_enter, on_update, on_click)
+- [ ] Script-driven animations
+- [ ] Conditional visibility/formatting
+
+### Phase 5: Advanced Features
+- [ ] Localization system (string tables)
+- [ ] Theme system (switchable color palettes)
+- [ ] Sound effects for UI interactions
+- [ ] Rich text (inline colors, bold, italic)
+- [ ] Tooltips
+- [ ] Drag-and-drop for inventory
+
+## Lua Scripting Design (Future Reference)
+
+### Integration Architecture
+```
+┌─────────────────────────────────────────────────┐
+│                  UIDocument                      │
+│  ┌───────────┐  ┌───────────┐  ┌─────────────┐ │
+│  │ XML Tree  │  │ CSS Rules │  │ Lua State   │ │
+│  └───────────┘  └───────────┘  └──────┬──────┘ │
+│                                       │        │
+│                                       ▼        │
+│                              ┌─────────────┐   │
+│                              │ Script API  │   │
+│                              │ (sandboxed) │   │
+│                              └─────────────┘   │
+└─────────────────────────────────────────────────┘
+```
+
+### Script Loading
+```xml
+<UI script="scripts/main_menu.lua">
+  <Panel id="main-menu">...</Panel>
+</UI>
+```
+
+### Example Script
+```lua
+-- scripts/main_menu.lua
+
+local title_visible = true
+local blink_timer = 0
+
+function on_enter()
+  -- Called when this screen becomes active
+  ui.animate("#title", "fade_in", 0.3)
+  ui.play_sound("menu_open")
+end
+
+function on_exit()
+  -- Called when leaving this screen
+  ui.animate("#main-menu", "fade_out", 0.2)
+end
+
+function on_update(dt)
+  -- Called every frame while screen is active
+  blink_timer = blink_timer + dt
+  if blink_timer > 0.5 then
+    blink_timer = 0
+    title_visible = not title_visible
+    ui.set_visible("#subtitle", title_visible)
+  end
+  
+  -- Update dynamic text
+  ui.set_text("#fps-counter", "FPS: " .. vm.fps)
+end
+
+function on_click(action, node_id)
+  -- Called when a button is clicked
+  -- Return false to prevent default C++ handling
+  ui.play_sound("button_click")
+  
+  if action == "start_game" then
+    ui.animate("#main-menu", "slide_out_left", 0.3, function()
+      return true -- proceed to C++ handler after animation
+    end)
+    return false -- don't handle in C++ yet
+  end
+  
+  return true -- proceed to C++ handler
+end
+```
+
+### Safety Constraints
+- **Memory limit**: 1MB per script state
+- **CPU limit**: 1ms per frame for all scripts combined
+- **No globals**: Scripts cannot pollute global state
+- **No file access**: No `io.*` or `os.*` libraries
+- **No network**: No socket/http access
+- **Timeout**: Long-running scripts are killed after 10ms
+```

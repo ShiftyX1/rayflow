@@ -7,6 +7,13 @@
 
 namespace ui {
 
+enum class GameScreen {
+    MainMenu,
+    Playing,
+    Paused,
+    Settings,
+};
+
 struct PlayerViewModel {
     Vector3 position{0.0f, 0.0f, 0.0f};
     Vector3 velocity{0.0f, 0.0f, 0.0f};
@@ -42,6 +49,8 @@ struct UIViewModel {
 
     float dt{0.0f};
     int fps{0};
+
+    GameScreen game_screen{GameScreen::MainMenu};
 
     PlayerViewModel player{};
     NetViewModel net{};

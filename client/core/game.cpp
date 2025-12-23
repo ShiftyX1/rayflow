@@ -41,14 +41,31 @@ bool Game::init(int width, int height, const char* title) {
     ui_.init();
     renderer::Skybox::instance().init();
 
-    if (session_) {
-        session_->start_handshake();
-    }
-    
-    // Initialize block registry
+    // Initialize block registry early (needed even before gameplay for potential previews)
     if (!voxel::BlockRegistry::instance().init("textures/terrain.png")) {
         TraceLog(LOG_ERROR, "Failed to initialize block registry!");
         return false;
+    }
+
+    game_screen_ = ui::GameScreen::MainMenu;
+    EnableCursor();
+    cursor_enabled_ = true;
+
+    TraceLog(LOG_INFO, "Game initialized! Starting in main menu.");
+    
+    return true;
+}
+
+void Game::start_gameplay() {
+    if (gameplay_initialized_) {
+        game_screen_ = ui::GameScreen::Playing;
+        DisableCursor();
+        cursor_enabled_ = false;
+        return;
+    }
+
+    if (session_) {
+        session_->start_handshake();
     }
     
     // Create world
@@ -92,8 +109,10 @@ bool Game::init(int width, int height, const char* title) {
     
     DisableCursor();
     cursor_enabled_ = false;
+    game_screen_ = ui::GameScreen::Playing;
+    gameplay_initialized_ = true;
 
-    TraceLog(LOG_INFO, "Game initialized with ECS architecture!");
+    TraceLog(LOG_INFO, "Gameplay started!");
     TraceLog(LOG_INFO, "Player spawned at (%.1f, %.1f, %.1f)",
              spawn_position.x, spawn_position.y, spawn_position.z);
 
@@ -114,8 +133,6 @@ bool Game::init(int width, int height, const char* title) {
              core::key_name(controls.tool_1).c_str(),
              core::key_name(controls.tool_5).c_str());
     TraceLog(LOG_INFO, "  %s - Exit", core::key_name(controls.exit).c_str());
-    
-    return true;
 }
 
 void Game::set_cursor_enabled(bool enabled) {
@@ -137,6 +154,19 @@ void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
         if (const auto* s = std::get_if<ui::SetCameraSensitivity>(&cmd)) {
             if (player_entity_ != entt::null && registry_.all_of<ecs::PlayerController>(player_entity_)) {
                 registry_.get<ecs::PlayerController>(player_entity_).camera_sensitivity = s->value;
+            }
+        } else if (std::get_if<ui::StartGame>(&cmd)) {
+            start_gameplay();
+        } else if (std::get_if<ui::QuitGame>(&cmd)) {
+            should_exit_ = true;
+        } else if (std::get_if<ui::OpenSettings>(&cmd)) {
+            // TODO: Implement settings screen
+            TraceLog(LOG_INFO, "Settings not implemented yet");
+        } else if (std::get_if<ui::ResumeGame>(&cmd)) {
+            if (gameplay_initialized_) {
+                game_screen_ = ui::GameScreen::Playing;
+                DisableCursor();
+                cursor_enabled_ = false;
             }
         }
     }
@@ -160,12 +190,13 @@ void Game::refresh_ui_view_model(float delta_time) {
     ui_vm_.screen_height = screen_height_;
     ui_vm_.dt = delta_time;
     ui_vm_.fps = GetFPS();
+    ui_vm_.game_screen = game_screen_;
 
     // Temporary HUD stats (server-authoritative health not implemented yet).
     ui_vm_.player.health = 20;
     ui_vm_.player.max_health = 20;
 
-    if (player_entity_ != entt::null) {
+    if (gameplay_initialized_ && player_entity_ != entt::null) {
         if (registry_.all_of<ecs::Transform>(player_entity_)) {
             ui_vm_.player.position = registry_.get<ecs::Transform>(player_entity_).position;
         }
@@ -250,6 +281,7 @@ void Game::update(float delta_time) {
     ui_vm_.screen_height = screen_height_;
     ui_vm_.dt = delta_time;
     ui_vm_.fps = GetFPS();
+    ui_vm_.game_screen = game_screen_;
 
     // UI: toggle + capture + apply commands from last frame (safe point).
     ui::UIFrameInput ui_in;
@@ -263,6 +295,15 @@ void Game::update(float delta_time) {
 
     set_cursor_enabled(ui_out.capture.wants_mouse);
 
+    if (game_screen_ == ui::GameScreen::MainMenu) {
+        refresh_ui_view_model(delta_time);
+        return;
+    }
+
+    if (!gameplay_initialized_) {
+        return;
+    }
+
     if (session_) {
         session_->poll();
     }
@@ -274,9 +315,9 @@ void Game::update(float delta_time) {
             const unsigned int desiredSeed = static_cast<unsigned int>(helloOpt->worldSeed);
             if (!world_ || world_->get_seed() != desiredSeed) {
                 world_ = std::make_unique<voxel::World>(desiredSeed);
-                physics_system_->set_world(world_.get());
-                player_system_->set_world(world_.get());
-                render_system_->set_world(world_.get());
+                if (physics_system_) physics_system_->set_world(world_.get());
+                if (player_system_) player_system_->set_world(world_.get());
+                if (render_system_) render_system_->set_world(world_.get());
             }
 
             // MT-1: if server advertises a finite map template, load it locally for rendering.
@@ -314,7 +355,7 @@ void Game::update(float delta_time) {
     }
 
     // Update ECS systems
-    if (!ui_captures_input_) {
+    if (!ui_captures_input_ && input_system_ && player_system_) {
         input_system_->update(registry_, delta_time);
         player_system_->update(registry_, delta_time);
     } else {
@@ -323,6 +364,11 @@ void Game::update(float delta_time) {
     // physics_system_ is intentionally not run in client replica mode
     
     // Get player position and camera for world updates
+    if (player_entity_ == entt::null) {
+        refresh_ui_view_model(delta_time);
+        return;
+    }
+
     auto& transform = registry_.get<ecs::Transform>(player_entity_);
     auto& fps_camera = registry_.get<ecs::FirstPersonCamera>(player_entity_);
     auto& input = registry_.get<ecs::InputState>(player_entity_);
@@ -373,7 +419,7 @@ void Game::update(float delta_time) {
         camera.target.z - camera.position.z
     };
     
-    if (!ui_captures_input_) {
+    if (!ui_captures_input_ && block_interaction_ && world_) {
         // Update block interaction
         block_interaction_->update(*world_, camera.position, camera_dir,
                                     tool, input.primary_action, input.secondary_action, delta_time);
@@ -389,7 +435,9 @@ void Game::update(float delta_time) {
     }
     
     // Update world (chunk loading/unloading)
-    world_->update(transform.position);
+    if (world_) {
+        world_->update(transform.position);
+    }
 
     // Build a fresh view-model for render() (debug overlays, stats, etc.)
     refresh_ui_view_model(delta_time);
@@ -399,6 +447,20 @@ void Game::render() {
     BeginDrawing();
     ClearBackground(BLACK);
     
+    // If in main menu, just render UI
+    if (game_screen_ == ui::GameScreen::MainMenu) {
+        ui_.render(ui_vm_);
+        EndDrawing();
+        return;
+    }
+
+    // From here on: gameplay rendering
+    if (!gameplay_initialized_ || player_entity_ == entt::null) {
+        ui_.render(ui_vm_);
+        EndDrawing();
+        return;
+    }
+
     Camera3D camera = ecs::PlayerSystem::get_camera(registry_, player_entity_);
     
     BeginMode3D(camera);
@@ -406,16 +468,22 @@ void Game::render() {
     renderer::Skybox::instance().draw(camera);
     
     // Render world
-    render_system_->render(registry_, camera);
+    if (render_system_) {
+        render_system_->render(registry_, camera);
+    }
     
     // Render block highlight and break overlay
-    block_interaction_->render_highlight(camera);
-    block_interaction_->render_break_overlay(camera);
+    if (block_interaction_) {
+        block_interaction_->render_highlight(camera);
+        block_interaction_->render_break_overlay(camera);
+    }
     
     EndMode3D();
     
     // Render UI
-    render_system_->render_ui(registry_, screen_width_, screen_height_);
+    if (render_system_) {
+        render_system_->render_ui(registry_, screen_width_, screen_height_);
+    }
 
     ui_.render(ui_vm_);
     

@@ -42,11 +42,18 @@ private:
     void clear_player_input();
     void refresh_ui_view_model(float delta_time);
     void set_cursor_enabled(bool enabled);
+
+    // Start actual gameplay (called when transitioning from main menu)
+    void start_gameplay();
     
     // Window
     int screen_width_{1280};
     int screen_height_{720};
     bool should_exit_{false};
+    
+    // Game state
+    ui::GameScreen game_screen_{ui::GameScreen::MainMenu};
+    bool gameplay_initialized_{false};
     
     // ECS
     entt::registry registry_;
