@@ -100,4 +100,5 @@ When making changes, follow the detailed rules in:
 - .github/instructions/testing.instructions.md
 - .github/instructions/gui.instructions.md
 - .github/instructions/ui-framework.instructions.md (detailed AI agent guide for UI)
+- .github/instructions/resources.instructions.md (VFS and asset packaging system)
 
