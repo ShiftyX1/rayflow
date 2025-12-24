@@ -1,5 +1,6 @@
 #include "../client/core/config.hpp"
 #include "../client/core/logger.hpp"
+#include "../client/core/resources.hpp"
 #include "../client/ecs/components.hpp"
 #include "../client/ecs/systems/input_system.hpp"
 #include "../client/ecs/systems/player_system.hpp"
@@ -468,6 +469,9 @@ int main() {
     InitWindow(screenWidth, screenHeight, "Rayflow Map Editor");
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
+
+    // Initialize resource system (VFS) - must be after InitWindow.
+    resources::init();
 
     // Initialize custom UI styling
     editor_ui::InitEditorFonts();
@@ -1227,6 +1231,7 @@ int main() {
     voxel::BlockRegistry::instance().destroy();
     core::Logger::instance().shutdown();
     editor_ui::ShutdownEditorFonts();
+    resources::shutdown();
 
     CloseWindow();
 

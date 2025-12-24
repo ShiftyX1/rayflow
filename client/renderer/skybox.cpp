@@ -1,4 +1,5 @@
 #include "skybox.hpp"
+#include "../core/resources.hpp"
 
 #include <rlgl.h>
 
@@ -14,7 +15,7 @@ Skybox& Skybox::instance() {
 bool Skybox::init() {
     if (ready_) return true;
 
-    shader_ = LoadShader("shaders/skybox.vs", "shaders/skybox.fs");
+    shader_ = resources::load_shader("shaders/skybox.vs", "shaders/skybox.fs");
     if (shader_.id == 0) {
         TraceLog(LOG_ERROR, "Skybox: failed to load shaders (shaders/skybox.*)");
         return false;
@@ -103,7 +104,7 @@ void Skybox::ensure_cubemap_loaded_() {
     const char* pano_path = panorama_path_for_kind_(kind_);
 #ifdef CUBEMAP_LAYOUT_PANORAMA
     if (pano_path) {
-        Image img = LoadImage(pano_path);
+        Image img = resources::load_image(pano_path);
         if (img.data == nullptr) {
             TraceLog(LOG_WARNING, "Skybox: failed to load panorama image: %s", pano_path);
         } else {
@@ -128,7 +129,7 @@ void Skybox::ensure_cubemap_loaded_() {
         return;
     }
 
-    Image cube_img = LoadImage(cube_path);
+    Image cube_img = resources::load_image(cube_path);
     if (cube_img.data == nullptr) {
         TraceLog(LOG_WARNING, "Skybox: failed to load cubemap image: %s", cube_path);
         if (pano_path) {

@@ -1,6 +1,7 @@
 #include "game.hpp"
 #include "config.hpp"
 #include "logger.hpp"
+#include "resources.hpp"
 #include "../ecs/components.hpp"
 #include "../ecs/systems/input_system.hpp"
 #include "../ecs/systems/physics_system.hpp"
@@ -29,6 +30,9 @@ bool Game::init(int width, int height, const char* title) {
     InitWindow(width, height, title);
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
+
+    // Initialize resource system (VFS) - must be after InitWindow.
+    resources::init();
 
     // Load client config from rayflow.conf (optional; defaults apply if missing)
     const bool cfg_ok = core::Config::instance().load_from_file("rayflow.conf");
@@ -265,6 +269,9 @@ void Game::shutdown() {
     renderer::Skybox::instance().shutdown();
 
     core::Logger::instance().shutdown();
+
+    // Shutdown resource system (VFS) before CloseWindow.
+    resources::shutdown();
     
     CloseWindow();
 }

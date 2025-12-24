@@ -1,4 +1,5 @@
 #include "world.hpp"
+#include "../core/resources.hpp"
 #include <raylib.h>
 #include <cmath>
 #include <cstdio>
@@ -383,12 +384,12 @@ void World::render(const Camera3D& camera) const {
 void World::load_voxel_shader() {
     if (voxel_shader_loaded_) return;
 
-    // Look for shaders in the build directory (copied by CMake)
+    // Look for shaders in the build directory (copied by CMake or packed in .pak)
     const char* vs_path = "shaders/voxel.vs";
     const char* fs_path = "shaders/voxel.fs";
 
-    if (FileExists(vs_path) && FileExists(fs_path)) {
-        voxel_shader_ = LoadShader(vs_path, fs_path);
+    voxel_shader_ = resources::load_shader(vs_path, fs_path);
+    if (voxel_shader_.id != 0) {
         voxel_shader_loaded_ = true;
         TraceLog(LOG_INFO, "Voxel shader loaded successfully");
     } else {

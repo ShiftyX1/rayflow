@@ -6,14 +6,24 @@ build/
 
 # Executables
 low_pulse
+rayflow_map_editor
+pack_assets
+rayflow_tests_*
 *.exe
 *.out
+
+# Generated assets (created by pack_assets tool)
+assets.pak
+*.pak
 
 # CMake generated files
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+CTestTestfile.cmake
+DartConfiguration.tcl
+Testing/
 
 # Libraries
 *.dll
@@ -38,3 +48,12 @@ build.ninja
 
 compile_commands.json
 _deps/
+
+# IDA Pro database files (for reverse engineering/debugging)
+*.id0
+*.id1
+*.nam
+*.til
+
+# Keep documentation sources
+!documentation/

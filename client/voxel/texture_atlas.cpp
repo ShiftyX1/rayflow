@@ -1,4 +1,5 @@
 #include "texture_atlas.hpp"
+#include "../core/resources.hpp"
 
 namespace voxel {
 
@@ -7,7 +8,7 @@ bool TextureAtlas::load(const char* path) {
         unload();
     }
     
-    texture_ = LoadTexture(path);
+    texture_ = resources::load_texture(path);
     if (texture_.id == 0) {
         return false;
     }

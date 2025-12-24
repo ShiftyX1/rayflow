@@ -5,6 +5,7 @@
 
 #include "map_editor_style.hpp"
 #include "../ui/raygui.h"
+#include "../client/core/resources.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -22,35 +23,13 @@ static EditorFonts s_fonts = {};
 // Font management
 // ============================================================================
 
-static std::filesystem::path find_fonts_dir() {
-    namespace fs = std::filesystem;
-    const fs::path candidates[] = {
-        fs::path{"fonts"},
-        fs::path{"../fonts"},
-        fs::path{"../../fonts"},
-        fs::path{"../client/static/fonts"},
-        fs::path{"../../client/static/fonts"},
-    };
-    for (const auto& p : candidates) {
-        if (fs::exists(p) && fs::is_directory(p)) return p;
-    }
-    return fs::path{"fonts"};
-}
-
 void InitEditorFonts() {
     if (s_fonts.loaded) return;
 
-    auto fontsDir = find_fonts_dir();
-    
-    // Pre-construct paths as std::string to keep memory valid
-    std::string regularStr = (fontsDir / "Inter_18pt-Regular.ttf").string();
-    std::string semiBoldStr = (fontsDir / "Inter_18pt-SemiBold.ttf").string();
-    std::string boldStr = (fontsDir / "Inter_18pt-Bold.ttf").string();
-
-    // Default codepoints (ASCII + extended Latin)
-    s_fonts.regular = LoadFontEx(regularStr.c_str(), 18, nullptr, 0);
-    s_fonts.semiBold = LoadFontEx(semiBoldStr.c_str(), 18, nullptr, 0);
-    s_fonts.bold = LoadFontEx(boldStr.c_str(), 22, nullptr, 0);
+    // Load fonts via VFS-aware resource system.
+    s_fonts.regular = resources::load_font("fonts/Inter_18pt-Regular.ttf", 18);
+    s_fonts.semiBold = resources::load_font("fonts/Inter_18pt-SemiBold.ttf", 18);
+    s_fonts.bold = resources::load_font("fonts/Inter_18pt-Bold.ttf", 22);
 
     // Check if fonts loaded successfully
     if (s_fonts.regular.texture.id == 0) {

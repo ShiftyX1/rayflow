@@ -25,6 +25,10 @@
             "path": "tests/"
         },
         {
+            "name": "📄 Documentation",
+            "path": "documentation/"
+        },
+        {
             "name": " Github",
             "path": ".github/",
         },

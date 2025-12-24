@@ -1,12 +1,30 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(low_pulse CXX)
+project(low_pulse C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
+
+# ==============================================================================
+# Build type detection and PAK mode
+# ==============================================================================
+# Default to Debug if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
+endif()
+
+# RAYFLOW_USE_PAK: ON for Release, OFF for Debug (can be overridden)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    option(RAYFLOW_USE_PAK "Use packed .pak assets instead of loose files" ON)
+else()
+    option(RAYFLOW_USE_PAK "Use packed .pak assets instead of loose files" OFF)
+endif()
+
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "RAYFLOW_USE_PAK: ${RAYFLOW_USE_PAK}")
 
 include(FetchContent)
 FetchContent_Declare(
@@ -78,6 +96,9 @@ add_library(shared_lib STATIC
     shared/transport/local_transport.cpp
     shared/maps/rfmap_io.cpp
     shared/maps/runtime_paths.cpp
+    shared/vfs/vfs.cpp
+    shared/vfs/archive_reader.cpp
+    shared/vfs/archive_writer.cpp
 )
 
 target_include_directories(shared_lib PUBLIC ${CMAKE_SOURCE_DIR}/shared)
@@ -94,6 +115,7 @@ add_library(client_lib STATIC
     client/core/game.cpp
     client/core/config.cpp
     client/core/logger.cpp
+    client/core/resources.cpp
     client/net/client_session.cpp
     client/ecs/components.cpp
     client/ecs/systems/physics_system.cpp
@@ -124,6 +146,14 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
         ui/debug/raygui_impl.cpp
     )
 endif()
+
+# RAYFLOW_USE_PAK compile definition for VFS mode selection
+if (RAYFLOW_USE_PAK)
+    target_compile_definitions(client_lib PUBLIC RAYFLOW_USE_PAK=1)
+else()
+    target_compile_definitions(client_lib PUBLIC RAYFLOW_USE_PAK=0)
+endif()
+
 target_link_libraries(client_lib PUBLIC shared_lib)
 
 # client_lib needs EnTT and raylib headers during compilation
@@ -145,30 +175,71 @@ target_link_libraries(${PROJECT_NAME} PRIVATE client_lib server_lib shared_lib)
 option(RAYFLOW_BUILD_MAP_EDITOR "Build rayflow map editor" ON)
 if (RAYFLOW_BUILD_MAP_EDITOR)
     # Map editor executable (shares the same client renderer stack).
+    # Map editor always needs raygui, even in Release builds.
     add_executable(rayflow_map_editor
         app/map_editor_main.cpp
         app/map_editor_style.cpp
+        ui/debug/raygui_impl.cpp
     )
 
     target_link_libraries(rayflow_map_editor PRIVATE client_lib server_lib shared_lib)
 endif()
 
+# Asset packing tool
+option(RAYFLOW_BUILD_PACK_ASSETS "Build pack_assets tool" ON)
+if (RAYFLOW_BUILD_PACK_ASSETS)
+    add_executable(pack_assets
+        tools/pack_assets.cpp
+        shared/vfs/archive_writer.cpp
+    )
+    target_include_directories(pack_assets PRIVATE ${CMAKE_SOURCE_DIR}/shared)
+    set_target_properties(pack_assets PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    )
+endif()
+
+# ==============================================================================
+# Asset deployment (loose files for Debug, .pak for Release)
+# ==============================================================================
 set(RAYFLOW_ASSETS_SRC ${CMAKE_SOURCE_DIR}/client/static)
-add_custom_target(rayflow_copy_assets ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${RAYFLOW_ASSETS_SRC}/textures
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/textures
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${RAYFLOW_ASSETS_SRC}/shaders
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${RAYFLOW_ASSETS_SRC}/ui
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ui
-    VERBATIM
-)
-add_dependencies(${PROJECT_NAME} rayflow_copy_assets)
-if (RAYFLOW_BUILD_MAP_EDITOR)
-    add_dependencies(rayflow_map_editor rayflow_copy_assets)
+set(RAYFLOW_PAK_FILE ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets.pak)
+
+if (RAYFLOW_USE_PAK AND RAYFLOW_BUILD_PACK_ASSETS)
+    # Release mode: Pack assets into .pak file
+    add_custom_target(rayflow_pack_assets ALL
+        COMMAND $<TARGET_FILE:pack_assets>
+            --input ${RAYFLOW_ASSETS_SRC}
+            --output ${RAYFLOW_PAK_FILE}
+            --verbose
+        DEPENDS pack_assets
+        COMMENT "Packing assets into ${RAYFLOW_PAK_FILE}"
+        VERBATIM
+    )
+    add_dependencies(${PROJECT_NAME} rayflow_pack_assets)
+    if (RAYFLOW_BUILD_MAP_EDITOR)
+        add_dependencies(rayflow_map_editor rayflow_pack_assets)
+    endif()
+else()
+    # Debug mode: Copy loose files
+    add_custom_target(rayflow_copy_assets ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${RAYFLOW_ASSETS_SRC}/textures
+            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/textures
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${RAYFLOW_ASSETS_SRC}/shaders
+            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${RAYFLOW_ASSETS_SRC}/fonts
+            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/fonts
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${RAYFLOW_ASSETS_SRC}/ui
+            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ui
+        VERBATIM
+    )
+    add_dependencies(${PROJECT_NAME} rayflow_copy_assets)
+    if (RAYFLOW_BUILD_MAP_EDITOR)
+        add_dependencies(rayflow_map_editor rayflow_copy_assets)
+    endif()
 endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE EnTT::EnTT)

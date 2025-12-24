@@ -23,6 +23,7 @@ add_executable(rayflow_tests_shared
     shared/transport/test_local_transport.cpp
     shared/voxel/test_block.cpp
     shared/maps/test_rfmap_io.cpp
+    shared/vfs/vfs_test.cpp
 )
 
 # IMPORTANT: Clear inherited global include directories and set only what's needed

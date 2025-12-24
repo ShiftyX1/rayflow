@@ -1,5 +1,6 @@
 #include "block_interaction.hpp"
 #include "block_registry.hpp"
+#include "../core/resources.hpp"
 #include <cmath>
 #include <rlgl.h>
 #include <cstdio>
@@ -12,7 +13,7 @@ bool BlockInteraction::init() {
     for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
         char path[128];
         snprintf(path, sizeof(path), "textures/destroy_stages/destroy_stage_%d.png", i);
-        destroy_textures_[i] = LoadTexture(path);
+        destroy_textures_[i] = resources::load_texture(path);
         if (destroy_textures_[i].id == 0) {
             TraceLog(LOG_ERROR, "Failed to load destroy texture: %s", path);
             return false;

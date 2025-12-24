@@ -6,26 +6,13 @@
 #include <tinyxml2.h>
 
 #include "../ui_view_model.hpp"
+#include "../../../client/core/resources.hpp"
 
 namespace ui::xmlui {
 
 static std::string read_file_to_string(const char* path) {
-    FILE* f = std::fopen(path, "rb");
-    if (!f) {
-        return {};
-    }
-    std::fseek(f, 0, SEEK_END);
-    long len = std::ftell(f);
-    std::fseek(f, 0, SEEK_SET);
-    if (len <= 0) {
-        std::fclose(f);
-        return {};
-    }
-    std::string data;
-    data.resize(static_cast<size_t>(len));
-    (void)std::fread(data.data(), 1, data.size(), f);
-    std::fclose(f);
-    return data;
+    // Use VFS-aware resource loading.
+    return resources::load_text(path);
 }
 
 static Rectangle anchor_rect(const UIStyle& style, int content_w, int content_h, int screen_w, int screen_h) {
@@ -187,7 +174,7 @@ Texture2D UIDocument::load_texture_cached(const std::string& path) {
     }
 
     TextureRef ref;
-    ref.tex = LoadTexture(path.c_str());
+    ref.tex = resources::load_texture(path);
     texture_cache_.emplace(path, ref);
     return ref.tex;
 }
