@@ -1,0 +1,140 @@
+# =============================================================================
+# Build Workflow
+# Builds RayFlow on Linux, macOS, and Windows
+# =============================================================================
+
+name: Build
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Skip if running on Gitea (mirror repo uses GitHub Actions only)
+env:
+  IS_GITHUB: ${{ github.server_url == 'https://github.com' }}
+
+jobs:
+  build:
+    # Only run on GitHub, skip on Gitea mirrors
+    if: github.server_url == 'https://github.com'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            preset: ci-linux
+            name: Linux
+          - os: macos-14
+            preset: ci-macos
+            name: macOS (ARM64)
+          - os: macos-13
+            preset: ci-macos
+            name: macOS (x86_64)
+          - os: windows-2022
+            preset: ci-windows
+            name: Windows
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -------------------------------------------------------------------------
+      # Platform-specific setup
+      # -------------------------------------------------------------------------
+      - name: Setup (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            libgl1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev
+
+      - name: Setup (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja
+
+      - name: Setup (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install ninja
+
+      # -------------------------------------------------------------------------
+      # Build
+      # -------------------------------------------------------------------------
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      # -------------------------------------------------------------------------
+      # Upload artifacts
+      # -------------------------------------------------------------------------
+      - name: Upload build artifacts (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rayflow-linux-x64
+          path: |
+            build/${{ matrix.preset }}/rayflow
+            build/${{ matrix.preset }}/map_builder
+            build/${{ matrix.preset }}/rfds
+          if-no-files-found: warn
+
+      - name: Upload build artifacts (macOS ARM64)
+        if: runner.os == 'macOS' && matrix.os == 'macos-14'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rayflow-macos-arm64
+          path: |
+            build/${{ matrix.preset }}/rayflow
+            build/${{ matrix.preset }}/map_builder
+            build/${{ matrix.preset }}/rfds
+          if-no-files-found: warn
+
+      - name: Upload build artifacts (macOS x86_64)
+        if: runner.os == 'macOS' && matrix.os == 'macos-13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rayflow-macos-x64
+          path: |
+            build/${{ matrix.preset }}/rayflow
+            build/${{ matrix.preset }}/map_builder
+            build/${{ matrix.preset }}/rfds
+          if-no-files-found: warn
+
+      - name: Upload build artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rayflow-windows-x64
+          path: |
+            build/${{ matrix.preset }}/rayflow.exe
+            build/${{ matrix.preset }}/map_builder.exe
+            build/${{ matrix.preset }}/rfds.exe
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Gitea fallback job (always succeeds)
+  # ---------------------------------------------------------------------------
+  gitea-skip:
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    name: Build (Gitea - Skipped)
+    steps:
+      - name: Skip build on Gitea
+        run: echo "Build skipped on Gitea mirror. Use GitHub for CI/CD."

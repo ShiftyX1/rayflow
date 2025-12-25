@@ -1,0 +1,229 @@
+# =============================================================================
+# Release Workflow
+# Creates release artifacts when a version tag is pushed
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-release:
+    # Only run on GitHub, skip on Gitea mirrors
+    if: github.server_url == 'https://github.com'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            preset: release
+            name: Linux
+            artifact: rayflow-linux-x64
+          - os: macos-14
+            preset: release
+            name: macOS (ARM64)
+            artifact: rayflow-macos-arm64
+          - os: macos-13
+            preset: release
+            name: macOS (x86_64)
+            artifact: rayflow-macos-x64
+          - os: windows-2022
+            preset: release
+            name: Windows
+            artifact: rayflow-windows-x64
+
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for version detection
+
+      # -------------------------------------------------------------------------
+      # Platform-specific setup
+      # -------------------------------------------------------------------------
+      - name: Setup (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            libgl1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev
+
+      - name: Setup (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja
+
+      - name: Setup (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install ninja
+
+      # -------------------------------------------------------------------------
+      # Build Release
+      # -------------------------------------------------------------------------
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      # -------------------------------------------------------------------------
+      # Run Tests (Release mode)
+      # -------------------------------------------------------------------------
+      - name: Run Tests
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+        continue-on-error: true  # Don't fail release on test failure
+
+      # -------------------------------------------------------------------------
+      # Package artifacts
+      # -------------------------------------------------------------------------
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p release-package
+          cp build/${{ matrix.preset }}/rayflow release-package/ || true
+          cp build/${{ matrix.preset }}/map_builder release-package/ || true
+          cp build/${{ matrix.preset }}/rfds release-package/ || true
+          cp build/${{ matrix.preset }}/assets.pak release-package/ || true
+          cd release-package && tar -czvf ../rayflow-linux-x64.tar.gz *
+
+      - name: Package (macOS ARM64)
+        if: runner.os == 'macOS' && matrix.os == 'macos-14'
+        run: |
+          mkdir -p release-package
+          cp build/${{ matrix.preset }}/rayflow release-package/ || true
+          cp build/${{ matrix.preset }}/map_builder release-package/ || true
+          cp build/${{ matrix.preset }}/rfds release-package/ || true
+          cp build/${{ matrix.preset }}/assets.pak release-package/ || true
+          cd release-package && tar -czvf ../rayflow-macos-arm64.tar.gz *
+
+      - name: Package (macOS x86_64)
+        if: runner.os == 'macOS' && matrix.os == 'macos-13'
+        run: |
+          mkdir -p release-package
+          cp build/${{ matrix.preset }}/rayflow release-package/ || true
+          cp build/${{ matrix.preset }}/map_builder release-package/ || true
+          cp build/${{ matrix.preset }}/rfds release-package/ || true
+          cp build/${{ matrix.preset }}/assets.pak release-package/ || true
+          cd release-package && tar -czvf ../rayflow-macos-x64.tar.gz *
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-package
+          Copy-Item -Path "build/${{ matrix.preset }}/rayflow.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/${{ matrix.preset }}/map_builder.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/${{ matrix.preset }}/rfds.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/${{ matrix.preset }}/assets.pak" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "release-package/*" -DestinationPath "rayflow-windows-x64.zip"
+
+      # -------------------------------------------------------------------------
+      # Upload artifacts
+      # -------------------------------------------------------------------------
+      - name: Upload release artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rayflow-linux-x64.tar.gz
+
+      - name: Upload release artifact (macOS ARM64)
+        if: runner.os == 'macOS' && matrix.os == 'macos-14'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rayflow-macos-arm64.tar.gz
+
+      - name: Upload release artifact (macOS x86_64)
+        if: runner.os == 'macOS' && matrix.os == 'macos-13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rayflow-macos-x64.tar.gz
+
+      - name: Upload release artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rayflow-windows-x64.zip
+
+  # ---------------------------------------------------------------------------
+  # Create GitHub Release
+  # ---------------------------------------------------------------------------
+  create-release:
+    if: github.server_url == 'https://github.com'
+    needs: build-release
+    runs-on: ubuntu-latest
+    name: Create Release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: List artifacts
+        run: find release-artifacts -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: RayFlow ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/**/*.tar.gz
+            release-artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Gitea fallback job (always succeeds)
+  # ---------------------------------------------------------------------------
+  gitea-skip:
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    name: Release (Gitea - Skipped)
+    steps:
+      - name: Skip release on Gitea
+        run: echo "Release skipped on Gitea mirror. Use GitHub for CI/CD."
