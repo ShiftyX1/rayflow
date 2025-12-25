@@ -3,10 +3,15 @@ build/
 *.o
 *.obj
 *.a
+*.lib
 
-# Executables
+# Executables (old and new names)
 low_pulse
+rayflow
 rayflow_map_editor
+map_builder
+rfds
+rayflow_pack_assets
 pack_assets
 rayflow_tests_*
 *.exe
@@ -24,6 +29,9 @@ Makefile
 CTestTestfile.cmake
 DartConfiguration.tcl
 Testing/
+
+# CMake Presets (user-specific overrides)
+CMakeUserPresets.json
 
 # Libraries
 *.dll

@@ -310,37 +310,11 @@ bool Config::load_from_file(const std::string& path) {
     loaded_from_path_.clear();
 
     std::ifstream in(path);
-    std::string used = path;
-
     if (!in.is_open()) {
-        // The project is often run with different working directories (project root, build/, app/, etc).
-        // If the caller asks for the canonical filename, try a few common relative fallbacks.
-        if (path == "rayflow.conf") {
-            const char* candidates[] = {
-                "rayflow.conf",
-                "../rayflow.conf",
-                "../../rayflow.conf",
-                "build/rayflow.conf",
-                "../build/rayflow.conf",
-                "../../build/rayflow.conf",
-            };
-
-            for (const char* c : candidates) {
-                in.clear();
-                in.open(c);
-                if (in.is_open()) {
-                    used = c;
-                    break;
-                }
-            }
-        }
-
-        if (!in.is_open()) {
-            return false;
-        }
+        return false;
     }
 
-    loaded_from_path_ = used;
+    loaded_from_path_ = path;
     TraceLog(LOG_INFO, "[config] loaded: %s", loaded_from_path_.c_str());
 
     std::string section;

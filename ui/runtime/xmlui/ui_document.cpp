@@ -118,9 +118,16 @@ bool UIDocument::load_from_files(const char* xml_path, const char* css_path) {
     rules_ = cssRes.rules;
     TraceLog(LOG_DEBUG, "[ui] Loaded %zu CSS rules from: %s", rules_.size(), css_path);
 
+    // Load XML via VFS (supports both loose files and PAK archives)
+    const std::string xml = read_file_to_string(xml_path);
+    if (xml.empty()) {
+        TraceLog(LOG_ERROR, "[ui] Failed to read XML file: %s", xml_path);
+        return false;
+    }
+
     tinyxml2::XMLDocument doc;
-    if (doc.LoadFile(xml_path) != tinyxml2::XML_SUCCESS) {
-        TraceLog(LOG_ERROR, "[ui] Failed to load XML file: %s (error: %s)", xml_path, doc.ErrorStr());
+    if (doc.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS) {
+        TraceLog(LOG_ERROR, "[ui] Failed to parse XML file: %s (error: %s)", xml_path, doc.ErrorStr());
         return false;
     }
 

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <sstream>
 #include <vector>
 
 namespace shared::maps {
@@ -34,7 +35,17 @@ bool read_bytes(std::ifstream& in, void* data, std::size_t size) {
     return static_cast<bool>(in);
 }
 
+// Generic istream version for reading from memory.
+bool read_bytes(std::istream& in, void* data, std::size_t size) {
+    in.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(size));
+    return static_cast<bool>(in);
+}
+
 bool read_u8(std::ifstream& in, std::uint8_t* out) {
+    return read_bytes(in, out, sizeof(*out));
+}
+
+bool read_u8(std::istream& in, std::uint8_t* out) {
     return read_bytes(in, out, sizeof(*out));
 }
 
@@ -45,7 +56,25 @@ bool read_u16_le(std::ifstream& in, std::uint16_t* out) {
     return true;
 }
 
+bool read_u16_le(std::istream& in, std::uint16_t* out) {
+    unsigned char b[2] = {0, 0};
+    if (!read_bytes(in, b, sizeof(b))) return false;
+    *out = static_cast<std::uint16_t>(static_cast<std::uint16_t>(b[0]) | (static_cast<std::uint16_t>(b[1]) << 8));
+    return true;
+}
+
 bool read_u32_le(std::ifstream& in, std::uint32_t* out) {
+    unsigned char b[4] = {0, 0, 0, 0};
+    if (!read_bytes(in, b, sizeof(b))) return false;
+    *out = static_cast<std::uint32_t>(
+        (static_cast<std::uint32_t>(b[0]) << 0) |
+        (static_cast<std::uint32_t>(b[1]) << 8) |
+        (static_cast<std::uint32_t>(b[2]) << 16) |
+        (static_cast<std::uint32_t>(b[3]) << 24));
+    return true;
+}
+
+bool read_u32_le(std::istream& in, std::uint32_t* out) {
     unsigned char b[4] = {0, 0, 0, 0};
     if (!read_bytes(in, b, sizeof(b))) return false;
     *out = static_cast<std::uint32_t>(
@@ -64,6 +93,14 @@ bool read_f32_le(std::ifstream& in, float* out) {
     return true;
 }
 
+bool read_f32_le(std::istream& in, float* out) {
+    std::uint32_t u = 0;
+    if (!read_u32_le(in, &u)) return false;
+    static_assert(sizeof(float) == sizeof(std::uint32_t));
+    std::memcpy(out, &u, sizeof(float));
+    return true;
+}
+
 bool read_i32_le(std::ifstream& in, std::int32_t* out) {
     std::uint32_t u = 0;
     if (!read_u32_le(in, &u)) return false;
@@ -71,7 +108,26 @@ bool read_i32_le(std::ifstream& in, std::int32_t* out) {
     return true;
 }
 
+bool read_i32_le(std::istream& in, std::int32_t* out) {
+    std::uint32_t u = 0;
+    if (!read_u32_le(in, &u)) return false;
+    *out = static_cast<std::int32_t>(u);
+    return true;
+}
+
 bool read_string_u16(std::ifstream& in, std::string* out) {
+    std::uint16_t len = 0;
+    if (!read_u16_le(in, &len)) return false;
+    out->clear();
+    if (len == 0) return true;
+    std::vector<char> tmp;
+    tmp.resize(static_cast<std::size_t>(len));
+    if (!read_bytes(in, tmp.data(), tmp.size())) return false;
+    out->assign(tmp.data(), tmp.size());
+    return true;
+}
+
+bool read_string_u16(std::istream& in, std::string* out) {
     std::uint16_t len = 0;
     if (!read_u16_le(in, &len)) return false;
     out->clear();
@@ -564,6 +620,245 @@ bool read_rfmap(const std::filesystem::path& path,
                                 if (outError) *outError = "failed to skip section";
                                 return false;
                             }
+                        }
+                    }
+                }
+            }
+        } else {
+            in.clear();
+            in.seekg(posBefore);
+        }
+    }
+
+    *outMap = std::move(map);
+    return true;
+}
+
+bool read_rfmap_from_memory(const void* data,
+                            std::size_t size,
+                            MapTemplate* outMap,
+                            std::string* outError) {
+    if (!outMap) {
+        if (outError) *outError = "outMap is null";
+        return false;
+    }
+    if (!data || size == 0) {
+        if (outError) *outError = "empty data buffer";
+        return false;
+    }
+
+    // Create istringstream from memory buffer.
+    std::string buf(reinterpret_cast<const char*>(data), size);
+    std::istringstream in(buf, std::ios::binary);
+
+    std::array<unsigned char, 4> magic{};
+    if (!read_bytes(in, magic.data(), magic.size())) {
+        if (outError) *outError = "failed to read magic";
+        return false;
+    }
+    if (magic != kMagic) {
+        if (outError) *outError = "bad magic";
+        return false;
+    }
+
+    std::uint32_t formatVersion = 0;
+    if (!read_u32_le(in, &formatVersion)) {
+        if (outError) *outError = "failed to read formatVersion";
+        return false;
+    }
+    if (formatVersion == 0 || formatVersion > kFormatVersion) {
+        if (outError) *outError = "unsupported formatVersion";
+        return false;
+    }
+
+    MapTemplate map;
+    map.visualSettings = default_visual_settings();
+
+    if (!read_string_u16(in, &map.mapId)) {
+        if (outError) *outError = "failed to read mapId";
+        return false;
+    }
+    if (map.mapId.empty()) {
+        if (outError) *outError = "mapId is empty";
+        return false;
+    }
+
+    if (!read_u32_le(in, &map.version)) {
+        if (outError) *outError = "failed to read version";
+        return false;
+    }
+    if (map.version == 0) {
+        if (outError) *outError = "version must be > 0";
+        return false;
+    }
+
+    if (!read_i32_le(in, &map.bounds.chunkMinX) || !read_i32_le(in, &map.bounds.chunkMinZ) ||
+        !read_i32_le(in, &map.bounds.chunkMaxX) || !read_i32_le(in, &map.bounds.chunkMaxZ)) {
+        if (outError) *outError = "failed to read chunk bounds";
+        return false;
+    }
+    if (map.bounds.chunkMinX > map.bounds.chunkMaxX || map.bounds.chunkMinZ > map.bounds.chunkMaxZ) {
+        if (outError) *outError = "invalid chunk bounds";
+        return false;
+    }
+
+    if (!read_i32_le(in, &map.worldBoundary.chunkMinX) || !read_i32_le(in, &map.worldBoundary.chunkMinZ) ||
+        !read_i32_le(in, &map.worldBoundary.chunkMaxX) || !read_i32_le(in, &map.worldBoundary.chunkMaxZ)) {
+        if (outError) *outError = "failed to read world boundary";
+        return false;
+    }
+    if (map.worldBoundary.chunkMinX > map.worldBoundary.chunkMaxX || map.worldBoundary.chunkMinZ > map.worldBoundary.chunkMaxZ) {
+        if (outError) *outError = "invalid world boundary";
+        return false;
+    }
+
+    std::uint32_t chunkCount = 0;
+    if (!read_u32_le(in, &chunkCount)) {
+        if (outError) *outError = "failed to read chunkCount";
+        return false;
+    }
+
+    map.chunks.reserve(chunkCount);
+
+    for (std::uint32_t ci = 0; ci < chunkCount; ci++) {
+        std::int32_t cx = 0;
+        std::int32_t cz = 0;
+        std::uint32_t blockCount = 0;
+        if (!read_i32_le(in, &cx) || !read_i32_le(in, &cz) || !read_u32_le(in, &blockCount)) {
+            if (outError) *outError = "failed to read chunk header";
+            return false;
+        }
+
+        MapTemplate::ChunkData chunk;
+        chunk.blocks.fill(shared::voxel::BlockType::Air);
+
+        for (std::uint32_t bi = 0; bi < blockCount; bi++) {
+            std::uint8_t lx = 0;
+            std::uint16_t ly = 0;
+            std::uint8_t lz = 0;
+            std::uint8_t rawType = 0;
+            if (!read_u8(in, &lx) || !read_u16_le(in, &ly) || !read_u8(in, &lz) || !read_u8(in, &rawType)) {
+                if (outError) *outError = "failed to read block record";
+                return false;
+            }
+
+            if (lx >= static_cast<std::uint8_t>(shared::voxel::CHUNK_WIDTH) ||
+                lz >= static_cast<std::uint8_t>(shared::voxel::CHUNK_DEPTH) ||
+                ly >= static_cast<std::uint16_t>(shared::voxel::CHUNK_HEIGHT)) {
+                if (outError) *outError = "block record out of range";
+                return false;
+            }
+            if (!is_valid_block_type(rawType)) {
+                if (outError) *outError = "invalid blockType id";
+                return false;
+            }
+
+            const auto bt = static_cast<shared::voxel::BlockType>(rawType);
+            if (bt == shared::voxel::BlockType::Air) {
+                continue;
+            }
+
+            chunk.blocks[chunk_index(lx, ly, lz)] = bt;
+        }
+
+        map.chunks[{cx, cz}] = std::move(chunk);
+    }
+
+    // v2+: optional section table.
+    if (formatVersion >= 2) {
+        std::uint32_t sectionCount = 0;
+        const auto posBefore = in.tellg();
+        if (read_u32_le(in, &sectionCount)) {
+            for (std::uint32_t si = 0; si < sectionCount; si++) {
+                std::uint32_t tag = 0;
+                std::uint32_t sectionSize = 0;
+                if (!read_u32_le(in, &tag) || !read_u32_le(in, &sectionSize)) {
+                    if (outError) *outError = "failed to read section header";
+                    return false;
+                }
+
+                if (tag == kSectionTagVisualSettings) {
+                    if (sectionSize < kVisualSettingsPayloadMinSize) {
+                        if (outError) *outError = "VisualSettings section too small";
+                        return false;
+                    }
+
+                    std::uint8_t skybox = 0;
+                    std::uint8_t useMoon = 0;
+                    std::uint16_t reserved = 0;
+                    float timeOfDay = 12.0f;
+                    float sunI = 1.0f;
+                    float ambI = 0.25f;
+                    float temp = map.visualSettings.temperature;
+                    float hum = map.visualSettings.humidity;
+
+                    if (!read_u8(in, &skybox) || !read_u8(in, &useMoon) || !read_u16_le(in, &reserved) ||
+                        !read_f32_le(in, &timeOfDay) || !read_f32_le(in, &sunI) || !read_f32_le(in, &ambI)) {
+                        if (outError) *outError = "failed to read VisualSettings payload";
+                        return false;
+                    }
+
+                    if (sectionSize >= kVisualSettingsPayloadSizeV2) {
+                        if (!read_f32_le(in, &temp)) {
+                            if (outError) *outError = "failed to read VisualSettings temperature";
+                            return false;
+                        }
+                    }
+                    if (sectionSize >= kVisualSettingsPayloadSize) {
+                        if (!read_f32_le(in, &hum)) {
+                            if (outError) *outError = "failed to read VisualSettings humidity";
+                            return false;
+                        }
+                    }
+
+                    map.visualSettings.skyboxKind = static_cast<MapTemplate::SkyboxKind>(skybox);
+                    map.visualSettings.useMoon = (useMoon != 0);
+                    map.visualSettings.timeOfDayHours = timeOfDay;
+                    map.visualSettings.sunIntensity = sunI;
+                    map.visualSettings.ambientIntensity = ambI;
+                    map.visualSettings.temperature = temp;
+                    map.visualSettings.humidity = hum;
+
+                    const std::uint32_t consumed = (sectionSize >= kVisualSettingsPayloadSize) ? kVisualSettingsPayloadSize :
+                                                   (sectionSize >= kVisualSettingsPayloadSizeV2) ? kVisualSettingsPayloadSizeV2 :
+                                                   kVisualSettingsPayloadMinSize;
+                    const std::uint32_t remaining = sectionSize - consumed;
+                    if (remaining > 0) {
+                        in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip VisualSettings padding";
+                            return false;
+                        }
+                    }
+                } else if (tag == kSectionTagProtection) {
+                    if (sectionSize < kProtectionPayloadSize) {
+                        if (outError) *outError = "Protection section too small";
+                        return false;
+                    }
+
+                    for (std::size_t i = 0; i < map.breakableTemplateBlocks.size(); i++) {
+                        std::uint8_t v = 0;
+                        if (!read_u8(in, &v)) {
+                            if (outError) *outError = "failed to read Protection payload";
+                            return false;
+                        }
+                        map.breakableTemplateBlocks[i] = (v != 0);
+                    }
+
+                    const std::uint32_t remaining = sectionSize - kProtectionPayloadSize;
+                    if (remaining > 0) {
+                        in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip Protection padding";
+                            return false;
+                        }
+                    }
+                } else {
+                    if (sectionSize > 0) {
+                        in.seekg(static_cast<std::streamoff>(sectionSize), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip section";
+                            return false;
                         }
                     }
                 }

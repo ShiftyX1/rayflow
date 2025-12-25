@@ -1,0 +1,199 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "description": "Debug build with tests enabled",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "RAYFLOW_BUILD_TESTS": "ON",
+        "RAYFLOW_USE_PAK": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "description": "Optimized release build with PAK assets",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "RAYFLOW_BUILD_TESTS": "OFF",
+        "RAYFLOW_USE_PAK": "ON"
+      }
+    },
+    {
+      "name": "relwithdebinfo",
+      "inherits": "base",
+      "displayName": "Release with Debug Info",
+      "description": "Release build with debug symbols",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "RAYFLOW_BUILD_TESTS": "OFF",
+        "RAYFLOW_USE_PAK": "ON"
+      }
+    },
+    {
+      "name": "ci-linux",
+      "inherits": "debug",
+      "displayName": "CI Linux (GCC)",
+      "description": "CI build for Linux with GCC",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/linux-gcc.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "ci-linux-clang",
+      "inherits": "debug",
+      "displayName": "CI Linux (Clang)",
+      "description": "CI build for Linux with Clang",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/linux-clang.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "ci-macos",
+      "inherits": "debug",
+      "displayName": "CI macOS",
+      "description": "CI build for macOS with AppleClang",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/macos-clang.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ci-windows",
+      "inherits": "debug",
+      "displayName": "CI Windows (MSVC)",
+      "description": "CI build for Windows with MSVC",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/windows-msvc.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "ci-windows-mingw",
+      "inherits": "debug",
+      "displayName": "CI Windows (MinGW)",
+      "description": "CI build for Windows with MinGW/MSYS2",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/windows-mingw.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Build Debug",
+      "description": "Build debug configuration"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Build Release",
+      "description": "Build release configuration"
+    },
+    {
+      "name": "relwithdebinfo",
+      "configurePreset": "relwithdebinfo",
+      "displayName": "Build RelWithDebInfo"
+    },
+    {
+      "name": "ci-linux",
+      "configurePreset": "ci-linux",
+      "displayName": "Build CI Linux"
+    },
+    {
+      "name": "ci-linux-clang",
+      "configurePreset": "ci-linux-clang",
+      "displayName": "Build CI Linux (Clang)"
+    },
+    {
+      "name": "ci-macos",
+      "configurePreset": "ci-macos",
+      "displayName": "Build CI macOS"
+    },
+    {
+      "name": "ci-windows",
+      "configurePreset": "ci-windows",
+      "displayName": "Build CI Windows"
+    },
+    {
+      "name": "ci-windows-mingw",
+      "configurePreset": "ci-windows-mingw",
+      "displayName": "Build CI Windows (MinGW)"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Test Debug",
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "default"
+      }
+    },
+    {
+      "name": "ci-linux",
+      "configurePreset": "ci-linux",
+      "displayName": "Test CI Linux",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci-macos",
+      "configurePreset": "ci-macos",
+      "displayName": "Test CI macOS",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci-windows",
+      "configurePreset": "ci-windows",
+      "displayName": "Test CI Windows",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "packagePresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Package Release",
+      "generators": ["ZIP"]
+    }
+  ]
+}

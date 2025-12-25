@@ -1,4 +1,5 @@
 #include "block_registry.hpp"
+#include "../core/resources.hpp"
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
@@ -17,7 +18,7 @@ BlockRegistry::~BlockRegistry() {
 bool BlockRegistry::init(const std::string& atlas_path) {
     if (initialized_) return true;
     
-    atlas_texture_ = LoadTexture(atlas_path.c_str());
+    atlas_texture_ = resources::load_texture(atlas_path);
     if (atlas_texture_.id == 0) {
         TraceLog(LOG_ERROR, "Failed to load texture atlas: %s", atlas_path.c_str());
         return false;
@@ -27,13 +28,13 @@ bool BlockRegistry::init(const std::string& atlas_path) {
     atlas_tiles_per_row_ = atlas_texture_.width / atlas_tile_size_;
 
     // MV-2: optional colormaps for foliage/grass recolor.
-    grass_colormap_ = LoadImage("textures/grasscolor.png");
+    grass_colormap_ = resources::load_image("textures/grasscolor.png");
     grass_colormap_loaded_ = (grass_colormap_.data != nullptr);
     if (!grass_colormap_loaded_) {
         TraceLog(LOG_WARNING, "[voxel] grasscolor.png not found; grass recolor will use fallback");
     }
 
-    foliage_colormap_ = LoadImage("textures/foliagecolor.png");
+    foliage_colormap_ = resources::load_image("textures/foliagecolor.png");
     foliage_colormap_loaded_ = (foliage_colormap_.data != nullptr);
     if (!foliage_colormap_loaded_) {
         TraceLog(LOG_WARNING, "[voxel] foliagecolor.png not found; foliage recolor will use fallback");

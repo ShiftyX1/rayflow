@@ -12,7 +12,9 @@
 #include "../client/voxel/world.hpp"
 
 #include "../shared/maps/rfmap_io.hpp"
+#include "../shared/maps/runtime_paths.hpp"
 #include "../shared/transport/local_transport.hpp"
+#include "../shared/vfs/vfs.hpp"
 #include "../server/core/server.hpp"
 
 #include "../ui/raygui.h"
@@ -66,8 +68,7 @@ struct CreateParams {
 
 struct OpenParams {
     bool needsRefresh = true;
-    std::filesystem::path baseDir{"maps"};
-    std::vector<std::filesystem::path> files;
+    std::vector<shared::maps::MapFileEntry> entries;
     std::string listText;
     int scrollIndex = 0;
     int active = -1;
@@ -76,34 +77,14 @@ struct OpenParams {
 struct SkyboxParams {
     bool open = false;
     bool needsRefresh = true;
-    std::filesystem::path baseDir{"textures/skybox/panorama"};
     std::vector<std::uint8_t> ids; // list index -> skyboxKind value
     std::string listText;
     int scrollIndex = 0;
     int active = -1;
 };
 
-static std::filesystem::path choose_maps_dir() {
-    namespace fs = std::filesystem;
-    const fs::path candidates[] = {fs::path{"maps"}, fs::path{"../maps"}, fs::path{"../../maps"}};
-    for (const auto& p : candidates) {
-        if (fs::exists(p) && fs::is_directory(p)) return p;
-    }
-    return fs::path{"maps"};
-}
-
-static std::filesystem::path choose_skybox_panorama_dir() {
-    namespace fs = std::filesystem;
-    const fs::path candidates[] = {
-        fs::path{"textures/skybox/panorama"},
-        fs::path{"../textures/skybox/panorama"},
-        fs::path{"../../textures/skybox/panorama"},
-    };
-    for (const auto& p : candidates) {
-        if (fs::exists(p) && fs::is_directory(p)) return p;
-    }
-    return fs::path{"textures/skybox/panorama"};
-}
+// Skybox and maps are now loaded via VFS (list_dir) and user_maps_dir().
+// No need for choose_maps_dir() or choose_skybox_panorama_dir().
 
 static bool try_parse_panorama_sky_id(const std::string& filename, std::uint8_t& outId) {
     // Expected pattern: Panorama_Sky_01-512x512.png
@@ -122,9 +103,6 @@ static bool try_parse_panorama_sky_id(const std::string& filename, std::uint8_t&
 }
 
 static void refresh_skybox_params(SkyboxParams& p, std::uint8_t currentId) {
-    namespace fs = std::filesystem;
-
-    p.baseDir = choose_skybox_panorama_dir();
     p.ids.clear();
     p.listText.clear();
     p.scrollIndex = 0;
@@ -136,33 +114,30 @@ static void refresh_skybox_params(SkyboxParams& p, std::uint8_t currentId) {
 
     struct Entry {
         std::uint8_t id{0};
-        fs::path name;
+        std::string name;
     };
     std::vector<Entry> tmp;
 
-    std::error_code ec;
-    for (const auto& it : fs::directory_iterator(p.baseDir, ec)) {
-        if (ec) break;
-        if (!it.is_regular_file()) continue;
-        const fs::path file = it.path();
-        if (file.extension() != ".png") continue;
+    const auto files = shared::vfs::list_dir("textures/skybox/panorama");
+    for (const auto& fname : files) {
+        if (fname.empty() || fname.back() == '/') continue;
+        if (fname.size() < 4 || fname.substr(fname.size() - 4) != ".png") continue;
 
         std::uint8_t id = 0;
-        const std::string fname = file.filename().string();
         if (!try_parse_panorama_sky_id(fname, id)) continue;
         if (id == 0) continue;
-        tmp.push_back(Entry{id, file.filename()});
+        tmp.push_back(Entry{id, fname});
     }
 
     std::sort(tmp.begin(), tmp.end(), [](const Entry& a, const Entry& b) {
         if (a.id != b.id) return a.id < b.id;
-        return a.name.string() < b.name.string();
+        return a.name < b.name;
     });
 
     for (const auto& e : tmp) {
         p.ids.push_back(e.id);
         p.listText.push_back(';');
-        p.listText += e.name.string();
+        p.listText += e.name;
     }
 
     // Restore selection to current id if present.
@@ -175,32 +150,18 @@ static void refresh_skybox_params(SkyboxParams& p, std::uint8_t currentId) {
 }
 
 static void refresh_open_params(OpenParams& p) {
-    namespace fs = std::filesystem;
-
-    p.baseDir = choose_maps_dir();
-    p.files.clear();
+    p.entries = shared::maps::list_available_maps();
     p.listText.clear();
     p.scrollIndex = 0;
     p.active = -1;
 
-    std::vector<fs::path> tmp;
-    std::error_code ec;
-    for (const auto& it : fs::directory_iterator(p.baseDir, ec)) {
-        if (ec) break;
-        if (!it.is_regular_file()) continue;
-        const fs::path file = it.path();
-        if (file.extension() == ".rfmap") tmp.push_back(file.filename());
-    }
-
-    std::sort(tmp.begin(), tmp.end());
-    for (const auto& name : tmp) {
-        p.files.push_back(p.baseDir / name);
+    for (const auto& entry : p.entries) {
         if (!p.listText.empty()) p.listText.push_back(';');
-        p.listText += name.string();
+        p.listText += entry.filename;
     }
 
-    if (p.files.empty()) {
-        p.listText = "(no .rfmap files in maps/)";
+    if (p.entries.empty()) {
+        p.listText = "(no .rfmap files found)";
     }
 }
 
@@ -800,7 +761,7 @@ int main() {
                 editor_ui::VerticalLayout layout(win.x + 24, win.y + 56, win.width - 48, 8);
 
                 // Directory info
-                std::string dirLabel = "Directory: " + openParams.baseDir.string();
+                std::string dirLabel = "Directory: " + shared::maps::runtime_maps_dir().string();
                 editor_ui::DrawStyledLabel(layout.NextRow(20), dirLabel.c_str(), true);
 
                 layout.AddSpace(8);
@@ -812,9 +773,10 @@ int main() {
                 layout.AddSpace(8);
 
                 // Selection info
-                const bool hasSelection = (openParams.active >= 0) && (openParams.active < static_cast<int>(openParams.files.size()));
+                const bool hasSelection = (openParams.active >= 0) && (openParams.active < static_cast<int>(openParams.entries.size()));
                 if (hasSelection) {
-                    std::string selectedLabel = "Selected: " + openParams.files[static_cast<std::size_t>(openParams.active)].filename().string();
+                    const auto& entry = openParams.entries[static_cast<std::size_t>(openParams.active)];
+                    std::string selectedLabel = "Selected: " + entry.filename;
                     editor_ui::DrawStyledLabel(layout.NextRow(20), selectedLabel.c_str(), false);
                 } else {
                     editor_ui::DrawStyledLabel(layout.NextRow(20), "No file selected", true);
@@ -837,8 +799,11 @@ int main() {
                     if (hasSelection) {
                         shared::maps::MapTemplate map;
                         std::string err;
-                        const std::string path = openParams.files[static_cast<std::size_t>(openParams.active)].string();
-                        if (shared::maps::read_rfmap(path.c_str(), &map, &err)) {
+                        const auto& entry = openParams.entries[static_cast<std::size_t>(openParams.active)];
+                        const std::string pathStr = entry.path.string();
+                        
+                        // Maps are always loose files - read directly from filesystem.
+                        if (shared::maps::read_rfmap(pathStr.c_str(), &map, &err)) {
                             pendingLoadedMap = map;
                             visualSettings = map.visualSettings;
                             std::snprintf(createParams.mapId, sizeof(createParams.mapId), "%s", map.mapId.c_str());
@@ -857,7 +822,7 @@ int main() {
                         } else {
                             lastReject.reset();
                             lastExport.reset();
-                            TraceLog(LOG_WARNING, "[editor] failed to open map %s: %s", path.c_str(), err.c_str());
+                            TraceLog(LOG_WARNING, "[editor] failed to open map %s: %s", pathStr.c_str(), err.c_str());
                         }
                     }
                 }
@@ -1179,8 +1144,7 @@ int main() {
 
             editor_ui::VerticalLayout modalLayout(win.x + 24, win.y + 56, win.width - 48, 8);
 
-            std::string dirLabel = "Directory: " + skyboxParams.baseDir.string();
-            editor_ui::DrawStyledLabel(modalLayout.NextRow(20), dirLabel.c_str(), true);
+            editor_ui::DrawStyledLabel(modalLayout.NextRow(20), "Select panorama skybox:", true);
 
             modalLayout.AddSpace(4);
             editor_ui::StyledListView(modalLayout.NextRow(180), skyboxParams.listText.c_str(), &skyboxParams.scrollIndex, &skyboxParams.active);

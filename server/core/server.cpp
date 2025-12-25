@@ -776,8 +776,7 @@ void Server::handle_message_(shared::proto::Message& msg) {
             return;
         }
 
-        // Use the same runtime maps directory for exporting as we do for loading.
-        // This avoids editor/game running from different working directories producing/consuming different folders.
+        // Maps are always loose files in maps/ next to executable.
         const std::filesystem::path mapsDir = shared::maps::runtime_maps_dir();
         std::error_code ec;
         std::filesystem::create_directories(mapsDir, ec);
