@@ -214,6 +214,14 @@ function(rayflow_link_raylib TARGET_NAME)
     if(RAYLIB_FOUND_VIA STREQUAL "find_package" OR RAYLIB_FOUND_VIA STREQUAL "FetchContent")
         # Modern CMake target available
         target_link_libraries(${TARGET_NAME} PUBLIC raylib)
+        
+        # For static linking with vcpkg on Windows, we need to link glfw3 explicitly
+        if(WIN32)
+            find_package(glfw3 CONFIG QUIET)
+            if(glfw3_FOUND)
+                target_link_libraries(${TARGET_NAME} PUBLIC glfw)
+            endif()
+        endif()
     elseif(RAYLIB_FOUND_VIA STREQUAL "manual")
         # Use our imported target
         target_link_libraries(${TARGET_NAME} PUBLIC raylib_manual)
