@@ -8,13 +8,14 @@
 
 #include <raylib.h>
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#elif defined(__APPLE__)
+#if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #elif defined(__linux__)
 #include <unistd.h>
+#elif defined(_WIN32)
+extern "C" {
+__declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(void* hModule, char* lpFilename, unsigned long nSize);
+}
 #endif
 
 namespace core {
@@ -23,8 +24,9 @@ namespace {
 
 std::filesystem::path get_executable_dir() {
 #if defined(_WIN32)
-    char buffer[MAX_PATH] = {0};
-    GetModuleFileNameA(nullptr, buffer, MAX_PATH);
+    constexpr unsigned long kMaxPath = 260;  // MAX_PATH
+    char buffer[kMaxPath] = {0};
+    GetModuleFileNameA(nullptr, buffer, kMaxPath);
     return std::filesystem::path(buffer).parent_path();
 #elif defined(__APPLE__)
     char buffer[1024] = {0};
