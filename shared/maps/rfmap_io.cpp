@@ -30,6 +30,20 @@ constexpr std::uint32_t kVisualSettingsPayloadSize = 24;    // MV-3 payload (add
 constexpr std::uint32_t kSectionTagProtection = make_tag('P', 'R', 'O', '0');
 constexpr std::uint32_t kProtectionPayloadSize = static_cast<std::uint32_t>(static_cast<std::size_t>(::shared::voxel::BlockType::Count));
 
+// LUA0: Lua scripts embedded in the map.
+// Format:
+//   u32: script version
+//   u32: main script length
+//   bytes: main script content
+//   u16: module count
+//   for each module:
+//     u16: name length
+//     bytes: name
+//     u32: content length
+//     bytes: content
+constexpr std::uint32_t kSectionTagLuaScripts = make_tag('L', 'U', 'A', '0');
+constexpr std::uint32_t kLuaScriptsMinPayloadSize = 10;  // version(4) + mainLen(4) + moduleCount(2)
+
 bool read_bytes(std::ifstream& in, void* data, std::size_t size) {
     in.read(reinterpret_cast<char*>(data), static_cast<std::streamsize>(size));
     return static_cast<bool>(in);
@@ -338,7 +352,10 @@ bool write_rfmap(const std::filesystem::path& path,
     // Format v2+: u32 sectionCount, then [tag:u32][size:u32][payload...].
     // MV-1 requires VisualSettings section.
     // MT-1 adds an optional protection allow-list section.
-    if (!write_u32_le(out, 2)) {
+    // LUA0 adds optional Lua scripts section.
+    const bool hasScripts = !req.scriptData.empty();
+    const std::uint32_t sectionCount = hasScripts ? 3 : 2;
+    if (!write_u32_le(out, sectionCount)) {
         if (outError) *outError = "failed to write sectionCount";
         return false;
     }
@@ -374,6 +391,72 @@ bool write_rfmap(const std::filesystem::path& path,
         if (!write_u8(out, v)) {
             if (outError) *outError = "failed to write Protection payload";
             return false;
+        }
+    }
+
+    // LUA0: Lua scripts (optional)
+    if (hasScripts) {
+        // Calculate payload size
+        std::uint32_t luaPayloadSize = 4 + 4 + 2;  // version + mainLen + moduleCount
+        luaPayloadSize += static_cast<std::uint32_t>(req.scriptData.mainScript.size());
+        for (const auto& mod : req.scriptData.modules) {
+            luaPayloadSize += 2 + static_cast<std::uint32_t>(mod.name.size());  // nameLen + name
+            luaPayloadSize += 4 + static_cast<std::uint32_t>(mod.content.size()); // contentLen + content
+        }
+        
+        if (!write_u32_le(out, kSectionTagLuaScripts) || !write_u32_le(out, luaPayloadSize)) {
+            if (outError) *outError = "failed to write LuaScripts section header";
+            return false;
+        }
+        
+        // Script version
+        if (!write_u32_le(out, req.scriptData.version)) {
+            if (outError) *outError = "failed to write script version";
+            return false;
+        }
+        
+        // Main script
+        if (!write_u32_le(out, static_cast<std::uint32_t>(req.scriptData.mainScript.size()))) {
+            if (outError) *outError = "failed to write main script length";
+            return false;
+        }
+        if (!req.scriptData.mainScript.empty()) {
+            if (!write_bytes(out, req.scriptData.mainScript.data(), req.scriptData.mainScript.size())) {
+                if (outError) *outError = "failed to write main script content";
+                return false;
+            }
+        }
+        
+        // Modules
+        if (!write_u16_le(out, static_cast<std::uint16_t>(req.scriptData.modules.size()))) {
+            if (outError) *outError = "failed to write module count";
+            return false;
+        }
+        
+        for (const auto& mod : req.scriptData.modules) {
+            // Module name
+            if (!write_u16_le(out, static_cast<std::uint16_t>(mod.name.size()))) {
+                if (outError) *outError = "failed to write module name length";
+                return false;
+            }
+            if (!mod.name.empty()) {
+                if (!write_bytes(out, mod.name.data(), mod.name.size())) {
+                    if (outError) *outError = "failed to write module name";
+                    return false;
+                }
+            }
+            
+            // Module content
+            if (!write_u32_le(out, static_cast<std::uint32_t>(mod.content.size()))) {
+                if (outError) *outError = "failed to write module content length";
+                return false;
+            }
+            if (!mod.content.empty()) {
+                if (!write_bytes(out, mod.content.data(), mod.content.size())) {
+                    if (outError) *outError = "failed to write module content";
+                    return false;
+                }
+            }
         }
     }
 
@@ -587,39 +670,120 @@ bool read_rfmap(const std::filesystem::path& path,
                             return false;
                         }
                     }
-                } else {
-                    if (tag == kSectionTagProtection) {
-                        // MT-1 fixed-size payload; tolerate larger payloads by reading known prefix and skipping the rest.
-                        if (size < kProtectionPayloadSize) {
-                            if (outError) *outError = "Protection section too small";
+                } else if (tag == kSectionTagProtection) {
+                    // MT-1 fixed-size payload; tolerate larger payloads by reading known prefix and skipping the rest.
+                    if (size < kProtectionPayloadSize) {
+                        if (outError) *outError = "Protection section too small";
+                        return false;
+                    }
+
+                    for (std::size_t i = 0; i < map.breakableTemplateBlocks.size(); i++) {
+                        std::uint8_t v = 0;
+                        if (!read_u8(in, &v)) {
+                            if (outError) *outError = "failed to read Protection payload";
                             return false;
                         }
+                        map.breakableTemplateBlocks[i] = (v != 0);
+                    }
 
-                        for (std::size_t i = 0; i < map.breakableTemplateBlocks.size(); i++) {
-                            std::uint8_t v = 0;
-                            if (!read_u8(in, &v)) {
-                                if (outError) *outError = "failed to read Protection payload";
-                                return false;
-                            }
-                            map.breakableTemplateBlocks[i] = (v != 0);
+                    const std::uint32_t remaining = size - kProtectionPayloadSize;
+                    if (remaining > 0) {
+                        in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip Protection padding";
+                            return false;
                         }
-
-                        const std::uint32_t remaining = size - kProtectionPayloadSize;
-                        if (remaining > 0) {
-                            in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
-                            if (!in) {
-                                if (outError) *outError = "failed to skip Protection padding";
+                    }
+                } else if (tag == kSectionTagLuaScripts) {
+                    // LUA0: Lua scripts section
+                    if (size < kLuaScriptsMinPayloadSize) {
+                        if (outError) *outError = "LuaScripts section too small";
+                        return false;
+                    }
+                    
+                    const auto sectionStart = in.tellg();
+                    
+                    // Script version
+                    std::uint32_t scriptVersion = 0;
+                    if (!read_u32_le(in, &scriptVersion)) {
+                        if (outError) *outError = "failed to read script version";
+                        return false;
+                    }
+                    map.scriptData.version = scriptVersion;
+                    
+                    // Main script
+                    std::uint32_t mainLen = 0;
+                    if (!read_u32_le(in, &mainLen)) {
+                        if (outError) *outError = "failed to read main script length";
+                        return false;
+                    }
+                    
+                    if (mainLen > 0) {
+                        map.scriptData.mainScript.resize(mainLen);
+                        if (!read_bytes(in, map.scriptData.mainScript.data(), mainLen)) {
+                            if (outError) *outError = "failed to read main script content";
+                            return false;
+                        }
+                    }
+                    
+                    // Module count
+                    std::uint16_t moduleCount = 0;
+                    if (!read_u16_le(in, &moduleCount)) {
+                        if (outError) *outError = "failed to read module count";
+                        return false;
+                    }
+                    
+                    map.scriptData.modules.reserve(moduleCount);
+                    for (std::uint16_t mi = 0; mi < moduleCount; mi++) {
+                        scripting::MapScriptData::Module mod;
+                        
+                        // Module name
+                        std::uint16_t nameLen = 0;
+                        if (!read_u16_le(in, &nameLen)) {
+                            if (outError) *outError = "failed to read module name length";
+                            return false;
+                        }
+                        if (nameLen > 0) {
+                            mod.name.resize(nameLen);
+                            if (!read_bytes(in, mod.name.data(), nameLen)) {
+                                if (outError) *outError = "failed to read module name";
                                 return false;
                             }
                         }
-                    } else {
-                        // Skip unknown sections for forward compatibility.
-                        if (size > 0) {
-                            in.seekg(static_cast<std::streamoff>(size), std::ios::cur);
-                            if (!in) {
-                                if (outError) *outError = "failed to skip section";
+                        
+                        // Module content
+                        std::uint32_t contentLen = 0;
+                        if (!read_u32_le(in, &contentLen)) {
+                            if (outError) *outError = "failed to read module content length";
+                            return false;
+                        }
+                        if (contentLen > 0) {
+                            mod.content.resize(contentLen);
+                            if (!read_bytes(in, mod.content.data(), contentLen)) {
+                                if (outError) *outError = "failed to read module content";
                                 return false;
                             }
+                        }
+                        
+                        map.scriptData.modules.push_back(std::move(mod));
+                    }
+                    
+                    // Skip any remaining bytes (forward compatibility)
+                    const auto consumed = static_cast<std::uint32_t>(in.tellg() - sectionStart);
+                    if (consumed < size) {
+                        in.seekg(static_cast<std::streamoff>(size - consumed), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip LuaScripts padding";
+                            return false;
+                        }
+                    }
+                } else {
+                    // Skip unknown sections for forward compatibility.
+                    if (size > 0) {
+                        in.seekg(static_cast<std::streamoff>(size), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip section";
+                            return false;
                         }
                     }
                 }
@@ -850,6 +1014,89 @@ bool read_rfmap_from_memory(const void* data,
                         in.seekg(static_cast<std::streamoff>(remaining), std::ios::cur);
                         if (!in) {
                             if (outError) *outError = "failed to skip Protection padding";
+                            return false;
+                        }
+                    }
+                } else if (tag == kSectionTagLuaScripts) {
+                    // LUA0: Lua scripts section
+                    if (sectionSize < kLuaScriptsMinPayloadSize) {
+                        if (outError) *outError = "LuaScripts section too small";
+                        return false;
+                    }
+                    
+                    const auto sectionStart = in.tellg();
+                    
+                    // Script version
+                    std::uint32_t scriptVersion = 0;
+                    if (!read_u32_le(in, &scriptVersion)) {
+                        if (outError) *outError = "failed to read script version";
+                        return false;
+                    }
+                    map.scriptData.version = scriptVersion;
+                    
+                    // Main script
+                    std::uint32_t mainLen = 0;
+                    if (!read_u32_le(in, &mainLen)) {
+                        if (outError) *outError = "failed to read main script length";
+                        return false;
+                    }
+                    
+                    if (mainLen > 0) {
+                        map.scriptData.mainScript.resize(mainLen);
+                        if (!read_bytes(in, map.scriptData.mainScript.data(), mainLen)) {
+                            if (outError) *outError = "failed to read main script content";
+                            return false;
+                        }
+                    }
+                    
+                    // Module count
+                    std::uint16_t moduleCount = 0;
+                    if (!read_u16_le(in, &moduleCount)) {
+                        if (outError) *outError = "failed to read module count";
+                        return false;
+                    }
+                    
+                    map.scriptData.modules.reserve(moduleCount);
+                    for (std::uint16_t mi = 0; mi < moduleCount; mi++) {
+                        scripting::MapScriptData::Module mod;
+                        
+                        // Module name
+                        std::uint16_t nameLen = 0;
+                        if (!read_u16_le(in, &nameLen)) {
+                            if (outError) *outError = "failed to read module name length";
+                            return false;
+                        }
+                        if (nameLen > 0) {
+                            mod.name.resize(nameLen);
+                            if (!read_bytes(in, mod.name.data(), nameLen)) {
+                                if (outError) *outError = "failed to read module name";
+                                return false;
+                            }
+                        }
+                        
+                        // Module content
+                        std::uint32_t contentLen = 0;
+                        if (!read_u32_le(in, &contentLen)) {
+                            if (outError) *outError = "failed to read module content length";
+                            return false;
+                        }
+                        if (contentLen > 0) {
+                            mod.content.resize(contentLen);
+                            if (!read_bytes(in, mod.content.data(), contentLen)) {
+                                if (outError) *outError = "failed to read module content";
+                                return false;
+                            }
+                        }
+                        
+                        map.scriptData.modules.push_back(std::move(mod));
+                    }
+                    
+                    // Skip any remaining bytes (forward compatibility)
+                    const auto consumed = static_cast<std::uint32_t>(in.tellg() - sectionStart);
+                    if (consumed < sectionSize) {
+                        in.seekg(static_cast<std::streamoff>(sectionSize - consumed), std::ios::cur);
+                        if (!in) {
+                            if (outError) *outError = "failed to skip LuaScripts padding";
                             return false;
                         }
                     }

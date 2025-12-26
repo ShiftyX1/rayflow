@@ -6,6 +6,8 @@
 add_library(server_lib STATIC
     core/server.cpp
     voxel/terrain.cpp
+    scripting/script_engine.cpp
+    scripting/game_api.cpp
 )
 
 target_include_directories(server_lib PUBLIC

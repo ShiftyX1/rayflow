@@ -48,6 +48,7 @@ target_sources(client_lib PRIVATE
     ${CMAKE_SOURCE_DIR}/ui/runtime/ui_manager.cpp
     ${CMAKE_SOURCE_DIR}/ui/runtime/xmlui/css_lite.cpp
     ${CMAKE_SOURCE_DIR}/ui/runtime/xmlui/ui_document.cpp
+    ${CMAKE_SOURCE_DIR}/ui/scripting/ui_script_engine.cpp
 )
 
 # -----------------------------------------------------------------------------

@@ -9,6 +9,10 @@
 
 #include "../voxel/terrain.hpp"
 
+namespace server::scripting {
+class ScriptEngine;
+}
+
 namespace server::core {
 
 class Server {
@@ -44,6 +48,10 @@ private:
     void run_loop_();
     void tick_once_();
     void handle_message_(shared::proto::Message& msg);
+    
+    // Script engine integration
+    void init_script_engine_();
+    void process_script_commands_();
 
     std::shared_ptr<shared::transport::IEndpoint> endpoint_;
 
@@ -57,6 +65,9 @@ private:
 
     std::uint32_t worldSeed_{0};
     std::unique_ptr<server::voxel::Terrain> terrain_{};
+    
+    // Lua scripting engine for map scripts
+    std::unique_ptr<server::scripting::ScriptEngine> scriptEngine_{};
 
     bool hasMapTemplate_{false};
     std::string mapId_{};

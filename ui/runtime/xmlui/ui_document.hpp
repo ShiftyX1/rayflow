@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -17,12 +18,19 @@ namespace tinyxml2 {
 class XMLElement;
 }
 
+namespace ui::scripting {
+class UIScriptEngine;
+}
+
 namespace ui::xmlui {
 
 using OnClickCallback = std::function<void(const std::string& id)>;
 
 class UIDocument {
 public:
+    UIDocument();
+    ~UIDocument();
+    
     bool load_from_files(const char* xml_path, const char* css_path);
     void unload();
 
@@ -31,6 +39,12 @@ public:
     void render(const UIViewModel& vm);
 
     void set_on_click(OnClickCallback cb) { on_click_ = std::move(cb); }
+    
+    // Check if document has scripts
+    bool has_scripts() const { return scriptEngine_ != nullptr; }
+    
+    // Set logging callback for scripts
+    void set_script_log_callback(std::function<void(const std::string&)> callback);
 
 private:
     struct Node {
@@ -86,6 +100,15 @@ private:
     std::unordered_map<int, Font> font_cache_{};
 
     OnClickCallback on_click_{};
+    
+    // Lua scripting
+    std::unique_ptr<scripting::UIScriptEngine> scriptEngine_{};
+    std::function<void(const std::string&)> scriptLogCallback_{};
+    
+    void parse_script_element(tinyxml2::XMLElement* el);
+    void process_script_commands();
+    void notify_script_click(const std::string& elementId);
+    void notify_script_hover(const std::string& elementId, bool hovered);
 };
 
 } // namespace ui::xmlui

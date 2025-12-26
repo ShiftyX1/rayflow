@@ -13,6 +13,7 @@
 #include "../../shared/constants.hpp"
 #include "../../shared/maps/rfmap_io.hpp"
 #include "../../shared/maps/runtime_paths.hpp"
+#include "../scripting/script_engine.hpp"
 
 namespace server::core {
 
@@ -286,6 +287,20 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options o
             hasMapTemplate_ = true;
             mapId_ = map.mapId;
             mapVersion_ = map.version;
+            
+            if (map.has_scripts()) {
+                init_script_engine_();
+                if (scriptEngine_) {
+                    auto result = scriptEngine_->load_map_scripts(map.scriptData);
+                    if (result) {
+                        logf(serverTick_, "init", "loaded map scripts (main: %zu bytes, modules: %zu)",
+                             map.scriptData.mainScript.size(), map.scriptData.modules.size());
+                    } else {
+                        logf(serverTick_, "init", "failed to load map scripts: %s", result.error.c_str());
+                    }
+                }
+            }
+            
             terrain_->set_map_template(std::move(map));
             logf(serverTick_, "init", "loaded map template: %s (mapId=%s version=%u)",
                  path.generic_string().c_str(), mapId_.c_str(), mapVersion_);
@@ -422,6 +437,11 @@ void Server::tick_once_() {
             logf(serverTick_, "move", "pos=(%.2f,%.2f,%.2f) vel=(%.2f,%.2f,%.2f) onGround=%d", px_, py_, pz_, vx_, vy_, vz_, onGround_ ? 1 : 0);
         }
 
+        if (scriptEngine_ && scriptEngine_->has_scripts()) {
+            scriptEngine_->update(dt);
+            process_script_commands_();
+        }
+
         // Periodic snapshot (every tick for now; can be throttled later)
         shared::proto::StateSnapshot snap;
         snap.serverTick = serverTick_;
@@ -507,6 +527,10 @@ void Server::handle_message_(shared::proto::Message& msg) {
 
         joined_ = true;
 
+        if (scriptEngine_ && scriptEngine_->has_scripts()) {
+            scriptEngine_->on_player_join(playerId_);
+        }
+
         shared::proto::JoinAck ack;
         ack.playerId = playerId_;
         logf(serverTick_, "tx", "JoinAck playerId=%u", ack.playerId);
@@ -586,6 +610,10 @@ void Server::handle_message_(shared::proto::Message& msg) {
         }
 
         terrain_->break_player_block(req.x, req.y, req.z);
+
+        if (scriptEngine_ && scriptEngine_->has_scripts()) {
+            scriptEngine_->on_block_break(playerId_, req.x, req.y, req.z, static_cast<int>(cur));
+        }
 
         shared::proto::BlockBroken ev;
         ev.x = req.x;
@@ -670,6 +698,10 @@ void Server::handle_message_(shared::proto::Message& msg) {
         }
 
         terrain_->place_player_block(req.x, req.y, req.z, req.blockType);
+
+        if (scriptEngine_ && scriptEngine_->has_scripts()) {
+            scriptEngine_->on_block_place(playerId_, req.x, req.y, req.z, static_cast<int>(req.blockType));
+        }
 
         shared::proto::BlockPlaced ev;
         ev.x = req.x;
@@ -863,6 +895,81 @@ void Server::handle_message_(shared::proto::Message& msg) {
         logf(serverTick_, "tx", "ExportResult seq=%u ok=1 path=%s", result.seq, result.path.c_str());
         endpoint_->send(std::move(result));
         return;
+    }
+}
+
+void Server::init_script_engine_() {
+    scriptEngine_ = std::make_unique<server::scripting::ScriptEngine>();
+    
+    if (!scriptEngine_->init()) {
+        logf(serverTick_, "init", "failed to initialize script engine");
+        scriptEngine_.reset();
+        return;
+    }
+    
+    scriptEngine_->set_log_callback([this](const std::string& msg) {
+        logf(serverTick_, "script", "%s", msg.c_str());
+    });
+    
+    logf(serverTick_, "init", "script engine initialized");
+}
+
+void Server::process_script_commands_() {
+    if (!scriptEngine_) return;
+    
+    auto commands = scriptEngine_->take_commands();
+    for (const auto& cmd : commands) {
+        switch (cmd.type) {
+            case scripting::ScriptCommand::Type::Broadcast:
+                // TODO: Implement broadcast message to all clients
+                logf(serverTick_, "script", "broadcast: %s", cmd.stringParam.c_str());
+                break;
+                
+            case scripting::ScriptCommand::Type::SetBlock: {
+                const int x = cmd.intParams[0];
+                const int y = cmd.intParams[1];
+                const int z = cmd.intParams[2];
+                const auto bt = static_cast<shared::voxel::BlockType>(cmd.intParams[3]);
+                
+                terrain_->set_block(x, y, z, bt);
+                
+                if (bt == shared::voxel::BlockType::Air) {
+                    shared::proto::BlockBroken ev;
+                    ev.x = x;
+                    ev.y = y;
+                    ev.z = z;
+                    endpoint_->send(std::move(ev));
+                } else {
+                    shared::proto::BlockPlaced ev;
+                    ev.x = x;
+                    ev.y = y;
+                    ev.z = z;
+                    ev.blockType = bt;
+                    endpoint_->send(std::move(ev));
+                }
+                break;
+            }
+            
+            case scripting::ScriptCommand::Type::EndRound:
+                // TODO: Implement round end logic
+                logf(serverTick_, "script", "end_round: team=%d", cmd.intParams[0]);
+                break;
+                
+            case scripting::ScriptCommand::Type::TeleportPlayer:
+                // TODO: Implement player teleport
+                break;
+                
+            case scripting::ScriptCommand::Type::SetPlayerHealth:
+                // TODO: Implement player health
+                break;
+                
+            case scripting::ScriptCommand::Type::SpawnEntity:
+                // TODO: Implement entity spawning
+                break;
+                
+            default:
+                break;
+        }
     }
 }
 

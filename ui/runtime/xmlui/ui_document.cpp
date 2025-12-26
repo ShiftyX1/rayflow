@@ -7,8 +7,12 @@
 
 #include "../ui_view_model.hpp"
 #include "../../../client/core/resources.hpp"
+#include "../../scripting/ui_script_engine.hpp"
 
 namespace ui::xmlui {
+
+UIDocument::UIDocument() = default;
+UIDocument::~UIDocument() = default;
 
 static std::string read_file_to_string(const char* path) {
     // Use VFS-aware resource loading.
@@ -143,7 +147,13 @@ bool UIDocument::load_from_files(const char* xml_path, const char* css_path) {
     root_.children.clear();
 
     for (auto* child = rootEl->FirstChildElement(); child; child = child->NextSiblingElement()) {
-        root_.children.push_back(parse_node_rec(child));
+        const char* childName = child->Name();
+        if (childName && std::string(childName) == "script") {
+            // Parse script element
+            parse_script_element(child);
+        } else {
+            root_.children.push_back(parse_node_rec(child));
+        }
     }
 
     apply_styles_rec(root_);
@@ -155,6 +165,12 @@ void UIDocument::unload() {
     loaded_ = false;
     root_ = {};
     rules_.clear();
+
+    // Unload script engine
+    if (scriptEngine_) {
+        scriptEngine_->unload();
+        scriptEngine_.reset();
+    }
 
     for (auto& [_, ref] : texture_cache_) {
         if (ref.tex.id != 0) {
@@ -320,16 +336,28 @@ bool UIDocument::update_node_rec(Node& node, Vector2 mouse_pos, bool mouse_down,
 
     // Check if mouse is over this node
     const bool over = CheckCollisionPointRec(mouse_pos, node.computed_rect);
+    
+    // Notify script about hover state changes
+    if (over != node.hovered && !node.id.empty()) {
+        notify_script_hover(node.id, over);
+    }
     node.hovered = over;
 
     if (node.type == "Button" && over) {
         captured = true;
         node.pressed = mouse_down;
 
-        if (mouse_pressed && on_click_) {
-            const std::string click_id = node.action.empty() ? node.id : node.action;
-            if (!click_id.empty()) {
-                on_click_(click_id);
+        if (mouse_pressed) {
+            // Notify C++ callback
+            if (on_click_) {
+                const std::string click_id = node.action.empty() ? node.id : node.action;
+                if (!click_id.empty()) {
+                    on_click_(click_id);
+                }
+            }
+            // Notify script engine
+            if (!node.id.empty()) {
+                notify_script_click(node.id);
             }
         }
     }
@@ -351,6 +379,7 @@ bool UIDocument::update(const UIViewModel& vm, Vector2 mouse_pos, bool mouse_dow
 
     // Run layout pass
     Rectangle full_screen{0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height)};
+    (void)full_screen;
     for (auto& child : root_.children) {
         int w = child.style.width.has_value() ? *child.style.width : measure_content_width(child);
         int h = child.style.height.has_value() ? *child.style.height : measure_content_height(child);
@@ -364,6 +393,12 @@ bool UIDocument::update(const UIViewModel& vm, Vector2 mouse_pos, bool mouse_dow
         if (update_node_rec(child, mouse_pos, mouse_down, mouse_pressed)) {
             captured = true;
         }
+    }
+
+    // Update script engine (for animations, timers, etc.)
+    if (scriptEngine_ && scriptEngine_->has_scripts()) {
+        scriptEngine_->update(GetFrameTime());
+        process_script_commands();
     }
 
     return captured;
@@ -544,6 +579,98 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
         const Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
         const Rectangle dst{static_cast<float>(x), static_cast<float>(y), static_cast<float>(heartW), static_cast<float>(heartH)};
         DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
+    }
+}
+
+void UIDocument::parse_script_element(tinyxml2::XMLElement* el) {
+    // Get inline script content
+    const char* text = el->GetText();
+    if (!text || std::string(text).empty()) {
+        return;
+    }
+    
+    // Create script engine if not exists
+    if (!scriptEngine_) {
+        scriptEngine_ = std::make_unique<scripting::UIScriptEngine>();
+        if (!scriptEngine_->init()) {
+            TraceLog(LOG_ERROR, "[ui] Failed to initialize UI script engine");
+            scriptEngine_.reset();
+            return;
+        }
+        
+        if (scriptLogCallback_) {
+            scriptEngine_->set_log_callback(scriptLogCallback_);
+        }
+    }
+    
+    // Load the script
+    auto result = scriptEngine_->load_script(text, "inline_script");
+    if (!result) {
+        TraceLog(LOG_ERROR, "[ui] Failed to load UI script: %s", result.error.c_str());
+    }
+}
+
+void UIDocument::process_script_commands() {
+    if (!scriptEngine_) return;
+    
+    auto commands = scriptEngine_->take_commands();
+    for (const auto& cmd : commands) {
+        switch (cmd.type) {
+            case scripting::UICommand::Type::Show:
+                // TODO: Implement show element
+                TraceLog(LOG_DEBUG, "[ui script] show: %s", cmd.elementId.c_str());
+                break;
+                
+            case scripting::UICommand::Type::Hide:
+                // TODO: Implement hide element
+                TraceLog(LOG_DEBUG, "[ui script] hide: %s", cmd.elementId.c_str());
+                break;
+                
+            case scripting::UICommand::Type::SetText:
+                // TODO: Implement set text
+                TraceLog(LOG_DEBUG, "[ui script] set_text: %s = %s", 
+                         cmd.elementId.c_str(), cmd.stringParam.c_str());
+                break;
+                
+            case scripting::UICommand::Type::SetStyle:
+                // TODO: Implement set style
+                TraceLog(LOG_DEBUG, "[ui script] set_style: %s.%s = %s", 
+                         cmd.elementId.c_str(), cmd.stringParam.c_str(), cmd.stringParam2.c_str());
+                break;
+                
+            case scripting::UICommand::Type::PlaySound:
+                // TODO: Implement play sound
+                TraceLog(LOG_DEBUG, "[ui script] play_sound: %s", cmd.stringParam.c_str());
+                break;
+                
+            case scripting::UICommand::Type::Animate:
+                // TODO: Implement animation
+                TraceLog(LOG_DEBUG, "[ui script] animate: %s (%s, %.2f)", 
+                         cmd.elementId.c_str(), cmd.stringParam.c_str(), cmd.floatParams[0]);
+                break;
+                
+            default:
+                break;
+        }
+    }
+}
+
+void UIDocument::notify_script_click(const std::string& elementId) {
+    if (scriptEngine_ && scriptEngine_->has_scripts()) {
+        scriptEngine_->on_click(elementId);
+    }
+}
+
+void UIDocument::notify_script_hover(const std::string& elementId, bool hovered) {
+    if (scriptEngine_ && scriptEngine_->has_scripts()) {
+        scriptEngine_->on_hover(elementId, hovered);
+    }
+}
+
+void UIDocument::set_script_log_callback(std::function<void(const std::string&)> callback) {
+    scriptLogCallback_ = std::move(callback);
+    if (scriptEngine_) {
+        scriptEngine_->set_log_callback(scriptLogCallback_);
     }
 }
 

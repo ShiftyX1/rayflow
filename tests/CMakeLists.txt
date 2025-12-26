@@ -36,10 +36,8 @@ target_include_directories(rayflow_tests_shared PRIVATE
 
 target_link_libraries(rayflow_tests_shared PRIVATE
     Catch2::Catch2WithMain
+    shared_lib
 )
-
-# Link shared_lib but don't inherit its interface includes (we set them explicitly above)
-target_link_libraries(rayflow_tests_shared PRIVATE $<TARGET_FILE:shared_lib>)
 
 # ==============================================================================
 # Server Layer Tests (no raylib dependency)
@@ -63,8 +61,9 @@ target_include_directories(rayflow_tests_server PRIVATE
 
 target_link_libraries(rayflow_tests_server PRIVATE
     Catch2::Catch2WithMain
+    server_lib
+    shared_lib
 )
-target_link_libraries(rayflow_tests_server PRIVATE $<TARGET_FILE:server_lib> $<TARGET_FILE:shared_lib>)
 
 # ==============================================================================
 # Client Layer Tests (mocked rendering, no actual raylib calls)
@@ -85,8 +84,8 @@ target_include_directories(rayflow_tests_client PRIVATE
 
 target_link_libraries(rayflow_tests_client PRIVATE
     Catch2::Catch2WithMain
+    shared_lib
 )
-target_link_libraries(rayflow_tests_client PRIVATE $<TARGET_FILE:shared_lib>)
 
 # ==============================================================================
 # Integration Tests (full client-server via LocalTransport)
@@ -106,8 +105,9 @@ target_include_directories(rayflow_tests_integration PRIVATE
 
 target_link_libraries(rayflow_tests_integration PRIVATE
     Catch2::Catch2WithMain
+    server_lib
+    shared_lib
 )
-target_link_libraries(rayflow_tests_integration PRIVATE $<TARGET_FILE:server_lib> $<TARGET_FILE:shared_lib>)
 
 # ==============================================================================
 # CTest Integration

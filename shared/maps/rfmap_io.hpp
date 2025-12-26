@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../voxel/block.hpp"
+#include "../scripting/script_utils.hpp"
 
 #include <array>
 #include <cstdint>
@@ -79,9 +80,16 @@ struct MapTemplate {
     // MV-1: render-only visual settings.
     VisualSettings visualSettings{};
 
+    // LUA0: Lua scripts embedded in the map (for custom game logic).
+    scripting::MapScriptData scriptData{};
+
     const ChunkData* find_chunk(std::int32_t cx, std::int32_t cz) const {
         const auto it = chunks.find({cx, cz});
         return (it == chunks.end()) ? nullptr : &it->second;
+    }
+    
+    bool has_scripts() const {
+        return !scriptData.empty();
     }
 };
 
@@ -109,6 +117,9 @@ struct ExportRequest {
 
     // MV-1: render-only environment settings to embed in the exported template.
     MapTemplate::VisualSettings visualSettings{default_visual_settings()};
+    
+    // LUA0: Lua scripts to embed in the map.
+    scripting::MapScriptData scriptData{};
 };
 
 // Writes a sparse `.rfmap` template.
