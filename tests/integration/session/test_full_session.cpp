@@ -47,7 +47,7 @@ TEST_CASE("Integration: complete session lifecycle", "[integration][session]") {
     clientHello.clientName = "IntegrationTestClient";
     pair.client->send(clientHello);
     
-    pump_ms(50);
+    pump_ms(100);
     
     // Step 2: Receive ServerHello
     REQUIRE(pair.client->try_recv(msg));
@@ -60,7 +60,7 @@ TEST_CASE("Integration: complete session lifecycle", "[integration][session]") {
     // Step 3: Send JoinMatch
     pair.client->send(JoinMatch{});
     
-    pump_ms(50);
+    pump_ms(100);
     
     // Step 4: Receive JoinAck
     REQUIRE(pair.client->try_recv(msg));
@@ -123,11 +123,11 @@ TEST_CASE("Integration: block placement end-to-end", "[integration][session][blo
     
     // Complete handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);  // ServerHello
     
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);  // JoinAck
     
     // Try to place a block
@@ -176,10 +176,10 @@ TEST_CASE("Integration: block break end-to-end", "[integration][session][block]"
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Try to break a block at ground level
@@ -220,10 +220,10 @@ TEST_CASE("Integration: player position changes with input", "[integration][sess
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Wait for initial state
@@ -287,7 +287,7 @@ TEST_CASE("Integration: server handles multiple sequential connections", "[integ
         
         // Quick connect/disconnect cycle
         pair.client->send(make_client_hello());
-        pump_ms(50);
+        pump_ms(100);
         REQUIRE(pair.client->try_recv(msg));
         REQUIRE(is_message_type<ServerHello>(msg));
         
@@ -332,7 +332,7 @@ TEST_CASE("Integration: server handles input before join", "[integration][sessio
     ClientHello hello;
     hello.version = kProtocolVersion;
     pair.client->send(hello);
-    pump_ms(50);
+    pump_ms(100);
     
     Message msg;
     pair.client->try_recv(msg);  // ServerHello

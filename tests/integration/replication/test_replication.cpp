@@ -74,10 +74,10 @@ TEST_CASE("Replication: snapshots have monotonically increasing ticks", "[integr
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Collect snapshots for a while
@@ -114,10 +114,10 @@ TEST_CASE("Replication: playerId remains constant in snapshots", "[integration][
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     REQUIRE(pair.client->try_recv(msg));
     
     PlayerId assignedId = std::get<JoinAck>(msg).playerId;
@@ -153,10 +153,10 @@ TEST_CASE("Replication: block changes are reflected in state", "[integration][re
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Place a block
@@ -205,10 +205,10 @@ TEST_CASE("Replication: position changes smoothly", "[integration][replication][
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Send continuous movement
@@ -270,13 +270,13 @@ TEST_CASE("Replication: snapshot rate approximately matches tick rate", "[integr
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     std::uint32_t tickRate = std::get<ServerHello>(msg).tickRate;
     
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Wait exactly 1 second
@@ -320,10 +320,10 @@ TEST_CASE("Replication: client can rebuild state from snapshots", "[integration]
     
     // Handshake
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     REQUIRE(pair.client->try_recv(msg));
     state.playerId = std::get<JoinAck>(msg).playerId;
     

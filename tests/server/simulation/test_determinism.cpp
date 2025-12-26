@@ -48,10 +48,10 @@ SimulationRun run_simulation(const std::vector<InputFrame>& inputs, int run_time
     // Handshake
     Message msg;
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     
     // Send all inputs

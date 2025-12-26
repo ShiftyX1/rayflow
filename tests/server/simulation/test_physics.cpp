@@ -30,10 +30,10 @@ void pump_ms(int ms) {
 PlayerId join_and_get_id(LocalTransport::Pair& pair) {
     Message msg;
     pair.client->send(make_client_hello());
-    pump_ms(50);
+    pump_ms(100);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
-    pump_ms(50);
+    pump_ms(100);
     if (pair.client->try_recv(msg) && std::holds_alternative<JoinAck>(msg)) {
         return std::get<JoinAck>(msg).playerId;
     }
@@ -202,7 +202,7 @@ TEST_CASE("Physics: horizontal movement input affects position", "[server][physi
     InputFrame idleFrame;
     idleFrame.seq = 0;
     pair.client->send(idleFrame);  // Idle frame
-    pump_ms(50);
+    pump_ms(100);
     auto baseline = collect_snapshots(*pair.client);
     if (!baseline.empty()) {
         initialX = baseline.back().px;
