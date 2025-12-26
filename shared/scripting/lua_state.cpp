@@ -163,22 +163,22 @@ void LuaState::apply_sandbox(const ScriptLimits& limits) {
     auto& lua = impl_->lua;
     
     // Remove dangerous libraries/functions
-    lua["os"] = sol::nil;
-    lua["io"] = sol::nil;
-    lua["debug"] = sol::nil;
-    lua["loadfile"] = sol::nil;
-    lua["dofile"] = sol::nil;
-    lua["load"] = sol::nil;       // Can load bytecode
-    lua["loadstring"] = sol::nil;
-    lua["require"] = sol::nil;    // File system access
-    lua["package"] = sol::nil;
-    lua["collectgarbage"] = sol::nil;  // Can cause DoS
-    lua["rawget"] = sol::nil;
-    lua["rawset"] = sol::nil;
-    lua["rawequal"] = sol::nil;
-    lua["setmetatable"] = sol::nil;  // Prevent metatable manipulation
-    lua["getfenv"] = sol::nil;
-    lua["setfenv"] = sol::nil;
+    lua["os"] = sol::lua_nil;
+    lua["io"] = sol::lua_nil;
+    lua["debug"] = sol::lua_nil;
+    lua["loadfile"] = sol::lua_nil;
+    lua["dofile"] = sol::lua_nil;
+    lua["load"] = sol::lua_nil;       // Can load bytecode
+    lua["loadstring"] = sol::lua_nil;
+    lua["require"] = sol::lua_nil;    // File system access
+    lua["package"] = sol::lua_nil;
+    lua["collectgarbage"] = sol::lua_nil;  // Can cause DoS
+    lua["rawget"] = sol::lua_nil;
+    lua["rawset"] = sol::lua_nil;
+    lua["rawequal"] = sol::lua_nil;
+    lua["setmetatable"] = sol::lua_nil;  // Prevent metatable manipulation
+    lua["getfenv"] = sol::lua_nil;
+    lua["setfenv"] = sol::lua_nil;
     
     // Keep safe functions:
     // - print (will be overridden by API)
