@@ -12,7 +12,7 @@ struct lua_State;
 
 namespace sol {
 class state;
-class protected_function_result;
+struct protected_function_result;  // sol2 declares this as struct
 }
 
 namespace shared::scripting {

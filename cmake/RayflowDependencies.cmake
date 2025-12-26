@@ -15,7 +15,9 @@ set(FETCHCONTENT_QUIET OFF)
 set(RAYFLOW_RAYLIB_VERSION "5.5" CACHE STRING "raylib version to use")
 set(RAYFLOW_ENTT_VERSION "v3.13.2" CACHE STRING "EnTT version to use")
 set(RAYFLOW_TINYXML2_VERSION "10.0.0" CACHE STRING "tinyxml2 version to use")
-set(RAYFLOW_SOL2_VERSION "v3.3.1" CACHE STRING "sol2 version to use")
+# Note: v3.3.1 has a bug with optional_implementation.hpp on some compilers
+# Using develop branch which has the fix
+set(RAYFLOW_SOL2_VERSION "develop" CACHE STRING "sol2 version to use")
 
 # -----------------------------------------------------------------------------
 # EnTT (Entity Component System)
