@@ -94,14 +94,14 @@ TEST_CASE("Determinism: identical inputs produce similar trajectory", "[server][
     // Create identical input sequence
     std::vector<InputFrame> inputs;
     for (std::uint32_t i = 0; i < 10; ++i) {
-        inputs.push_back(InputFrame{
-            .seq = i,
-            .moveX = 0.5f,
-            .moveY = 0.5f,
-            .yaw = 0.0f,
-            .pitch = 0.0f,
-            .jump = (i == 3)  // Jump at seq 3
-        });
+        InputFrame frame;
+        frame.seq = i;
+        frame.moveX = 0.5f;
+        frame.moveY = 0.5f;
+        frame.yaw = 0.0f;
+        frame.pitch = 0.0f;
+        frame.jump = (i == 3);  // Jump at seq 3
+        inputs.push_back(frame);
     }
     
     // Run twice
