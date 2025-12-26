@@ -20,8 +20,6 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - '.github/workflows/**'
-    paths-ignore:
-      - '**/*.md'
   pull_request:
     branches: [main, master]
     paths:
@@ -36,8 +34,6 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - '.github/workflows/**'
-    paths-ignore:
-      - '**/*.md'
   workflow_dispatch:
 
 # Skip if running on Gitea (mirror repo uses GitHub Actions only)
