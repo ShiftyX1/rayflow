@@ -41,10 +41,10 @@ TEST_CASE("Server responds to ClientHello with ServerHello", "[server][session]"
     server.start();
     
     // Client sends hello
-    pair.client->send(ClientHello{
-        .version = kProtocolVersion,
-        .clientName = "TestClient"
-    });
+    ClientHello clientHello;
+    clientHello.version = kProtocolVersion;
+    clientHello.clientName = "TestClient";
+    pair.client->send(clientHello);
     
     pump_server_briefly();
     
@@ -53,9 +53,9 @@ TEST_CASE("Server responds to ClientHello with ServerHello", "[server][session]"
     REQUIRE(pair.client->try_recv(msg));
     REQUIRE(std::holds_alternative<ServerHello>(msg));
     
-    auto& hello = std::get<ServerHello>(msg);
-    REQUIRE(hello.acceptedVersion == kProtocolVersion);
-    REQUIRE(hello.tickRate == 30);
+    auto& serverHello = std::get<ServerHello>(msg);
+    REQUIRE(serverHello.acceptedVersion == kProtocolVersion);
+    REQUIRE(serverHello.tickRate == 30);
     
     server.stop();
 }
@@ -107,10 +107,10 @@ TEST_CASE("Full session: Hello -> ServerHello -> Join -> JoinAck -> Snapshots", 
     Message msg;
     
     // Step 1: ClientHello
-    pair.client->send(ClientHello{
-        .version = kProtocolVersion,
-        .clientName = "IntegrationTest"
-    });
+    ClientHello helloMsg;
+    helloMsg.version = kProtocolVersion;
+    helloMsg.clientName = "IntegrationTest";
+    pair.client->send(helloMsg);
     pump_server_briefly();
     
     // Step 2: ServerHello
@@ -171,12 +171,12 @@ TEST_CASE("Server processes InputFrame after join", "[server][session][input]") 
     pair.client->try_recv(msg);  // JoinAck
     
     // Send input
-    pair.client->send(InputFrame{
-        .seq = 1,
-        .moveX = 1.0f,
-        .moveY = 0.0f,
-        .jump = false
-    });
+    InputFrame input;
+    input.seq = 1;
+    input.moveX = 1.0f;
+    input.moveY = 0.0f;
+    input.jump = false;
+    pair.client->send(input);
     
     pump_server_briefly(std::chrono::milliseconds(200));
     
