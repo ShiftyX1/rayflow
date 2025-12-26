@@ -5,6 +5,10 @@
 
 set(CMAKE_SYSTEM_NAME Windows)
 
+# Force MSVC compiler (avoid MinGW being picked up on CI)
+set(CMAKE_C_COMPILER "cl.exe")
+set(CMAKE_CXX_COMPILER "cl.exe")
+
 # MSVC is auto-detected, but we set some defaults
 
 # Use static runtime for easier distribution (no VCRUNTIME DLLs needed)

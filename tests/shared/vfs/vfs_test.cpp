@@ -4,6 +4,7 @@
 #include "vfs/archive_writer.hpp"
 #include "vfs/vfs.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
