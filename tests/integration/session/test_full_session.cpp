@@ -42,10 +42,10 @@ TEST_CASE("Integration: complete session lifecycle", "[integration][session]") {
     Message msg;
     
     // Step 1: Connect and send ClientHello
-    pair.client->send(ClientHello{
-        .version = kProtocolVersion,
-        .clientName = "IntegrationTestClient"
-    });
+    ClientHello clientHello;
+    clientHello.version = kProtocolVersion;
+    clientHello.clientName = "IntegrationTestClient";
+    pair.client->send(clientHello);
     
     pump_ms(50);
     
@@ -84,11 +84,11 @@ TEST_CASE("Integration: complete session lifecycle", "[integration][session]") {
     
     // Step 6: Send some inputs
     for (std::uint32_t i = 0; i < 10; ++i) {
-        pair.client->send(InputFrame{
-            .seq = i,
-            .moveX = 0.5f,
-            .moveY = 0.5f
-        });
+        InputFrame input;
+        input.seq = i;
+        input.moveX = 0.5f;
+        input.moveY = 0.5f;
+        pair.client->send(input);
     }
     
     pump_ms(200);
@@ -131,13 +131,13 @@ TEST_CASE("Integration: block placement end-to-end", "[integration][session][blo
     pair.client->try_recv(msg);  // JoinAck
     
     // Try to place a block
-    pair.client->send(TryPlaceBlock{
-        .seq = 100,
-        .x = 50,
-        .y = 80,
-        .z = 50,
-        .blockType = shared::voxel::BlockType::Stone
-    });
+    TryPlaceBlock placeCmd;
+    placeCmd.seq = 100;
+    placeCmd.x = 50;
+    placeCmd.y = 80;
+    placeCmd.z = 50;
+    placeCmd.blockType = shared::voxel::BlockType::Stone;
+    pair.client->send(placeCmd);
     
     pump_ms(200);
     
@@ -183,12 +183,12 @@ TEST_CASE("Integration: block break end-to-end", "[integration][session][block]"
     pair.client->try_recv(msg);
     
     // Try to break a block at ground level
-    pair.client->send(TryBreakBlock{
-        .seq = 200,
-        .x = 50,
-        .y = 60,
-        .z = 50
-    });
+    TryBreakBlock breakCmd;
+    breakCmd.seq = 200;
+    breakCmd.x = 50;
+    breakCmd.y = 60;
+    breakCmd.z = 50;
+    pair.client->send(breakCmd);
     
     pump_ms(200);
     
@@ -241,12 +241,12 @@ TEST_CASE("Integration: player position changes with input", "[integration][sess
     
     // Send movement input
     for (std::uint32_t i = 0; i < 30; ++i) {
-        pair.client->send(InputFrame{
-            .seq = i,
-            .moveX = 1.0f,
-            .moveY = 0.0f,
-            .yaw = 0.0f
-        });
+        InputFrame input;
+        input.seq = i;
+        input.moveX = 1.0f;
+        input.moveY = 0.0f;
+        input.yaw = 0.0f;
+        pair.client->send(input);
         pump_ms(33);  // ~30 fps
     }
     

@@ -160,13 +160,13 @@ TEST_CASE("Replication: block changes are reflected in state", "[integration][re
     pair.client->try_recv(msg);
     
     // Place a block
-    pair.client->send(TryPlaceBlock{
-        .seq = 1,
-        .x = 100,
-        .y = 64,
-        .z = 100,
-        .blockType = shared::voxel::BlockType::Stone
-    });
+    TryPlaceBlock placeCmd;
+    placeCmd.seq = 1;
+    placeCmd.x = 100;
+    placeCmd.y = 64;
+    placeCmd.z = 100;
+    placeCmd.blockType = shared::voxel::BlockType::Stone;
+    pair.client->send(placeCmd);
     
     pump_ms(200);
     
@@ -213,11 +213,11 @@ TEST_CASE("Replication: position changes smoothly", "[integration][replication][
     
     // Send continuous movement
     for (int i = 0; i < 20; ++i) {
-        pair.client->send(InputFrame{
-            .seq = static_cast<uint32_t>(i),
-            .moveX = 0.5f,
-            .moveY = 0.5f
-        });
+        InputFrame input;
+        input.seq = static_cast<uint32_t>(i);
+        input.moveX = 0.5f;
+        input.moveY = 0.5f;
+        pair.client->send(input);
         pump_ms(33);
     }
     
@@ -329,11 +329,11 @@ TEST_CASE("Replication: client can rebuild state from snapshots", "[integration]
     
     // Run simulation with input
     for (int i = 0; i < 30; ++i) {
-        pair.client->send(InputFrame{
-            .seq = static_cast<uint32_t>(i),
-            .moveX = static_cast<float>(i % 3 - 1),
-            .jump = (i % 10 == 0)
-        });
+        InputFrame input;
+        input.seq = static_cast<uint32_t>(i);
+        input.moveX = static_cast<float>(i % 3 - 1);
+        input.jump = (i % 10 == 0);
+        pair.client->send(input);
         pump_ms(33);
     }
     
