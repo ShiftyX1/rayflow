@@ -101,4 +101,5 @@ When making changes, follow the detailed rules in:
 - .github/instructions/gui.instructions.md
 - .github/instructions/ui-framework.instructions.md (detailed AI agent guide for UI)
 - .github/instructions/resources.instructions.md (VFS and asset packaging system)
+- .github/instructions/build-system.instructions.md (CMake, dependencies, CI/CD)
 
