@@ -5,7 +5,6 @@
 #include "../server/core/server.hpp"
 
 int main() {
-    // Load config early so both client and embedded server can honor it.
     const bool cfg_ok = core::Config::instance().load_from_file("rayflow.conf");
     TraceLog(LOG_INFO, "[config] %s, render.voxel_smooth_lighting=%s",
              cfg_ok ? "ok" : "missing (defaults)",

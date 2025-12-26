@@ -1,12 +1,7 @@
-// =============================================================================
-// dedicated_server_main.cpp
-// RayFlow Dedicated Server (RFDS) - Stub implementation
-// =============================================================================
 
 #include <iostream>
 #include <string>
 
-// Version will be defined by CMake
 #ifndef RAYFLOW_VERSION
 #define RAYFLOW_VERSION "0.0.0-dev"
 #endif
