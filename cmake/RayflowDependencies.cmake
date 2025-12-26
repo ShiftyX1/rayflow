@@ -111,7 +111,8 @@ call msvcbuild.bat static
         )
     endif()
 elseif(APPLE)
-    # macOS: Build static library with MACOSX_DEPLOYMENT_TARGET unset
+    # macOS: Build static library
+    # LuaJIT requires MACOSX_DEPLOYMENT_TARGET to be set
     set(LUAJIT_LIBRARY_FILE ${LUAJIT_INSTALL_DIR}/lib/libluajit-5.1.a)
     
     # Determine architecture for cross-compilation
@@ -121,6 +122,12 @@ elseif(APPLE)
         set(LUAJIT_TARGET_FLAGS "")
     endif()
     
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        set(LUAJIT_MACOSX_TARGET "11.0")
+    else()
+        set(LUAJIT_MACOSX_TARGET "10.15")
+    endif()
+    
     ExternalProject_Add(luajit_external
         GIT_REPOSITORY https://github.com/LuaJIT/LuaJIT.git
         GIT_TAG ${RAYFLOW_LUAJIT_VERSION}
@@ -128,9 +135,14 @@ elseif(APPLE)
         SOURCE_DIR ${LUAJIT_SOURCE_DIR}
         BINARY_DIR ${LUAJIT_SOURCE_DIR}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND ${CMAKE_COMMAND} -E env --unset=MACOSX_DEPLOYMENT_TARGET 
+        BUILD_COMMAND ${CMAKE_COMMAND} -E env MACOSX_DEPLOYMENT_TARGET=${LUAJIT_MACOSX_TARGET}
             make -C src BUILDMODE=static ${LUAJIT_TARGET_FLAGS}
-        INSTALL_COMMAND make -C src install PREFIX=${LUAJIT_INSTALL_DIR}
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/libluajit.a ${LUAJIT_INSTALL_DIR}/lib/libluajit-5.1.a
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lua.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/luajit.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/luaconf.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lualib.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lauxlib.h ${LUAJIT_INSTALL_DIR}/include/
         BUILD_BYPRODUCTS ${LUAJIT_LIBRARY_FILE}
     )
 else()
@@ -145,7 +157,12 @@ else()
         BINARY_DIR ${LUAJIT_SOURCE_DIR}
         CONFIGURE_COMMAND ""
         BUILD_COMMAND make -C src BUILDMODE=static XCFLAGS=-DLUAJIT_ENABLE_LUA52COMPAT
-        INSTALL_COMMAND make -C src install PREFIX=${LUAJIT_INSTALL_DIR}
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/libluajit.a ${LUAJIT_INSTALL_DIR}/lib/libluajit-5.1.a
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lua.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/luajit.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/luaconf.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lualib.h ${LUAJIT_INSTALL_DIR}/include/
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lauxlib.h ${LUAJIT_INSTALL_DIR}/include/
         BUILD_BYPRODUCTS ${LUAJIT_LIBRARY_FILE}
     )
 endif()
