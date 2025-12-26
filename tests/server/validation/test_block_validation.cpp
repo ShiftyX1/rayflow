@@ -63,13 +63,13 @@ TEST_CASE("TryPlaceBlock: server responds with BlockPlaced or ActionRejected", "
     REQUIRE(playerId > 0);
     
     // Try to place a block (location may or may not be valid)
-    pair.client->send(TryPlaceBlock{
-        .seq = 1,
-        .x = 50,
-        .y = 65,  // Just above typical ground
-        .z = 50,
-        .blockType = shared::voxel::BlockType::Stone
-    });
+    TryPlaceBlock placeCmd;
+    placeCmd.seq = 1;
+    placeCmd.x = 50;
+    placeCmd.y = 65;  // Just above typical ground
+    placeCmd.z = 50;
+    placeCmd.blockType = shared::voxel::BlockType::Stone;
+    pair.client->send(placeCmd);
     
     pump_briefly(std::chrono::milliseconds(200));
     
@@ -117,12 +117,12 @@ TEST_CASE("TryBreakBlock: server responds with BlockBroken or ActionRejected", "
     REQUIRE(playerId > 0);
     
     // Try to break a block
-    pair.client->send(TryBreakBlock{
-        .seq = 2,
-        .x = 50,
-        .y = 60,  // Should be solid ground in most terrain
-        .z = 50
-    });
+    TryBreakBlock breakCmd;
+    breakCmd.seq = 2;
+    breakCmd.x = 50;
+    breakCmd.y = 60;  // Should be solid ground in most terrain
+    breakCmd.z = 50;
+    pair.client->send(breakCmd);
     
     pump_briefly(std::chrono::milliseconds(200));
     
@@ -168,13 +168,13 @@ TEST_CASE("TrySetBlock: server processes editor block set", "[server][validation
     REQUIRE(playerId > 0);
     
     // Editor set block
-    pair.client->send(TrySetBlock{
-        .seq = 10,
-        .x = 100,
-        .y = 64,
-        .z = 100,
-        .blockType = shared::voxel::BlockType::Diamond
-    });
+    TrySetBlock setCmd;
+    setCmd.seq = 10;
+    setCmd.x = 100;
+    setCmd.y = 64;
+    setCmd.z = 100;
+    setCmd.blockType = shared::voxel::BlockType::Diamond;
+    pair.client->send(setCmd);
     
     pump_briefly(std::chrono::milliseconds(200));
     
