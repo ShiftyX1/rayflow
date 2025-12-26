@@ -170,13 +170,17 @@ TEST_CASE("Message variant can hold all message types", "[protocol][variant]") {
     Message msg;
 
     SECTION("ClientHello") {
-        msg = ClientHello{.clientName = "Test"};
+        ClientHello hello;
+        hello.clientName = "Test";
+        msg = hello;
         REQUIRE(std::holds_alternative<ClientHello>(msg));
         REQUIRE(std::get<ClientHello>(msg).clientName == "Test");
     }
 
     SECTION("ServerHello") {
-        msg = ServerHello{.tickRate = 60};
+        ServerHello serverHello;
+        serverHello.tickRate = 60;
+        msg = serverHello;
         REQUIRE(std::holds_alternative<ServerHello>(msg));
         REQUIRE(std::get<ServerHello>(msg).tickRate == 60);
     }
@@ -187,71 +191,107 @@ TEST_CASE("Message variant can hold all message types", "[protocol][variant]") {
     }
 
     SECTION("JoinAck") {
-        msg = JoinAck{.playerId = 42};
+        JoinAck ack;
+        ack.playerId = 42;
+        msg = ack;
         REQUIRE(std::holds_alternative<JoinAck>(msg));
         REQUIRE(std::get<JoinAck>(msg).playerId == 42);
     }
 
     SECTION("InputFrame") {
-        msg = InputFrame{.seq = 100, .moveX = 1.0f, .jump = true};
+        InputFrame input;
+        input.seq = 100;
+        input.moveX = 1.0f;
+        input.jump = true;
+        msg = input;
         REQUIRE(std::holds_alternative<InputFrame>(msg));
-        auto& input = std::get<InputFrame>(msg);
-        REQUIRE(input.seq == 100);
-        REQUIRE(input.moveX == 1.0f);
-        REQUIRE(input.jump);
+        auto& inputRef = std::get<InputFrame>(msg);
+        REQUIRE(inputRef.seq == 100);
+        REQUIRE(inputRef.moveX == 1.0f);
+        REQUIRE(inputRef.jump);
     }
 
     SECTION("TryPlaceBlock") {
-        msg = TryPlaceBlock{.x = 10, .y = 64, .z = -5, .blockType = shared::voxel::BlockType::Stone};
+        TryPlaceBlock place;
+        place.x = 10;
+        place.y = 64;
+        place.z = -5;
+        place.blockType = shared::voxel::BlockType::Stone;
+        msg = place;
         REQUIRE(std::holds_alternative<TryPlaceBlock>(msg));
-        auto& place = std::get<TryPlaceBlock>(msg);
-        REQUIRE(place.x == 10);
-        REQUIRE(place.y == 64);
-        REQUIRE(place.z == -5);
-        REQUIRE(place.blockType == shared::voxel::BlockType::Stone);
+        auto& placeRef = std::get<TryPlaceBlock>(msg);
+        REQUIRE(placeRef.x == 10);
+        REQUIRE(placeRef.y == 64);
+        REQUIRE(placeRef.z == -5);
+        REQUIRE(placeRef.blockType == shared::voxel::BlockType::Stone);
     }
 
     SECTION("TryBreakBlock") {
-        msg = TryBreakBlock{.x = 1, .y = 2, .z = 3};
+        TryBreakBlock brk;
+        brk.x = 1;
+        brk.y = 2;
+        brk.z = 3;
+        msg = brk;
         REQUIRE(std::holds_alternative<TryBreakBlock>(msg));
     }
 
     SECTION("TrySetBlock") {
-        msg = TrySetBlock{.blockType = shared::voxel::BlockType::Grass};
+        TrySetBlock setBlk;
+        setBlk.blockType = shared::voxel::BlockType::Grass;
+        msg = setBlk;
         REQUIRE(std::holds_alternative<TrySetBlock>(msg));
     }
 
     SECTION("StateSnapshot") {
-        msg = StateSnapshot{.serverTick = 999, .px = 50.0f, .py = 80.0f};
+        StateSnapshot snap;
+        snap.serverTick = 999;
+        snap.px = 50.0f;
+        snap.py = 80.0f;
+        msg = snap;
         REQUIRE(std::holds_alternative<StateSnapshot>(msg));
-        auto& snap = std::get<StateSnapshot>(msg);
-        REQUIRE(snap.serverTick == 999);
-        REQUIRE(snap.px == 50.0f);
+        auto& snapRef = std::get<StateSnapshot>(msg);
+        REQUIRE(snapRef.serverTick == 999);
+        REQUIRE(snapRef.px == 50.0f);
     }
 
     SECTION("BlockPlaced") {
-        msg = BlockPlaced{.x = 5, .blockType = shared::voxel::BlockType::Wood};
+        BlockPlaced placed;
+        placed.x = 5;
+        placed.blockType = shared::voxel::BlockType::Wood;
+        msg = placed;
         REQUIRE(std::holds_alternative<BlockPlaced>(msg));
     }
 
     SECTION("BlockBroken") {
-        msg = BlockBroken{.x = 7, .y = 8, .z = 9};
+        BlockBroken broken;
+        broken.x = 7;
+        broken.y = 8;
+        broken.z = 9;
+        msg = broken;
         REQUIRE(std::holds_alternative<BlockBroken>(msg));
     }
 
     SECTION("ActionRejected") {
-        msg = ActionRejected{.seq = 50, .reason = RejectReason::OutOfRange};
+        ActionRejected rejected;
+        rejected.seq = 50;
+        rejected.reason = RejectReason::OutOfRange;
+        msg = rejected;
         REQUIRE(std::holds_alternative<ActionRejected>(msg));
         REQUIRE(std::get<ActionRejected>(msg).reason == RejectReason::OutOfRange);
     }
 
     SECTION("TryExportMap") {
-        msg = TryExportMap{.mapId = "testmap"};
+        TryExportMap exportMap;
+        exportMap.mapId = "testmap";
+        msg = exportMap;
         REQUIRE(std::holds_alternative<TryExportMap>(msg));
     }
 
     SECTION("ExportResult") {
-        msg = ExportResult{.ok = true, .path = "/maps/test.rfmap"};
+        ExportResult result;
+        result.ok = true;
+        result.path = "/maps/test.rfmap";
+        msg = result;
         REQUIRE(std::holds_alternative<ExportResult>(msg));
         REQUIRE(std::get<ExportResult>(msg).ok);
     }

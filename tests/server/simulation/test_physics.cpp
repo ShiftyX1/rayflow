@@ -10,6 +10,7 @@
 #include "core/server.hpp"
 #include "transport/local_transport.hpp"
 #include "protocol/messages.hpp"
+#include "test_utils.hpp"
 
 #include <thread>
 #include <chrono>
@@ -18,6 +19,7 @@
 using namespace server::core;
 using namespace shared::transport;
 using namespace shared::proto;
+using namespace test_helpers;
 
 namespace {
 
@@ -27,7 +29,7 @@ void pump_ms(int ms) {
 
 PlayerId join_and_get_id(LocalTransport::Pair& pair) {
     Message msg;
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -113,7 +115,10 @@ TEST_CASE("Physics: jump input gives upward velocity", "[server][physics][jump]"
     collect_snapshots(*pair.client);
     
     // Send jump input
-    pair.client->send(InputFrame{.seq = 1, .jump = true});
+    InputFrame jumpFrame;
+    jumpFrame.seq = 1;
+    jumpFrame.jump = true;
+    pair.client->send(jumpFrame);
     pump_ms(200);
     
     auto snapshots = collect_snapshots(*pair.client);
@@ -147,7 +152,10 @@ TEST_CASE("Physics: jump only works when on ground", "[server][physics][jump]") 
     
     // Immediately try to jump multiple times while potentially in air
     for (int i = 0; i < 5; ++i) {
-        pair.client->send(InputFrame{.seq = static_cast<uint32_t>(i), .jump = true});
+        InputFrame frame;
+        frame.seq = static_cast<uint32_t>(i);
+        frame.jump = true;
+        pair.client->send(frame);
         pump_ms(30);
     }
     
@@ -191,7 +199,9 @@ TEST_CASE("Physics: horizontal movement input affects position", "[server][physi
     float initialX = 0.0f, initialZ = 0.0f;
     
     // Get baseline position
-    pair.client->send(InputFrame{.seq = 0});  // Idle frame
+    InputFrame idleFrame;
+    idleFrame.seq = 0;
+    pair.client->send(idleFrame);  // Idle frame
     pump_ms(50);
     auto baseline = collect_snapshots(*pair.client);
     if (!baseline.empty()) {
@@ -200,12 +210,12 @@ TEST_CASE("Physics: horizontal movement input affects position", "[server][physi
     }
     
     // Send movement input
-    pair.client->send(InputFrame{
-        .seq = 1,
-        .moveX = 1.0f,
-        .moveY = 1.0f,  // Forward + strafe
-        .yaw = 0.0f
-    });
+    InputFrame moveFrame;
+    moveFrame.seq = 1;
+    moveFrame.moveX = 1.0f;
+    moveFrame.moveY = 1.0f;  // Forward + strafe
+    moveFrame.yaw = 0.0f;
+    pair.client->send(moveFrame);
     
     pump_ms(300);
     
@@ -275,13 +285,19 @@ TEST_CASE("Physics: editor camera mode allows vertical movement", "[server][phys
     collect_snapshots(*pair.client);
     
     // Move up using editor controls
-    pair.client->send(InputFrame{.seq = 1, .camUp = true});
+    InputFrame upFrame;
+    upFrame.seq = 1;
+    upFrame.camUp = true;
+    pair.client->send(upFrame);
     pump_ms(200);
     
     auto afterUp = collect_snapshots(*pair.client);
     
     // Move down
-    pair.client->send(InputFrame{.seq = 2, .camDown = true});
+    InputFrame downFrame;
+    downFrame.seq = 2;
+    downFrame.camDown = true;
+    pair.client->send(downFrame);
     pump_ms(200);
     
     auto afterDown = collect_snapshots(*pair.client);

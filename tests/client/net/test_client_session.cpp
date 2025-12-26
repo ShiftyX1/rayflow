@@ -22,7 +22,9 @@ using namespace test_helpers;
 TEST_CASE("MockEndpoint records sent messages", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.send(ClientHello{.clientName = "Test"});
+    ClientHello hello;
+    hello.clientName = "Test";
+    endpoint.send(hello);
     endpoint.send(JoinMatch{});
     
     REQUIRE(endpoint.sent_count() == 2);
@@ -33,8 +35,13 @@ TEST_CASE("MockEndpoint records sent messages", "[client][session]") {
 TEST_CASE("MockEndpoint returns injected messages", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(ServerHello{.tickRate = 60});
-    endpoint.inject_message(JoinAck{.playerId = 42});
+    ServerHello serverHello;
+    serverHello.tickRate = 60;
+    JoinAck ack;
+    ack.playerId = 42;
+    
+    endpoint.inject_message(serverHello);
+    endpoint.inject_message(ack);
     
     Message msg;
     
@@ -56,11 +63,11 @@ TEST_CASE("MockEndpoint returns injected messages", "[client][session]") {
 TEST_CASE("Session receives ServerHello and extracts tick rate", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(ServerHello{
-        .acceptedVersion = kProtocolVersion,
-        .tickRate = 20,
-        .worldSeed = 99999
-    });
+    ServerHello serverHello;
+    serverHello.acceptedVersion = kProtocolVersion;
+    serverHello.tickRate = 20;
+    serverHello.worldSeed = 99999;
+    endpoint.inject_message(serverHello);
     
     Message msg;
     REQUIRE(endpoint.try_recv(msg));
@@ -73,7 +80,9 @@ TEST_CASE("Session receives ServerHello and extracts tick rate", "[client][sessi
 TEST_CASE("Session receives JoinAck and extracts player ID", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(JoinAck{.playerId = 123});
+    JoinAck ack;
+    ack.playerId = 123;
+    endpoint.inject_message(ack);
     
     Message msg;
     REQUIRE(endpoint.try_recv(msg));
@@ -89,16 +98,16 @@ TEST_CASE("Session receives JoinAck and extracts player ID", "[client][session]"
 TEST_CASE("Session receives StateSnapshot with position", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(StateSnapshot{
-        .serverTick = 100,
-        .playerId = 1,
-        .px = 10.5f,
-        .py = 64.0f,
-        .pz = -5.5f,
-        .vx = 1.0f,
-        .vy = -0.5f,
-        .vz = 0.0f
-    });
+    StateSnapshot snapshot;
+    snapshot.serverTick = 100;
+    snapshot.playerId = 1;
+    snapshot.px = 10.5f;
+    snapshot.py = 64.0f;
+    snapshot.pz = -5.5f;
+    snapshot.vx = 1.0f;
+    snapshot.vy = -0.5f;
+    snapshot.vz = 0.0f;
+    endpoint.inject_message(snapshot);
     
     Message msg;
     REQUIRE(endpoint.try_recv(msg));
@@ -120,39 +129,39 @@ TEST_CASE("Session receives StateSnapshot with position", "[client][session]") {
 TEST_CASE("Session receives BlockPlaced event", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(BlockPlaced{
-        .x = 10,
-        .y = 64,
-        .z = 20,
-        .blockType = shared::voxel::BlockType::Stone
-    });
+    BlockPlaced placed;
+    placed.x = 10;
+    placed.y = 64;
+    placed.z = 20;
+    placed.blockType = shared::voxel::BlockType::Stone;
+    endpoint.inject_message(placed);
     
     Message msg;
     REQUIRE(endpoint.try_recv(msg));
     
-    auto& placed = std::get<BlockPlaced>(msg);
-    REQUIRE(placed.x == 10);
-    REQUIRE(placed.y == 64);
-    REQUIRE(placed.z == 20);
-    REQUIRE(placed.blockType == shared::voxel::BlockType::Stone);
+    auto& placedRef = std::get<BlockPlaced>(msg);
+    REQUIRE(placedRef.x == 10);
+    REQUIRE(placedRef.y == 64);
+    REQUIRE(placedRef.z == 20);
+    REQUIRE(placedRef.blockType == shared::voxel::BlockType::Stone);
 }
 
 TEST_CASE("Session receives BlockBroken event", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(BlockBroken{
-        .x = 5,
-        .y = 60,
-        .z = 15
-    });
+    BlockBroken broken;
+    broken.x = 5;
+    broken.y = 60;
+    broken.z = 15;
+    endpoint.inject_message(broken);
     
     Message msg;
     REQUIRE(endpoint.try_recv(msg));
     
-    auto& broken = std::get<BlockBroken>(msg);
-    REQUIRE(broken.x == 5);
-    REQUIRE(broken.y == 60);
-    REQUIRE(broken.z == 15);
+    auto& brokenRef = std::get<BlockBroken>(msg);
+    REQUIRE(brokenRef.x == 5);
+    REQUIRE(brokenRef.y == 60);
+    REQUIRE(brokenRef.z == 15);
 }
 
 // =============================================================================
@@ -162,29 +171,36 @@ TEST_CASE("Session receives BlockBroken event", "[client][session]") {
 TEST_CASE("Session receives ActionRejected with reason", "[client][session]") {
     MockEndpoint endpoint;
     
-    endpoint.inject_message(ActionRejected{
-        .seq = 42,
-        .reason = RejectReason::OutOfRange
-    });
+    ActionRejected rejected;
+    rejected.seq = 42;
+    rejected.reason = RejectReason::OutOfRange;
+    endpoint.inject_message(rejected);
     
     Message msg;
     REQUIRE(endpoint.try_recv(msg));
     
-    auto& rejected = std::get<ActionRejected>(msg);
-    REQUIRE(rejected.seq == 42);
-    REQUIRE(rejected.reason == RejectReason::OutOfRange);
+    auto& rejectedRef = std::get<ActionRejected>(msg);
+    REQUIRE(rejectedRef.seq == 42);
+    REQUIRE(rejectedRef.reason == RejectReason::OutOfRange);
 }
 
 TEST_CASE("Session handles all RejectReason values", "[client][session]") {
     MockEndpoint endpoint;
     
     // Inject all possible rejection reasons
-    endpoint.inject_message(ActionRejected{.seq = 1, .reason = RejectReason::Unknown});
-    endpoint.inject_message(ActionRejected{.seq = 2, .reason = RejectReason::Invalid});
-    endpoint.inject_message(ActionRejected{.seq = 3, .reason = RejectReason::NotAllowed});
-    endpoint.inject_message(ActionRejected{.seq = 4, .reason = RejectReason::NotEnoughResources});
-    endpoint.inject_message(ActionRejected{.seq = 5, .reason = RejectReason::OutOfRange});
-    endpoint.inject_message(ActionRejected{.seq = 6, .reason = RejectReason::ProtectedBlock});
+    ActionRejected r1, r2, r3, r4, r5, r6;
+    r1.seq = 1; r1.reason = RejectReason::Unknown;
+    r2.seq = 2; r2.reason = RejectReason::Invalid;
+    r3.seq = 3; r3.reason = RejectReason::NotAllowed;
+    r4.seq = 4; r4.reason = RejectReason::NotEnoughResources;
+    r5.seq = 5; r5.reason = RejectReason::OutOfRange;
+    r6.seq = 6; r6.reason = RejectReason::ProtectedBlock;
+    endpoint.inject_message(r1);
+    endpoint.inject_message(r2);
+    endpoint.inject_message(r3);
+    endpoint.inject_message(r4);
+    endpoint.inject_message(r5);
+    endpoint.inject_message(r6);
     
     Message msg;
     for (int i = 0; i < 6; ++i) {
@@ -202,13 +218,13 @@ TEST_CASE("Session can handle rapid message sequence", "[client][session]") {
     
     // Simulate rapid server updates
     for (std::uint64_t tick = 0; tick < 100; ++tick) {
-        endpoint.inject_message(StateSnapshot{
-            .serverTick = tick,
-            .playerId = 1,
-            .px = static_cast<float>(tick),
-            .py = 64.0f,
-            .pz = 0.0f
-        });
+        StateSnapshot snap;
+        snap.serverTick = tick;
+        snap.playerId = 1;
+        snap.px = static_cast<float>(tick);
+        snap.py = 64.0f;
+        snap.pz = 0.0f;
+        endpoint.inject_message(snap);
     }
     
     REQUIRE(endpoint.pending_count() == 100);
@@ -230,12 +246,23 @@ TEST_CASE("Session handles interleaved message types", "[client][session]") {
     MockEndpoint endpoint;
     
     // Mix of message types
-    endpoint.inject_message(StateSnapshot{.serverTick = 1});
-    endpoint.inject_message(BlockPlaced{.x = 1});
-    endpoint.inject_message(StateSnapshot{.serverTick = 2});
-    endpoint.inject_message(BlockBroken{.x = 2});
-    endpoint.inject_message(ActionRejected{.seq = 1});
-    endpoint.inject_message(StateSnapshot{.serverTick = 3});
+    StateSnapshot snap1, snap2, snap3;
+    snap1.serverTick = 1;
+    snap2.serverTick = 2;
+    snap3.serverTick = 3;
+    BlockPlaced placed;
+    placed.x = 1;
+    BlockBroken broken;
+    broken.x = 2;
+    ActionRejected rejected;
+    rejected.seq = 1;
+    
+    endpoint.inject_message(snap1);
+    endpoint.inject_message(placed);
+    endpoint.inject_message(snap2);
+    endpoint.inject_message(broken);
+    endpoint.inject_message(rejected);
+    endpoint.inject_message(snap3);
     
     Message msg;
     

@@ -8,6 +8,7 @@
 #include "core/server.hpp"
 #include "transport/local_transport.hpp"
 #include "protocol/messages.hpp"
+#include "test_utils.hpp"
 
 #include <thread>
 #include <chrono>
@@ -15,6 +16,7 @@
 using namespace server::core;
 using namespace shared::transport;
 using namespace shared::proto;
+using namespace test_helpers;
 
 namespace {
 
@@ -68,7 +70,7 @@ TEST_CASE("Server responds to JoinMatch with JoinAck", "[server][session]") {
     server.start();
     
     // Complete handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_server_briefly();
     
     Message msg;
@@ -160,7 +162,7 @@ TEST_CASE("Server processes InputFrame after join", "[server][session][input]") 
     Message msg;
     
     // Complete handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_server_briefly();
     pair.client->try_recv(msg);  // ServerHello
     

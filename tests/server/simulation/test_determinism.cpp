@@ -10,6 +10,7 @@
 #include "core/server.hpp"
 #include "transport/local_transport.hpp"
 #include "protocol/messages.hpp"
+#include "test_utils.hpp"
 
 #include <thread>
 #include <chrono>
@@ -18,6 +19,7 @@
 using namespace server::core;
 using namespace shared::transport;
 using namespace shared::proto;
+using namespace test_helpers;
 
 namespace {
 
@@ -45,7 +47,7 @@ SimulationRun run_simulation(const std::vector<InputFrame>& inputs, int run_time
     
     // Handshake
     Message msg;
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -125,7 +127,9 @@ TEST_CASE("Determinism: identical inputs produce similar trajectory", "[server][
 TEST_CASE("Determinism: server tick increments consistently", "[server][determinism]") {
     std::vector<InputFrame> inputs;
     for (std::uint32_t i = 0; i < 5; ++i) {
-        inputs.push_back(InputFrame{.seq = i});
+        InputFrame frame;
+        frame.seq = i;
+        inputs.push_back(frame);
     }
     
     auto run = run_simulation(inputs, 300);
@@ -141,11 +145,11 @@ TEST_CASE("Determinism: server tick increments consistently", "[server][determin
 TEST_CASE("Determinism: no player teleportation between ticks", "[server][determinism]") {
     std::vector<InputFrame> inputs;
     for (std::uint32_t i = 0; i < 10; ++i) {
-        inputs.push_back(InputFrame{
-            .seq = i,
-            .moveX = 1.0f,
-            .moveY = 1.0f
-        });
+        InputFrame frame;
+        frame.seq = i;
+        frame.moveX = 1.0f;
+        frame.moveY = 1.0f;
+        inputs.push_back(frame);
     }
     
     auto run = run_simulation(inputs, 500);
@@ -178,7 +182,9 @@ TEST_CASE("Determinism: no player teleportation between ticks", "[server][determ
 TEST_CASE("Determinism: playerId remains constant", "[server][determinism]") {
     std::vector<InputFrame> inputs;
     for (std::uint32_t i = 0; i < 5; ++i) {
-        inputs.push_back(InputFrame{.seq = i});
+        InputFrame frame;
+        frame.seq = i;
+        inputs.push_back(frame);
     }
     
     auto run = run_simulation(inputs, 200);
@@ -195,13 +201,13 @@ TEST_CASE("Determinism: velocity is bounded", "[server][determinism]") {
     std::vector<InputFrame> inputs;
     // Spam all movement inputs
     for (std::uint32_t i = 0; i < 20; ++i) {
-        inputs.push_back(InputFrame{
-            .seq = i,
-            .moveX = 1.0f,
-            .moveY = 1.0f,
-            .jump = true,
-            .sprint = true
-        });
+        InputFrame frame;
+        frame.seq = i;
+        frame.moveX = 1.0f;
+        frame.moveY = 1.0f;
+        frame.jump = true;
+        frame.sprint = true;
+        inputs.push_back(frame);
     }
     
     auto run = run_simulation(inputs, 500);

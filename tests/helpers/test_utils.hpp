@@ -38,6 +38,25 @@ const T& get_message_or_throw(const shared::proto::Message& msg) {
 }
 
 // =============================================================================
+// Message construction helpers (C++17 compatible, avoid designated initializers)
+// =============================================================================
+
+/** @brief Create a ClientHello with default protocol version. */
+inline shared::proto::ClientHello make_client_hello(const std::string& name = "TestClient") {
+    shared::proto::ClientHello hello;
+    hello.version = shared::proto::kProtocolVersion;
+    hello.clientName = name;
+    return hello;
+}
+
+/** @brief Create an InputFrame with given sequence number. */
+inline shared::proto::InputFrame make_input_frame(std::uint32_t seq) {
+    shared::proto::InputFrame frame;
+    frame.seq = seq;
+    return frame;
+}
+
+// =============================================================================
 // Session helpers
 // =============================================================================
 
@@ -55,10 +74,10 @@ inline shared::proto::PlayerId perform_handshake(
     const std::string& client_name = "TestClient")
 {
     // Send ClientHello
-    client.send(shared::proto::ClientHello{
-        .version = shared::proto::kProtocolVersion,
-        .clientName = client_name
-    });
+    shared::proto::ClientHello hello;
+    hello.version = shared::proto::kProtocolVersion;
+    hello.clientName = client_name;
+    client.send(hello);
 
     pump_server();
 

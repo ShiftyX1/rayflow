@@ -50,7 +50,9 @@ TEST_CASE("LocalTransport client->server message passing", "[transport][local]")
     Message msg;
     
     // Client sends to server
-    pair.client->send(ClientHello{.clientName = "TestClient"});
+    ClientHello hello;
+    hello.clientName = "TestClient";
+    pair.client->send(hello);
     
     // Server receives
     REQUIRE(pair.server->try_recv(msg));
@@ -66,7 +68,10 @@ TEST_CASE("LocalTransport server->client message passing", "[transport][local]")
     Message msg;
     
     // Server sends to client
-    pair.server->send(ServerHello{.tickRate = 60, .worldSeed = 12345});
+    ServerHello serverHello;
+    serverHello.tickRate = 60;
+    serverHello.worldSeed = 12345;
+    pair.server->send(serverHello);
     
     // Client receives
     REQUIRE(pair.client->try_recv(msg));
@@ -88,9 +93,13 @@ TEST_CASE("LocalTransport maintains FIFO ordering client->server", "[transport][
     Message msg;
     
     // Send multiple messages
-    pair.client->send(InputFrame{.seq = 1});
-    pair.client->send(InputFrame{.seq = 2});
-    pair.client->send(InputFrame{.seq = 3});
+    InputFrame frame1, frame2, frame3;
+    frame1.seq = 1;
+    frame2.seq = 2;
+    frame3.seq = 3;
+    pair.client->send(frame1);
+    pair.client->send(frame2);
+    pair.client->send(frame3);
     
     // Receive in order
     REQUIRE(pair.server->try_recv(msg));
@@ -110,9 +119,13 @@ TEST_CASE("LocalTransport maintains FIFO ordering server->client", "[transport][
     Message msg;
     
     // Send multiple messages
-    pair.server->send(StateSnapshot{.serverTick = 100});
-    pair.server->send(StateSnapshot{.serverTick = 101});
-    pair.server->send(StateSnapshot{.serverTick = 102});
+    StateSnapshot snap1, snap2, snap3;
+    snap1.serverTick = 100;
+    snap2.serverTick = 101;
+    snap3.serverTick = 102;
+    pair.server->send(snap1);
+    pair.server->send(snap2);
+    pair.server->send(snap3);
     
     // Receive in order
     REQUIRE(pair.client->try_recv(msg));
@@ -136,10 +149,14 @@ TEST_CASE("LocalTransport channels are independent", "[transport][local]") {
     Message msg;
     
     // Client sends
-    pair.client->send(InputFrame{.seq = 10});
+    InputFrame inputFrame;
+    inputFrame.seq = 10;
+    pair.client->send(inputFrame);
     
     // Server sends (independent channel)
-    pair.server->send(StateSnapshot{.serverTick = 50});
+    StateSnapshot snapshot;
+    snapshot.serverTick = 50;
+    pair.server->send(snapshot);
     
     // Client receives from server (not its own message)
     REQUIRE(pair.client->try_recv(msg));
@@ -161,10 +178,17 @@ TEST_CASE("LocalTransport handles mixed message types", "[transport][local]") {
     Message msg;
     
     // Send different message types
+    InputFrame inputFrame;
+    inputFrame.seq = 1;
+    TryPlaceBlock placeBlock;
+    placeBlock.x = 5;
+    placeBlock.y = 64;
+    placeBlock.z = 10;
+    
     pair.client->send(ClientHello{});
     pair.client->send(JoinMatch{});
-    pair.client->send(InputFrame{.seq = 1});
-    pair.client->send(TryPlaceBlock{.x = 5, .y = 64, .z = 10});
+    pair.client->send(inputFrame);
+    pair.client->send(placeBlock);
     
     // Receive and verify types
     REQUIRE(pair.server->try_recv(msg));
@@ -191,10 +215,14 @@ TEST_CASE("Multiple LocalTransport pairs are independent", "[transport][local]")
     Message msg;
     
     // Send on pair1
-    pair1.client->send(InputFrame{.seq = 1});
+    InputFrame frame1;
+    frame1.seq = 1;
+    pair1.client->send(frame1);
     
     // Send on pair2
-    pair2.client->send(InputFrame{.seq = 2});
+    InputFrame frame2;
+    frame2.seq = 2;
+    pair2.client->send(frame2);
     
     // Pair1 server only receives pair1 messages
     REQUIRE(pair1.server->try_recv(msg));

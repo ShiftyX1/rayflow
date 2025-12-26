@@ -11,6 +11,7 @@
 #include "core/server.hpp"
 #include "transport/local_transport.hpp"
 #include "protocol/messages.hpp"
+#include "test_utils.hpp"
 
 #include <thread>
 #include <chrono>
@@ -18,6 +19,7 @@
 using namespace server::core;
 using namespace shared::transport;
 using namespace shared::proto;
+using namespace test_helpers;
 
 namespace {
 
@@ -29,7 +31,7 @@ void pump_briefly(std::chrono::milliseconds ms = std::chrono::milliseconds(100))
 PlayerId join_session(LocalTransport::Pair& pair) {
     Message msg;
     
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_briefly();
     pair.client->try_recv(msg);  // ServerHello
     
@@ -209,9 +211,13 @@ TEST_CASE("ActionRejected includes correct sequence number", "[server][validatio
     REQUIRE(playerId > 0);
     
     // Send multiple requests with different seq numbers
-    pair.client->send(TryBreakBlock{.seq = 100, .x = 0, .y = 0, .z = 0});
-    pair.client->send(TryBreakBlock{.seq = 101, .x = 1, .y = 1, .z = 1});
-    pair.client->send(TryBreakBlock{.seq = 102, .x = 2, .y = 2, .z = 2});
+    TryBreakBlock brk1, brk2, brk3;
+    brk1.seq = 100; brk1.x = 0; brk1.y = 0; brk1.z = 0;
+    brk2.seq = 101; brk2.x = 1; brk2.y = 1; brk2.z = 1;
+    brk3.seq = 102; brk3.x = 2; brk3.y = 2; brk3.z = 2;
+    pair.client->send(brk1);
+    pair.client->send(brk2);
+    pair.client->send(brk3);
     
     pump_briefly(std::chrono::milliseconds(300));
     

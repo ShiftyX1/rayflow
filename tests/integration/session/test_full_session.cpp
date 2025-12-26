@@ -122,7 +122,7 @@ TEST_CASE("Integration: block placement end-to-end", "[integration][session][blo
     Message msg;
     
     // Complete handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);  // ServerHello
     
@@ -175,7 +175,7 @@ TEST_CASE("Integration: block break end-to-end", "[integration][session][block]"
     Message msg;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -219,7 +219,7 @@ TEST_CASE("Integration: player position changes with input", "[integration][sess
     Message msg;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -286,7 +286,7 @@ TEST_CASE("Integration: server handles multiple sequential connections", "[integ
         Message msg;
         
         // Quick connect/disconnect cycle
-        pair.client->send(ClientHello{.version = kProtocolVersion});
+        pair.client->send(make_client_hello());
         pump_ms(50);
         REQUIRE(pair.client->try_recv(msg));
         REQUIRE(is_message_type<ServerHello>(msg));
@@ -329,14 +329,19 @@ TEST_CASE("Integration: server handles input before join", "[integration][sessio
     server.start();
     
     // Send hello
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    ClientHello hello;
+    hello.version = kProtocolVersion;
+    pair.client->send(hello);
     pump_ms(50);
     
     Message msg;
     pair.client->try_recv(msg);  // ServerHello
     
     // Send input before JoinMatch
-    pair.client->send(InputFrame{.seq = 1, .moveX = 1.0f});
+    InputFrame frame;
+    frame.seq = 1;
+    frame.moveX = 1.0f;
+    pair.client->send(frame);
     
     pump_ms(100);
     

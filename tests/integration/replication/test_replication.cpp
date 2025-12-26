@@ -73,7 +73,7 @@ TEST_CASE("Replication: snapshots have monotonically increasing ticks", "[integr
     Message msg;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -113,7 +113,7 @@ TEST_CASE("Replication: playerId remains constant in snapshots", "[integration][
     Message msg;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -152,7 +152,7 @@ TEST_CASE("Replication: block changes are reflected in state", "[integration][re
     ReplicatedState state;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -204,7 +204,7 @@ TEST_CASE("Replication: position changes smoothly", "[integration][replication][
     Message msg;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
@@ -269,7 +269,7 @@ TEST_CASE("Replication: snapshot rate approximately matches tick rate", "[integr
     Message msg;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     
@@ -319,7 +319,7 @@ TEST_CASE("Replication: client can rebuild state from snapshots", "[integration]
     ReplicatedState state;
     
     // Handshake
-    pair.client->send(ClientHello{.version = kProtocolVersion});
+    pair.client->send(make_client_hello());
     pump_ms(50);
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
