@@ -2,12 +2,48 @@
 
 #include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
 #include <raylib.h>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#elif defined(__linux__)
+#include <unistd.h>
+#endif
+
 namespace core {
+
+namespace {
+
+std::filesystem::path get_executable_dir() {
+#if defined(_WIN32)
+    char buffer[MAX_PATH] = {0};
+    GetModuleFileNameA(nullptr, buffer, MAX_PATH);
+    return std::filesystem::path(buffer).parent_path();
+#elif defined(__APPLE__)
+    char buffer[1024] = {0};
+    uint32_t size = sizeof(buffer);
+    if (_NSGetExecutablePath(buffer, &size) == 0) {
+        return std::filesystem::path(buffer).parent_path();
+    }
+    return std::filesystem::current_path();
+#elif defined(__linux__)
+    char buffer[1024] = {0};
+    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (len > 0) {
+        buffer[len] = '\0';
+        return std::filesystem::path(buffer).parent_path();
+    }
+    return std::filesystem::current_path();
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
+}  // namespace
 
 std::string key_name(int key) {
     // Letters
@@ -309,12 +345,19 @@ void Config::apply_kv(const std::string& section, const std::string& key, const 
 bool Config::load_from_file(const std::string& path) {
     loaded_from_path_.clear();
 
-    std::ifstream in(path);
+    // Resolve relative paths against the executable directory.
+    // This ensures config is found when double-clicking the app (where cwd is ~/).
+    std::filesystem::path configPath = path;
+    if (configPath.is_relative()) {
+        configPath = get_executable_dir() / configPath;
+    }
+
+    std::ifstream in(configPath);
     if (!in.is_open()) {
         return false;
     }
 
-    loaded_from_path_ = path;
+    loaded_from_path_ = configPath.string();
     TraceLog(LOG_INFO, "[config] loaded: %s", loaded_from_path_.c_str());
 
     std::string section;

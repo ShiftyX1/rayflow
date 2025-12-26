@@ -21,7 +21,9 @@ const char* get_extension(const std::string& path) {
 
 void init() {
     // Get executable directory as game root.
-    std::filesystem::path gameDir = std::filesystem::current_path();
+    // Use GetApplicationDirectory() instead of current_path() so resources are found
+    // even when the app is launched by double-clicking (where cwd is user's home).
+    std::filesystem::path gameDir = GetApplicationDirectory();
 
 #if RAYFLOW_USE_PAK
     // Release mode: use .pak archives.
