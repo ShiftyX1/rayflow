@@ -87,19 +87,23 @@ Note: seed-based procedural terrain is allowed only as a temporary migration aid
 - Logging must be rate-limited; do not spam every tick unless explicitly debugging.
 
 ## Instruction files
-When making changes, follow the detailed rules in:
-- .github/instructions/architecture.instructions.md
-- .github/instructions/protocol-transport.instructions.md
-- .github/instructions/server-simulation.instructions.md
-- .github/instructions/comments.instructions.md
-- .github/instructions/bedwars-gameplay.instructions.md
-- .github/instructions/migration-plan.instructions.md
-- .github/instructions/lighting-minecraft.instructions.md
-- .github/instructions/lighting-baked.instructions.md
-- .github/instructions/map-editor.instructions.md
-- .github/instructions/testing.instructions.md
-- .github/instructions/gui.instructions.md
-- .github/instructions/ui-framework.instructions.md (detailed AI agent guide for UI)
-- .github/instructions/resources.instructions.md (VFS and asset packaging system)
-- .github/instructions/build-system.instructions.md (CMake, dependencies, CI/CD)
+When making changes, follow the detailed rules in `.cursor/rules/`:
+- `.cursor/rules/main/RULE.md` — main project rules (summary)
+- `.cursor/rules/architecture/RULE.md` — architecture rules
+- `.cursor/rules/protocol-transport/RULE.md` — transport and protocol specs
+- `.cursor/rules/server-simulation/RULE.md` — server simulation rules
+- `.cursor/rules/comments/RULE.md` — commenting conventions
+- `.cursor/rules/bedwars-gameplay/RULE.md` — gameplay systems
+- `.cursor/rules/migration-plan/RULE.md` — migration stages
+- `.cursor/rules/lighting-minecraft/RULE.md` — Minecraft-style lighting
+- `.cursor/rules/lighting-baked/RULE.md` — baked lighting (legacy)
+- `.cursor/rules/map-editor/RULE.md` — map template and editor
+- `.cursor/rules/testing/RULE.md` — testing guidelines
+- `.cursor/rules/gui/RULE.md` — GUI approach
+- `.cursor/rules/ui-framework/RULE.md` — UI framework details (AI agent guide)
+- `.cursor/rules/resources/RULE.md` — VFS and asset packaging
+- `.cursor/rules/build-system/RULE.md` — CMake, dependencies, CI/CD
+- `.cursor/rules/config/RULE.md` — configuration file format
+
+Legacy instructions in `.github/instructions/` are kept for reference but superseded by `.cursor/rules/`.
 

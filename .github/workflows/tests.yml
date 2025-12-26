@@ -8,8 +8,36 @@ name: Tests
 on:
   push:
     branches: [main, master, develop]
+    paths:
+      - 'app/**'
+      - 'client/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'ui/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/workflows/**'
+    paths-ignore:
+      - '**/*.md'
   pull_request:
     branches: [main, master]
+    paths:
+      - 'app/**'
+      - 'client/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'ui/**'
+      - 'tools/**'
+      - 'tests/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/workflows/**'
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
 
 jobs:
