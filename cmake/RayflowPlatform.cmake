@@ -61,11 +61,18 @@ endfunction()
 # Executable properties per platform
 # -----------------------------------------------------------------------------
 function(rayflow_configure_executable TARGET_NAME)
-    if(WIN32)
-        # Windows: GUI application (no console window in Release)
-        if(CMAKE_BUILD_TYPE STREQUAL "Release")
-            set_target_properties(${TARGET_NAME} PROPERTIES
-                WIN32_EXECUTABLE TRUE
+    if(WIN32 AND MSVC)
+        # Windows MSVC: Configure subsystem and entry point
+        # For Release: GUI app (no console window) but using main() entry point
+        # For Debug: Console app for easier debugging
+        if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            target_link_options(${TARGET_NAME} PRIVATE
+                "/SUBSYSTEM:WINDOWS"
+                "/ENTRY:mainCRTStartup"
+            )
+        else()
+            target_link_options(${TARGET_NAME} PRIVATE
+                "/SUBSYSTEM:CONSOLE"
             )
         endif()
     elseif(APPLE)
