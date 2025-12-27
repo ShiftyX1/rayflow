@@ -12,6 +12,8 @@ Each rule is in its own directory with a `RULE.md` file:
 ├── architecture/       # Authoritative server + thin client
 ├── protocol-transport/ # Transport and protocol specs
 ├── server-simulation/  # Server tick loop, validation, determinism
+├── dedicated-server/   # RFDS dedicated server implementation
+├── scripting/          # Lua scripting system (two-tier: user + engine)
 ├── comments/           # Commenting conventions
 ├── bedwars-gameplay/   # BedWars gameplay systems
 ├── migration-plan/     # Migration stages A-D
@@ -47,7 +49,7 @@ To update a rule:
 | Category | Rules |
 |----------|-------|
 | **Architecture** | main, architecture, migration-plan |
-| **Server** | server-simulation, protocol-transport |
+| **Server** | server-simulation, protocol-transport, scripting, dedicated-server |
 | **Client** | gui, ui-framework, resources |
 | **Gameplay** | bedwars-gameplay, lighting-minecraft, lighting-baked, map-editor |
 | **Development** | testing, build-system, config, comments |

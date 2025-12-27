@@ -92,6 +92,8 @@ When making changes, follow the detailed rules in `.cursor/rules/`:
 - `.cursor/rules/architecture/RULE.md` — architecture rules
 - `.cursor/rules/protocol-transport/RULE.md` — transport and protocol specs
 - `.cursor/rules/server-simulation/RULE.md` — server simulation rules
+- `.cursor/rules/dedicated-server/RULE.md` — RFDS dedicated server implementation
+- `.cursor/rules/scripting/RULE.md` — Lua scripting system (two-tier: user + engine)
 - `.cursor/rules/comments/RULE.md` — commenting conventions
 - `.cursor/rules/bedwars-gameplay/RULE.md` — gameplay systems
 - `.cursor/rules/migration-plan/RULE.md` — migration stages
