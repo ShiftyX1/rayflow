@@ -112,12 +112,142 @@ return BedWars
 
 ## Hard Rules
 
+### Execution Context
+
+**Critical**: Scripts run in different contexts based on tier and trust level:
+
+| Script Type | Server | Client | Why |
+|-------------|--------|--------|-----|
+| **User Scripts** (custom maps) | ✅ Yes | ❌ **NEVER** | Prevents cheats, ensures consistency |
+| **Engine Scripts** (developers) | ✅ Yes | ✅ Yes | Trusted code for effects, UI, predictions |
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         SERVER                                  │
+│  ┌───────────────────────┐  ┌────────────────────────────────┐ │
+│  │  User Scripts         │  │  Engine Scripts (server/)      │ │
+│  │  (Sandboxed)          │  │  (Trusted)                     │ │
+│  │  - on_player_join     │  │  - BedWars core logic          │ │
+│  │  - on_block_break     │  │  - Match management            │ │
+│  │  - game.*, world.*    │  │  - Full engine.* API           │ │
+│  └───────────────────────┘  └────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLIENT                                  │
+│  ┌───────────────────────┐  ┌────────────────────────────────┐ │
+│  │  ❌ NO User Scripts   │  │  ✅ Engine Scripts (client/)   │ │
+│  │  (Security risk)      │  │  (Trusted)                     │ │
+│  │                       │  │  - Visual effects, particles   │ │
+│  │                       │  │  - Client-side UI logic        │ │
+│  │                       │  │  - Sound triggers              │ │
+│  │                       │  │  - Animation controllers       │ │
+│  │                       │  │  - Input handling helpers      │ │
+│  └───────────────────────┘  └────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Engine Script Locations
+
+```
+pak_0.pak/
+└── scripts/
+    ├── server/                    # Server-only engine scripts
+    │   ├── init.lua
+    │   └── bedwars/
+    │       ├── core.lua           # Match logic, rules
+    │       ├── teams.lua          # Team management
+    │       └── economy.lua        # Generators, shop
+    │
+    ├── client/                    # Client-only engine scripts
+    │   ├── init.lua
+    │   ├── effects/
+    │   │   ├── particles.lua      # Particle system helpers
+    │   │   └── damage_flash.lua   # Screen effects
+    │   ├── ui/
+    │   │   ├── hud.lua            # HUD logic
+    │   │   └── scoreboard.lua     # Scoreboard updates
+    │   └── audio/
+    │       └── sound_manager.lua  # Sound triggers
+    │
+    └── shared/                    # Shared between server & client
+        └── utils/
+            ├── math.lua           # Math utilities
+            └── table.lua          # Table utilities
+```
+
+### Client Engine Script API
+
+Client-side engine scripts have access to client-specific APIs:
+
+```lua
+-- client/effects/damage_flash.lua (Engine Script, runs on CLIENT)
+
+local DamageFlash = {}
+
+function DamageFlash.on_player_damaged(localPlayerId, damage, direction)
+    -- Visual feedback only - doesn't affect game state
+    effects.screen_flash(1.0, 0.0, 0.0, 0.3)  -- Red flash
+    effects.camera_shake(damage * 0.1)
+    audio.play("hit_received", 0.8)
+    
+    -- Directional indicator
+    ui.show_damage_indicator(direction)
+end
+
+function DamageFlash.on_player_healed(localPlayerId, amount)
+    effects.screen_flash(0.0, 1.0, 0.0, 0.2)  -- Green flash
+    audio.play("heal", 0.5)
+end
+
+return DamageFlash
+```
+
+```lua
+-- client/ui/hud.lua (Engine Script, runs on CLIENT)
+
+local HUD = {}
+
+function HUD.on_health_changed(newHealth, maxHealth)
+    ui.set_progress("health_bar", newHealth / maxHealth)
+    
+    if newHealth < maxHealth * 0.25 then
+        ui.add_class("health_bar", "critical")
+        audio.play_loop("heartbeat")
+    else
+        ui.remove_class("health_bar", "critical")
+        audio.stop("heartbeat")
+    end
+end
+
+function HUD.on_inventory_changed(slot, item)
+    ui.set_icon("hotbar_" .. slot, item.icon)
+    ui.set_text("hotbar_" .. slot .. "_count", item.count)
+end
+
+return HUD
+```
+
+### Client Engine API Namespaces
+
+| Namespace | Functions | Description |
+|-----------|-----------|-------------|
+| `effects` | `screen_flash()`, `camera_shake()`, `spawn_particles()` | Visual effects |
+| `audio` | `play()`, `play_loop()`, `stop()`, `set_volume()` | Sound control |
+| `ui` | `show()`, `hide()`, `set_text()`, `animate()` | UI manipulation |
+| `input` | `is_key_down()`, `get_mouse_pos()`, `vibrate()` | Input state (read-only) |
+| `local_player` | `get_position()`, `get_look_dir()`, `get_velocity()` | Local player state (interpolated) |
+| `camera` | `set_fov()`, `set_offset()`, `shake()` | Camera control |
+
+**Note**: Client scripts cannot modify game state — they react to events from server.
+
 ### Layering
 
 1. **`shared/scripting/`** — No dependencies on server/ or client/. No raylib.
 2. **`server/scripting/`** — May depend on shared/. No raylib. No client/.
-3. **`ui/scripting/`** — May depend on shared/. May use raylib for UI commands.
-4. **Never execute user scripts on client** — All game logic runs on server.
+3. **`client/scripting/`** — May depend on shared/. May use raylib. Engine scripts only.
+4. **User scripts execute ONLY on server** — All game logic is server-authoritative.
+5. **Engine scripts can run on both** — But server and client have different APIs.
 
 ### Security (User Scripts)
 
@@ -340,34 +470,248 @@ api_version(1)
 
 ---
 
-## File Format
+## File Storage & Security
 
-### MapScriptData (in .rfmap)
+### Directory Structure
+
+User scripts are stored **separately from map files** for easier development and security:
+
+```
+game_root/
+├── maps/
+│   ├── bedwars_classic.rfmap      # Map geometry + metadata (NO script content)
+│   ├── bedwars_duos.rfmap
+│   └── custom_map.rfmap
+│
+├── scripts/
+│   ├── maps/                       # User scripts (per-map)
+│   │   ├── bedwars_classic/
+│   │   │   ├── main.lua           # Entry point
+│   │   │   └── helpers.lua        # Optional modules
+│   │   ├── bedwars_duos/
+│   │   │   └── main.lua
+│   │   └── custom_map/
+│   │       └── main.lua
+│   │
+│   └── engine/                     # Engine scripts (trusted)
+│       ├── init.lua
+│       └── bedwars/
+│           ├── core.lua
+│           └── ...
+│
+└── pak_0.pak                       # Release: engine scripts packaged here
+```
+
+### Map File Script Metadata
+
+The `.rfmap` file stores **only metadata**, not script content:
 
 ```cpp
-struct MapScriptData {
-    std::string mainScript;           // Entry point script
-    std::vector<Module> modules;      // Additional modules
-    std::uint32_t version{1};         // API version for compatibility
+// In .rfmap file header
+struct MapScriptMetadata {
+    // Script reference
+    std::string scriptDir;           // "bedwars_classic" → scripts/maps/bedwars_classic/
+    std::string entryPoint;          // "main.lua" (default)
+    
+    // Security hashes (SHA-256)
+    struct ScriptHash {
+        std::string filename;        // "main.lua"
+        std::array<uint8_t, 32> hash; // SHA-256 of file content
+    };
+    std::vector<ScriptHash> hashes;
+    
+    // API version required
+    uint32_t apiVersion{1};
+    
+    // Total script size (for limits)
+    uint32_t totalSizeBytes{0};
 };
 ```
 
-### PAK Script Layout
+### Hash Verification Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Server                                   │
+│  1. Load map: bedwars_classic.rfmap                            │
+│  2. Read scriptDir: "bedwars_classic"                          │
+│  3. Load scripts from: scripts/maps/bedwars_classic/           │
+│  4. Compute SHA-256 of each .lua file                          │
+│  5. Compare with hashes in .rfmap                              │
+│     ├─ Match: ✅ Load and execute scripts                      │
+│     └─ Mismatch: ❌ Reject, log "Script tampered"             │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        Client                                   │
+│  1. Server sends: MapInfo { mapId, scriptHashes[] }            │
+│  2. Client checks local scripts against hashes                  │
+│     ├─ Match: ✅ Continue                                       │
+│     └─ Mismatch: ❌ Download correct scripts from server       │
+│                   or reject connection                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Security Implementation
+
+```cpp
+// shared/scripting/script_hash.hpp
+
+#include <array>
+#include <string>
+#include <vector>
+#include <filesystem>
+
+namespace shared::scripting {
+
+using SHA256Hash = std::array<uint8_t, 32>;
+
+struct ScriptFileHash {
+    std::string relativePath;  // "main.lua" or "helpers/utils.lua"
+    SHA256Hash hash;
+};
+
+struct ScriptManifest {
+    std::string scriptDir;
+    std::vector<ScriptFileHash> files;
+    uint32_t apiVersion{1};
+    
+    // Compute hashes for all .lua files in directory
+    static ScriptManifest from_directory(const std::filesystem::path& dir);
+    
+    // Verify files match stored hashes
+    bool verify(const std::filesystem::path& baseDir) const;
+    
+    // Serialization for .rfmap
+    void serialize(std::ostream& out) const;
+    static ScriptManifest deserialize(std::istream& in);
+};
+
+// Hash computation
+SHA256Hash compute_file_hash(const std::filesystem::path& file);
+SHA256Hash compute_string_hash(const std::string& content);
+
+// Compare hashes
+bool hashes_equal(const SHA256Hash& a, const SHA256Hash& b);
+
+} // namespace shared::scripting
+```
+
+```cpp
+// server/scripting/script_loader.hpp
+
+namespace server::scripting {
+
+enum class ScriptLoadResult {
+    Success,
+    DirectoryNotFound,
+    EntryPointMissing,
+    HashMismatch,
+    ValidationFailed,
+    SizeLimitExceeded,
+};
+
+struct ScriptLoadError {
+    ScriptLoadResult result;
+    std::string details;  // e.g., "main.lua hash mismatch"
+};
+
+class ScriptLoader {
+public:
+    // Load scripts for a map, verify hashes
+    std::expected<MapScriptData, ScriptLoadError> 
+    load_map_scripts(const std::filesystem::path& scriptsBase,
+                     const ScriptManifest& manifest);
+    
+    // Generate manifest for map editor
+    ScriptManifest generate_manifest(const std::filesystem::path& scriptDir);
+    
+private:
+    static constexpr size_t kMaxTotalScriptSize = 1024 * 1024;  // 1 MB limit
+};
+
+} // namespace server::scripting
+```
+
+### Map Editor Integration
+
+When saving a map in the editor:
+
+```cpp
+void MapEditor::save_map(const std::filesystem::path& mapPath) {
+    // 1. Save map geometry to .rfmap
+    save_geometry(mapPath);
+    
+    // 2. Get script directory name from map name
+    std::string scriptDir = mapPath.stem().string();  // "my_map.rfmap" → "my_map"
+    
+    // 3. If scripts exist, compute and store hashes
+    auto scriptsPath = scripts_base_path() / "maps" / scriptDir;
+    if (std::filesystem::exists(scriptsPath)) {
+        auto manifest = ScriptManifest::from_directory(scriptsPath);
+        save_script_metadata(mapPath, manifest);
+    }
+}
+```
+
+### Hot-Reload in Debug Mode
+
+```cpp
+// Debug only: skip hash verification, enable file watching
+#ifdef RAYFLOW_DEBUG
+    bool verify_hashes = false;  // Allow script editing without re-saving map
+    enable_file_watcher(scriptDir);  // Auto-reload on change
+#else
+    bool verify_hashes = true;   // Production: strict verification
+#endif
+```
+
+---
+
+## File Format Details
+
+### MapScriptMetadata Binary Format (in .rfmap)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ MapScriptMetadata Section                                    │
+├──────────────────────────────────────────────────────────────┤
+│ uint32_t  sectionSize          # Total section size          │
+│ uint8_t   scriptDirLen         # Length of scriptDir string  │
+│ char[]    scriptDir            # "bedwars_classic"           │
+│ uint8_t   entryPointLen        # Length of entryPoint        │
+│ char[]    entryPoint           # "main.lua"                  │
+│ uint32_t  apiVersion           # Required API version        │
+│ uint32_t  totalSizeBytes       # Total script size           │
+│ uint16_t  fileCount            # Number of script files      │
+│ ScriptHash[fileCount]          # Hash entries                │
+├──────────────────────────────────────────────────────────────┤
+│ ScriptHash Entry:                                            │
+│   uint8_t   filenameLen                                      │
+│   char[]    filename           # "main.lua"                  │
+│   uint8_t[32] sha256           # SHA-256 hash                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Engine Scripts (pak_N.pak)
+
+Engine scripts remain in PAK archives for release builds:
 
 ```
 pak_0.pak/
 ├── scripts/
-│   ├── init.lua              # Entry point, loaded first
-│   ├── bedwars/
-│   │   ├── core.lua          # Core BedWars logic
-│   │   ├── teams.lua         # Team management
-│   │   ├── economy.lua       # Generators, shop
-│   │   └── events.lua        # Event handlers
-│   └── utils/
-│       ├── math.lua          # Math utilities
-│       └── table.lua         # Table utilities
+│   └── engine/
+│       ├── init.lua
+│       └── bedwars/
+│           ├── core.lua
+│           ├── teams.lua
+│           └── economy.lua
 └── ...
 ```
+
+Engine scripts are **not hash-verified per-map** — they're signed at the PAK level (future feature).
+
+---
 
 ## Testing
 
@@ -379,16 +723,23 @@ pak_0.pak/
 - Command queue correctness
 - Timer firing accuracy
 - Event hook invocation
+- **SHA-256 hash computation correctness**
+- **Hash verification pass/fail scenarios**
+- **Script manifest serialization roundtrip**
 
 ### Integration Tests Required
-- User script in .rfmap loads and runs
+- User script loads from scripts/maps/ directory
+- Hash mismatch rejects script loading
 - Engine script in pak loads and runs
 - User script cannot access engine API
 - Engine script can access all APIs
 - Script errors don't crash server
+- **Client with modified script gets rejected**
+- **Map editor generates correct hashes**
 
 ## References
 
 - **sol2 documentation**: https://sol2.readthedocs.io/
 - **Lua 5.4 manual**: https://www.lua.org/manual/5.4/
 - **Valve VScripts**: https://developer.valvesoftware.com/wiki/VScript
+- **SHA-256 (OpenSSL/crypto++)**: For hash computation
