@@ -9,6 +9,12 @@ This repository is a voxel-based BedWars-like game.
 	- Server runs a fixed tick loop (default 30 TPS).
 	- Server simulates gravity + jump + basic AABB vs voxel blocks.
 	- Server sends `StateSnapshot` with authoritative player position.
+- **Multiplayer networking is implemented**:
+	- `rfds` (RayFlow Dedicated Server) — headless multi-client server using ENet.
+	- Client connects via `--connect host:port` flag.
+	- ENet transport in `shared/transport/enet_*.hpp/cpp`.
+	- `DedicatedServer` class in `server/core/dedicated_server.hpp/cpp`.
+	- Singleplayer still uses `LocalTransport` (same protocol).
 - Rendering is **client-only**:
 	- Client interpolates to authoritative positions and renders.
 	- Client does **not** run local physics for the player.

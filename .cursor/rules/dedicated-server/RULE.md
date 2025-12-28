@@ -41,19 +41,21 @@
 - [x] `Server` class with tick loop (`server/core/server.hpp`)
 - [x] Protocol messages (`shared/protocol/messages.hpp`)
 - [x] `ScriptEngine` for map scripts (`server/scripting/`)
+- [x] **ENet Transport** (`shared/transport/enet_*.hpp/cpp`) — Phase 1 complete
+- [x] **DedicatedServer** (`server/core/dedicated_server.hpp/cpp`) — multi-client support
+- [x] **rfds executable** (`app/dedicated_server_main.cpp`) — headless server
+- [x] **Client --connect** flag for network mode
 
 ### Not Implemented 🔴
-- [ ] `NetTransport` (UDP/TCP network layer)
-- [ ] `ConnectionManager` (multiple clients)
-- [ ] `rfds.exe` entry point
 - [ ] RCON (remote console)
 - [ ] Server browser integration
+- [ ] Match recording / replays
 
 ---
 
 ## Implementation Roadmap
 
-### Phase 1: Network Transport (2-3 weeks)
+### Phase 1: Network Transport ✅ COMPLETE
 
 **Goal**: Replace `LocalTransport` with network-capable transport.
 
@@ -315,7 +317,7 @@ void ENetServer::broadcast(const proto::Message& msg) {
 }
 ```
 
-### Phase 2: Dedicated Server Executable (1-2 weeks)
+### Phase 2: Dedicated Server Executable ✅ COMPLETE
 
 **Goal**: `rfds.exe` can host matches.
 

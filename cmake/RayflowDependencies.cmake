@@ -43,6 +43,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tinyxml2)
 
+message(STATUS "Fetching ENet...")
+FetchContent_Declare(
+    enet
+    GIT_REPOSITORY https://github.com/lsalzman/enet.git
+    GIT_TAG v1.3.18
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(enet)
+
 # -----------------------------------------------------------------------------
 # LuaJIT (Lua scripting with JIT compilation)
 # Strategy: Always build from source via ExternalProject for consistent cross-platform builds

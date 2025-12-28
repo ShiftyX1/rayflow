@@ -12,6 +12,7 @@
 #include "../voxel/block_interaction.hpp"
 #include "../renderer/skybox.hpp"
 #include "../../shared/maps/runtime_paths.hpp"
+#include "../../shared/transport/enet_client.hpp"
 #include <cstdio>
 #include <ctime>
 #include <utility>
@@ -309,6 +310,11 @@ void Game::update(float delta_time) {
 
     if (!gameplay_initialized_) {
         return;
+    }
+
+    // Poll ENet for network events (must be called every frame)
+    if (netClient_) {
+        netClient_->poll(0);
     }
 
     if (session_) {

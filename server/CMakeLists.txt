@@ -5,6 +5,7 @@
 
 add_library(server_lib STATIC
     core/server.cpp
+    core/dedicated_server.cpp
     voxel/terrain.cpp
     scripting/script_engine.cpp
     scripting/game_api.cpp

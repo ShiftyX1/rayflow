@@ -8,6 +8,10 @@
 
 #include "runtime/ui_manager.hpp"
 
+// Forward declarations
+namespace shared::transport {
+    class ENetClient;
+}
 
 // Forward declarations
 namespace voxel {
@@ -28,6 +32,7 @@ public:
     ~Game();
 
     void set_transport_endpoint(std::shared_ptr<shared::transport::IEndpoint> endpoint);
+    void set_network_client(shared::transport::ENetClient* client) { netClient_ = client; }
     
     bool init(int width, int height, const char* title);
     void run();
@@ -70,6 +75,7 @@ private:
     std::unique_ptr<voxel::BlockInteraction> block_interaction_;
 
     std::unique_ptr<client::net::ClientSession> session_;
+    shared::transport::ENetClient* netClient_{nullptr};  // Non-owning, for polling
 
     ui::UIManager ui_{};
     ui::UIViewModel ui_vm_{};

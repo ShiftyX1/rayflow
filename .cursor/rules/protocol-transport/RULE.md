@@ -12,7 +12,33 @@ Client and server communicate only via an abstract transport.
 
 ### Implementations
 1. `LocalTransport` (single process): in-memory queues.
-2. `NetTransport` (later): UDP/TCP/WebSocket are allowed, but the interface must stay stable.
+2. `ENetTransport` ✅ **IMPLEMENTED**: UDP-based reliable transport using ENet library.
+
+#### ENet Transport Files
+```
+shared/transport/
+├── endpoint.hpp           # IEndpoint interface
+├── local_transport.hpp    # In-memory (singleplayer)
+├── enet_common.hpp/cpp    # ENet init, serialization, channel config
+├── enet_connection.hpp/cpp # IEndpoint over ENetPeer
+├── enet_server.hpp/cpp    # Multi-client server listener
+└── enet_client.hpp/cpp    # Client connector
+```
+
+#### ENet Channels
+```cpp
+enum class ENetChannel : std::uint8_t {
+    Reliable = 0,        // Hello, Join, Events, Chat
+    Unreliable = 1,      // StateSnapshot, InputFrame
+    ReliableOrdered = 2, // Sequenced reliable data
+    Count = 3
+};
+```
+
+#### Usage
+- Server: `ENetServer::start(port, maxClients)` → `poll(0)` every tick
+- Client: `ENetClient::connect(host, port)` → `poll(0)` every frame
+- Both use `ENetConnection` as `IEndpoint` for send/recv
 
 Critical: client always "connects" to the transport abstraction; server always "listens" on it.
 

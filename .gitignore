@@ -32,6 +32,7 @@ Testing/
 
 # CMake Presets (user-specific overrides)
 CMakeUserPresets.json
+rfpak_explorer/
 
 # Libraries
 *.dll
@@ -66,3 +67,5 @@ _deps/
 
 # Keep documentation sources
 !documentation/
+
+rfpak_explorer_go/
