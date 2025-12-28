@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 
 #include "../../shared/constants.hpp"
@@ -61,7 +62,7 @@ static inline int fast_floor(float v) {
 
 // Collision helpers (same logic as server.cpp)
 static void resolve_x(const server::voxel::Terrain& terrain, float& px, float py, float pz, 
-                      float& vx, float dx, std::uint64_t tick) {
+                      float& vx, float dx) {
     if (dx == 0.0f) return;
     const float hw = kPlayerWidth * 0.5f;
     int minY = fast_floor(py + kEps);
@@ -95,7 +96,7 @@ static void resolve_x(const server::voxel::Terrain& terrain, float& px, float py
 }
 
 static void resolve_z(const server::voxel::Terrain& terrain, float px, float py, float& pz,
-                      float& vz, float dz, std::uint64_t tick) {
+                      float& vz, float dz) {
     if (dz == 0.0f) return;
     const float hw = kPlayerWidth * 0.5f;
     int minY = fast_floor(py + kEps);
@@ -129,7 +130,7 @@ static void resolve_z(const server::voxel::Terrain& terrain, float px, float py,
 }
 
 static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py, float pz,
-                      float& vy, float dy, bool& onGround, std::uint64_t tick) {
+                      float& vy, float dy, bool& onGround) {
     const float hw = kPlayerWidth * 0.5f;
     
     if (dy <= 0.0f) {
@@ -563,19 +564,19 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
     float dx = client.vx * dt;
     if (dx != 0.0f) {
         client.px += dx;
-        resolve_x(*terrain_, client.px, client.py, client.pz, client.vx, dx, serverTick_);
+        resolve_x(*terrain_, client.px, client.py, client.pz, client.vx, dx);
     }
 
     float dz = client.vz * dt;
     if (dz != 0.0f) {
         client.pz += dz;
-        resolve_z(*terrain_, client.px, client.py, client.pz, client.vz, dz, serverTick_);
+        resolve_z(*terrain_, client.px, client.py, client.pz, client.vz, dz);
     }
 
     float dy = client.vy * dt;
     client.py += dy;
     client.onGround = false;
-    resolve_y(*terrain_, client.px, client.py, client.pz, client.vy, dy, client.onGround, serverTick_);
+    resolve_y(*terrain_, client.px, client.py, client.pz, client.vy, dy, client.onGround);
 }
 
 void DedicatedServer::broadcast_(const shared::proto::Message& msg) {
