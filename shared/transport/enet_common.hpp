@@ -1,34 +1,37 @@
 #pragma once
 
+// ENet common utilities and types.
+// NOTE: This header avoids including <enet/enet.h> directly to prevent
+// Windows header conflicts (winsock2.h/windows.h vs raylib CloseWindow/ShowCursor).
+// ENet types are forward-declared or wrapped as needed.
 
 #include "../protocol/messages.hpp"
-
-#include <enet/enet.h>
 
 #include <cstdint>
 #include <vector>
 
+// Forward declarations for ENet types (opaque pointers)
+struct _ENetHost;
+struct _ENetPeer;
+struct _ENetPacket;
+typedef struct _ENetHost ENetHost;
+typedef struct _ENetPeer ENetPeer;
+typedef struct _ENetPacket ENetPacket;
+typedef unsigned int enet_uint32;
 
 namespace shared::transport {
 
+// ENetInitializer must be created in a .cpp file that includes <enet/enet.h>
+// This is just a forward declaration of its existence.
 class ENetInitializer {
 public:
-    ENetInitializer() {
-        initialized_ = (enet_initialize() == 0);
-    }
-
-    ~ENetInitializer() {
-        if (initialized_) {
-            enet_deinitialize();
-        }
-    }
+    ENetInitializer();
+    ~ENetInitializer();
 
     ENetInitializer(const ENetInitializer&) = delete;
     ENetInitializer& operator=(const ENetInitializer&) = delete;
 
-    bool isInitialized() const {
-        return initialized_;
-    }
+    bool isInitialized() const { return initialized_; }
     
 private:
     bool initialized_ = false;
@@ -42,25 +45,9 @@ enum class ENetChannel : std::uint8_t {
     Count = 3
 };
 
-inline ENetChannel get_channel_for_message(const shared::proto::Message& msg) {
-    return std::visit([](const auto& m) -> ENetChannel {
-        using T = std::decay_t<decltype(m)>;
-
-        if constexpr (std::is_same_v<T, shared::proto::StateSnapshot> ||
-                      std::is_same_v<T, shared::proto::InputFrame>) {
-            return ENetChannel::Unreliable;
-        }
-        return ENetChannel::Reliable;
-    }, msg);
-}
-
-inline enet_uint32 get_packet_flags_for_message(const shared::proto::Message& msg) {
-    ENetChannel channel = get_channel_for_message(msg);
-    if (channel == ENetChannel::Unreliable) {
-        return ENET_PACKET_FLAG_UNSEQUENCED;
-    }
-    return ENET_PACKET_FLAG_RELIABLE;
-}
+// These functions are implemented in enet_common.cpp
+ENetChannel get_channel_for_message(const shared::proto::Message& msg);
+enet_uint32 get_packet_flags_for_message(const shared::proto::Message& msg);
 
 std::vector<std::uint8_t> serialize_message(const shared::proto::Message& msg);
 bool deserialize_message(const std::uint8_t* data, std::size_t size,

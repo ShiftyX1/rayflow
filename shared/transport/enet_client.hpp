@@ -5,8 +5,6 @@
 
 #include "enet_connection.hpp"
 
-#include <enet/enet.h>
-
 #include <cstdint>
 #include <functional>
 #include <memory>

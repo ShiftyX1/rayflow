@@ -5,8 +5,6 @@
 
 #include "enet_connection.hpp"
 
-#include <enet/enet.h>
-
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -69,10 +67,12 @@ public:
     // Called when a client disconnects.
     std::function<void(std::shared_ptr<ENetConnection>)> onDisconnect;
 
+    // Access to connections list (used by internal handlers)
+    std::vector<std::shared_ptr<ENetConnection>>& connections() { return connections_; }
+
 private:
-    void handle_connect(ENetEvent& event);
-    void handle_disconnect(ENetEvent& event);
-    void handle_receive(ENetEvent& event);
+    // Event handlers are implemented in the .cpp file only
+    // (ENetEvent requires <enet/enet.h> which conflicts with Windows headers)
 
     ENetHost* host_{nullptr};
     std::vector<std::shared_ptr<ENetConnection>> connections_;

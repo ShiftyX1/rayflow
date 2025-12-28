@@ -1,6 +1,3 @@
-// ENet must be included early on Windows to avoid winsock2/windows.h conflicts
-#include "../../shared/transport/enet_client.hpp"
-
 #include "game.hpp"
 #include "config.hpp"
 #include "logger.hpp"
@@ -15,6 +12,7 @@
 #include "../voxel/block_interaction.hpp"
 #include "../renderer/skybox.hpp"
 #include "../../shared/maps/runtime_paths.hpp"
+#include "../../shared/transport/enet_client.hpp"
 #include <cstdio>
 #include <ctime>
 #include <utility>

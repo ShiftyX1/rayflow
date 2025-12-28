@@ -1,8 +1,48 @@
 #include "enet_common.hpp"
 
+#include <enet/enet.h>
+
 #include <cstring>
 
 namespace shared::transport {
+
+// =============================================================================
+// ENetInitializer implementation
+// =============================================================================
+
+ENetInitializer::ENetInitializer() {
+    initialized_ = (enet_initialize() == 0);
+}
+
+ENetInitializer::~ENetInitializer() {
+    if (initialized_) {
+        enet_deinitialize();
+    }
+}
+
+// =============================================================================
+// Channel/flags helpers
+// =============================================================================
+
+ENetChannel get_channel_for_message(const shared::proto::Message& msg) {
+    return std::visit([](const auto& m) -> ENetChannel {
+        using T = std::decay_t<decltype(m)>;
+
+        if constexpr (std::is_same_v<T, shared::proto::StateSnapshot> ||
+                      std::is_same_v<T, shared::proto::InputFrame>) {
+            return ENetChannel::Unreliable;
+        }
+        return ENetChannel::Reliable;
+    }, msg);
+}
+
+enet_uint32 get_packet_flags_for_message(const shared::proto::Message& msg) {
+    ENetChannel channel = get_channel_for_message(msg);
+    if (channel == ENetChannel::Unreliable) {
+        return ENET_PACKET_FLAG_UNSEQUENCED;
+    }
+    return ENET_PACKET_FLAG_RELIABLE;
+}
 
 // =============================================================================
 // Message type indices (must match order in std::variant)

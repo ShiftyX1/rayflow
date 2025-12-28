@@ -1,5 +1,7 @@
 #include "enet_server.hpp"
 
+#include <enet/enet.h>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -78,8 +80,64 @@ void ENetServer::stop() {
 }
 
 // =============================================================================
-// Event processing
+// Event processing (helper functions in anonymous namespace)
 // =============================================================================
+
+namespace {
+
+void do_handle_connect(shared::transport::ENetServer* server, ENetEvent& event) {
+    std::fprintf(stderr, "[enet_server] CONNECT from %x:%u\n",
+                 event.peer->address.host, event.peer->address.port);
+
+    // Create connection wrapper
+    auto conn = std::make_shared<shared::transport::ENetConnection>(event.peer);
+    conn->on_connect();
+
+    // Store peer -> connection mapping in peer data
+    event.peer->data = conn.get();
+
+    server->connections().push_back(conn);
+
+    // Notify callback
+    if (server->onConnect) {
+        server->onConnect(conn);
+    }
+}
+
+void do_handle_disconnect(shared::transport::ENetServer* server, ENetEvent& event) {
+    // Find connection
+    auto conn = server->find_connection(event.peer);
+    if (!conn) {
+        return;
+    }
+
+    // Mark as disconnected
+    conn->on_disconnect();
+
+    // Notify callback before removing
+    if (server->onDisconnect) {
+        server->onDisconnect(conn);
+    }
+
+    // Remove from list
+    auto& conns = server->connections();
+    conns.erase(
+        std::remove(conns.begin(), conns.end(), conn),
+        conns.end()
+    );
+}
+
+void do_handle_receive(shared::transport::ENetServer* server, ENetEvent& event) {
+    auto conn = server->find_connection(event.peer);
+    if (!conn) {
+        return;
+    }
+
+    // Pass to connection for deserialization and queuing
+    conn->on_receive(event.packet->data, event.packet->dataLength);
+}
+
+} // anonymous namespace
 
 void ENetServer::poll(std::uint32_t timeoutMs) {
     if (!host_) {
@@ -92,15 +150,15 @@ void ENetServer::poll(std::uint32_t timeoutMs) {
     while (enet_host_service(host_, &event, timeoutMs) > 0) {
         switch (event.type) {
             case ENET_EVENT_TYPE_CONNECT:
-                handle_connect(event);
+                do_handle_connect(this, event);
                 break;
 
             case ENET_EVENT_TYPE_DISCONNECT:
-                handle_disconnect(event);
+                do_handle_disconnect(this, event);
                 break;
 
             case ENET_EVENT_TYPE_RECEIVE:
-                handle_receive(event);
+                do_handle_receive(this, event);
                 enet_packet_destroy(event.packet);
                 break;
 
@@ -143,61 +201,6 @@ void ENetServer::broadcast(const shared::proto::Message& msg) {
     }
 
     enet_host_broadcast(host_, static_cast<enet_uint8>(channel), packet);
-}
-
-// =============================================================================
-// Event handlers
-// =============================================================================
-
-void ENetServer::handle_connect(ENetEvent& event) {
-    std::fprintf(stderr, "[enet_server] CONNECT from %x:%u\n",
-                 event.peer->address.host, event.peer->address.port);
-
-    // Create connection wrapper
-    auto conn = std::make_shared<ENetConnection>(event.peer);
-    conn->on_connect();
-
-    // Store peer -> connection mapping in peer data
-    event.peer->data = conn.get();
-
-    connections_.push_back(conn);
-
-    // Notify callback
-    if (onConnect) {
-        onConnect(conn);
-    }
-}
-
-void ENetServer::handle_disconnect(ENetEvent& event) {
-    // Find connection
-    auto conn = find_connection(event.peer);
-    if (!conn) {
-        return;
-    }
-
-    // Mark as disconnected
-    conn->on_disconnect();
-
-    // Notify callback before removing
-    if (onDisconnect) {
-        onDisconnect(conn);
-    }
-
-    // Remove from list
-    connections_.erase(
-        std::remove(connections_.begin(), connections_.end(), conn),
-        connections_.end()
-    );
-}
-
-void ENetServer::handle_receive(ENetEvent& event) {
-    auto conn = find_connection(event.peer);
-    if (!conn) {
-        return;
-    }
-
-    // Pass to connection for deserialization and queuing
-    conn->on_receive(event.packet->data, event.packet->dataLength);
 }
 
 } // namespace shared::transport

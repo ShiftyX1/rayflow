@@ -1,5 +1,7 @@
 #include "enet_client.hpp"
 
+#include <enet/enet.h>
+
 #include <cstdio>
 #include <cstring>
 

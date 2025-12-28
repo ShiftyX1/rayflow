@@ -1,5 +1,7 @@
 #include "enet_connection.hpp"
 
+#include <enet/enet.h>
+
 namespace shared::transport {
 
 ENetConnection::ENetConnection(ENetPeer* peer)

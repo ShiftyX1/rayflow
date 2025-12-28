@@ -3,8 +3,6 @@
 #include "endpoint.hpp"
 #include "enet_common.hpp"
 
-#include <enet/enet.h>
-
 #include <atomic>
 #include <cstdint>
 #include <mutex>
