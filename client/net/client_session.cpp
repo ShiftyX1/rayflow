@@ -16,6 +16,15 @@ void ClientSession::start_handshake() {
     endpoint_->send(shared::proto::JoinMatch{});
 }
 
+void ClientSession::reset() {
+    inputSeq_ = 0;
+    actionSeq_ = 0;
+    serverHello_.reset();
+    joinAck_.reset();
+    latestSnapshot_.reset();
+    // Note: callbacks are kept intact for reuse
+}
+
 void ClientSession::send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint, bool camUp, bool camDown) {
     shared::proto::InputFrame frame;
     frame.seq = ++inputSeq_;

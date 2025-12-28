@@ -15,6 +15,7 @@ public:
 
     void start_handshake();
     void poll();
+    void reset();  // Reset session state for reconnect
 
     void send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint, bool camUp = false, bool camDown = false);
 

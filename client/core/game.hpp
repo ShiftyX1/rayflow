@@ -3,6 +3,7 @@
 #include <entt/entt.hpp>
 #include <raylib.h>
 #include <memory>
+#include <string>
 
 #include "../net/client_session.hpp"
 
@@ -11,6 +12,11 @@
 // Forward declarations
 namespace shared::transport {
     class ENetClient;
+    class ENetInitializer;
+}
+
+namespace server::core {
+    class Server;
 }
 
 // Forward declarations
@@ -48,8 +54,18 @@ private:
     void refresh_ui_view_model(float delta_time);
     void set_cursor_enabled(bool enabled);
 
-    // Start actual gameplay (called when transitioning from main menu)
+    // Start singleplayer (embedded server)
+    void start_singleplayer();
+    
+    // Start multiplayer connection
+    void connect_to_server(const std::string& host, std::uint16_t port);
+    void disconnect_from_server();
+    
+    // Start actual gameplay (called after transport is ready)
     void start_gameplay();
+    
+    // Return to main menu (cleanup gameplay state)
+    void return_to_main_menu();
     
     // Window
     int screen_width_{1280};
@@ -59,6 +75,15 @@ private:
     // Game state
     ui::GameScreen game_screen_{ui::GameScreen::MainMenu};
     bool gameplay_initialized_{false};
+    
+    // Multiplayer state
+    bool is_multiplayer_{false};
+    std::string connection_error_{};
+    std::unique_ptr<shared::transport::ENetInitializer> enet_init_{};
+    std::unique_ptr<shared::transport::ENetClient> owned_net_client_{};
+    
+    // Singleplayer embedded server
+    std::unique_ptr<server::core::Server> local_server_{};
     
     // ECS
     entt::registry registry_;

@@ -1,0 +1,98 @@
+/* Connect Menu Styles - Modern Dark Theme */
+
+.connect-panel {
+  anchor: center;
+  width: 450;
+  height: 380;
+  padding: 36;
+  gap: 20;
+  direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #0d1117f0;
+  border-radius: 16;
+  border-width: 1;
+  border-color: #30363d;
+}
+
+.panel-title {
+  font-size: 32;
+  color: #58a6ff;
+  text-align: center;
+}
+
+.panel-subtitle {
+  font-size: 16;
+  color: #8b949e;
+  text-align: center;
+}
+
+.input-section {
+  gap: 8;
+  direction: column;
+  align-items: center;
+  padding: 8;
+}
+
+.input-label {
+  font-size: 14;
+  color: #c9d1d9;
+  text-align: center;
+}
+
+.text-input-container {
+  width: 340;
+  height: 48;
+  background-color: #161b22;
+  border-radius: 8;
+  border-width: 1;
+  border-color: #30363d;
+  padding: 12;
+}
+
+.input-hint {
+  font-size: 16;
+  color: #484f58;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.button-row {
+  gap: 12;
+  direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 8;
+}
+
+.connect-button {
+  width: 160;
+  height: 48;
+  font-size: 18;
+  color: #c9d1d9;
+  text-align: center;
+  vertical-align: middle;
+  background-color: #21262d;
+  border-radius: 8;
+  border-width: 1;
+  border-color: #30363d;
+  padding: 12;
+}
+
+.primary-button {
+  background-color: #238636;
+  border-color: #2ea043;
+  color: #ffffff;
+}
+
+.secondary-button {
+  background-color: #21262d;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+
+.status-text {
+  font-size: 14;
+  color: #f85149;
+  text-align: center;
+}

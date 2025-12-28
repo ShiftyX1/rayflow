@@ -18,6 +18,7 @@ struct UIFrameInput {
 
     bool toggle_debug_ui{false};      // F1: interactive debug UI (windows/settings)
     bool toggle_debug_overlay{false}; // F2: overlay-only (informational)
+    bool toggle_pause{false};         // ESC: toggle pause menu during gameplay
 };
 
 struct UIFrameOutput {

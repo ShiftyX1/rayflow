@@ -1,13 +1,23 @@
 <UI>
   <Panel id="main-menu" class="fullscreen-menu">
-    <Text id="title" class="game-title">Rayflow</Text>
-    <Text id="subtitle" class="game-subtitle">Voxel BedWars</Text>
+    <Panel id="logo-section" class="logo-section">
+      <Text id="title" class="game-title">RAYFLOW</Text>
+      <Text id="subtitle" class="game-subtitle">Voxel BedWars</Text>
+    </Panel>
     
     <Panel id="menu-buttons" class="menu-buttons">
-      <Button id="btn-play" action="start_game" class="menu-button">Play Game</Button>
-      <Button id="btn-settings" action="open_settings" class="menu-button">Settings</Button>
-      <Button id="btn-quit" action="quit_game" class="menu-button">Quit</Button>
-      <Button id="btn-credits" action="view_credits" class="menu-button">Credits</Button>
+      <Button id="btn-singleplayer" action="start_game" class="menu-button primary-button">
+        Singleplayer
+      </Button>
+      <Button id="btn-multiplayer" action="show_connect_screen" class="menu-button multiplayer-button">
+        Multiplayer
+      </Button>
+      <Button id="btn-settings" action="open_settings" class="menu-button">
+        Settings
+      </Button>
+      <Button id="btn-quit" action="quit_game" class="menu-button danger-button">
+        Quit
+      </Button>
     </Panel>
     
     <Text id="version" class="version-text">v0.1.0 alpha</Text>

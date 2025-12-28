@@ -142,6 +142,34 @@ static std::optional<UIAlign> parse_align(std::string_view v) {
     return std::nullopt;
 }
 
+static std::optional<UITextAlign> parse_text_align(std::string_view v) {
+    std::string s;
+    s.reserve(v.size());
+    for (char c : v) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+    }
+    if (s == "left" || s == "start") return UITextAlign::Left;
+    if (s == "center") return UITextAlign::Center;
+    if (s == "right" || s == "end") return UITextAlign::Right;
+    return std::nullopt;
+}
+
+static std::optional<UIVerticalAlign> parse_vertical_align(std::string_view v) {
+    std::string s;
+    s.reserve(v.size());
+    for (char c : v) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        }
+    }
+    if (s == "top" || s == "start") return UIVerticalAlign::Top;
+    if (s == "middle" || s == "center") return UIVerticalAlign::Middle;
+    if (s == "bottom" || s == "end") return UIVerticalAlign::Bottom;
+    return std::nullopt;
+}
+
 static int hex_digit(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return 10 + c - 'a';
@@ -240,11 +268,38 @@ static bool parse_bool(std::string_view v) {
     return s == "true" || s == "1" || s == "yes";
 }
 
+// Helper to check if a class list (space-separated) contains a specific class
+static bool class_list_contains(std::string_view class_list, std::string_view target_class) {
+    if (class_list.empty() || target_class.empty()) return false;
+    
+    size_t pos = 0;
+    while (pos < class_list.size()) {
+        // Skip leading whitespace
+        while (pos < class_list.size() && std::isspace(static_cast<unsigned char>(class_list[pos]))) {
+            ++pos;
+        }
+        if (pos >= class_list.size()) break;
+        
+        // Find end of this class name
+        size_t start = pos;
+        while (pos < class_list.size() && !std::isspace(static_cast<unsigned char>(class_list[pos]))) {
+            ++pos;
+        }
+        
+        // Check if this class matches
+        std::string_view current_class = class_list.substr(start, pos - start);
+        if (current_class == target_class) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool selector_matches(const CSSSelector& sel, std::string_view type, std::string_view id, std::string_view class_name) {
     switch (sel.kind) {
         case CSSSelector::Kind::Type: return sel.value == type;
         case CSSSelector::Kind::Id: return sel.value == id;
-        case CSSSelector::Kind::Class: return sel.value == class_name;
+        case CSSSelector::Kind::Class: return class_list_contains(class_name, sel.value);
     }
     return false;
 }
@@ -333,6 +388,10 @@ CSSParseResult parse_css_lite(std::string_view css) {
                 if (auto v = parse_int(value); v.has_value()) rule.style.font_size = *v;
             } else if (key == "color") {
                 if (auto c = parse_color(value); c.has_value()) rule.style.color = *c;
+            } else if (key == "text-align") {
+                if (auto a = parse_text_align(value); a.has_value()) rule.style.text_align = *a;
+            } else if (key == "vertical-align") {
+                if (auto a = parse_vertical_align(value); a.has_value()) rule.style.vertical_align = *a;
             } else if (key == "background-color" || key == "background") {
                 if (auto c = parse_color(value); c.has_value()) rule.style.background_color = c;
             } else if (key == "border-width") {
@@ -378,6 +437,8 @@ UIStyle compute_style(
 
         out.font_size = r.style.font_size;
         out.color = r.style.color;
+        out.text_align = r.style.text_align;
+        out.vertical_align = r.style.vertical_align;
         if (r.style.background_color.has_value()) out.background_color = r.style.background_color;
 
         out.border_width = r.style.border_width;

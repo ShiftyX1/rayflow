@@ -44,9 +44,20 @@ private:
     xmlui::UIDocument main_menu_{};
     bool main_menu_loaded_{false};
 
+    // Connect menu UI (XML + CSS-lite)
+    xmlui::UIDocument connect_menu_{};
+    bool connect_menu_loaded_{false};
+
+    // Pause menu UI (XML + CSS-lite)
+    xmlui::UIDocument pause_menu_{};
+    bool pause_menu_loaded_{false};
+
     // Player HUD (XML + CSS-lite)
     xmlui::UIDocument hud_{};
     bool hud_loaded_{false};
+
+    // Server address text input state
+    std::string server_address_{"localhost:7777"};
 
     // Cached view model (for layout)
     UIViewModel cached_vm_{};

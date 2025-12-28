@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
 #include <raylib.h>
 
@@ -9,6 +10,8 @@ namespace ui {
 
 enum class GameScreen {
     MainMenu,
+    ConnectMenu,   // Multiplayer server address input
+    Connecting,    // Connecting to server (loading state)
     Playing,
     Paused,
     Settings,
@@ -41,6 +44,11 @@ struct NetViewModel {
 
     bool has_snapshot{false};
     std::uint64_t server_tick{0};
+
+    // Connection status
+    bool is_connecting{false};
+    bool connection_failed{false};
+    std::string connection_error{};
 };
 
 struct UIViewModel {

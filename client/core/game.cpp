@@ -13,6 +13,9 @@
 #include "../renderer/skybox.hpp"
 #include "../../shared/maps/runtime_paths.hpp"
 #include "../../shared/transport/enet_client.hpp"
+#include "../../shared/transport/enet_common.hpp"
+#include "../../shared/transport/local_transport.hpp"
+#include "../../server/core/server.hpp"
 #include <cstdio>
 #include <ctime>
 #include <utility>
@@ -59,6 +62,87 @@ bool Game::init(int width, int height, const char* title) {
     TraceLog(LOG_INFO, "Game initialized! Starting in main menu.");
     
     return true;
+}
+
+void Game::start_singleplayer() {
+    TraceLog(LOG_INFO, "Starting singleplayer...");
+    
+    // Create local transport pair
+    auto pair = shared::transport::LocalTransport::create_pair();
+
+    // Configure embedded server
+    server::core::Server::Options sv_opts;
+    {
+        const auto& sv = core::Config::instance().sv_logging();
+        sv_opts.logging.enabled = sv.enabled;
+        sv_opts.logging.init = sv.init;
+        sv_opts.logging.rx = sv.rx;
+        sv_opts.logging.tx = sv.tx;
+        sv_opts.logging.move = sv.move;
+        sv_opts.logging.coll = sv.coll;
+    }
+
+    // Create and start embedded server
+    local_server_ = std::make_unique<server::core::Server>(pair.server, sv_opts);
+    local_server_->start();
+
+    // Set up client session
+    session_ = std::make_unique<client::net::ClientSession>(pair.client);
+    netClient_ = nullptr;  // No network client for singleplayer
+    is_multiplayer_ = false;
+
+    TraceLog(LOG_INFO, "Singleplayer server started.");
+    start_gameplay();
+}
+
+void Game::connect_to_server(const std::string& host, std::uint16_t port) {
+    TraceLog(LOG_INFO, "Connecting to %s:%u...", host.c_str(), port);
+    
+    game_screen_ = ui::GameScreen::Connecting;
+    connection_error_.clear();
+    
+    // Initialize ENet if not already done
+    if (!enet_init_) {
+        enet_init_ = std::make_unique<shared::transport::ENetInitializer>();
+        if (!enet_init_->isInitialized()) {
+            connection_error_ = "Failed to initialize network";
+            TraceLog(LOG_ERROR, "[net] %s", connection_error_.c_str());
+            return;
+        }
+    }
+    
+    // Create network client and connect
+    owned_net_client_ = std::make_unique<shared::transport::ENetClient>();
+    if (!owned_net_client_->connect(host, port, 5000)) {
+        connection_error_ = "Failed to connect to " + host + ":" + std::to_string(port);
+        TraceLog(LOG_ERROR, "[net] %s", connection_error_.c_str());
+        owned_net_client_.reset();
+        return;
+    }
+    
+    TraceLog(LOG_INFO, "[net] Connected to %s:%u", host.c_str(), port);
+    
+    // Set up client session with network transport
+    session_ = std::make_unique<client::net::ClientSession>(owned_net_client_->connection());
+    netClient_ = owned_net_client_.get();
+    is_multiplayer_ = true;
+    
+    start_gameplay();
+}
+
+void Game::disconnect_from_server() {
+    TraceLog(LOG_INFO, "Disconnecting from server...");
+    
+    if (owned_net_client_) {
+        owned_net_client_->disconnect();
+        owned_net_client_.reset();
+    }
+    netClient_ = nullptr;
+    session_.reset();
+    
+    // Return to main menu
+    game_screen_ = ui::GameScreen::MainMenu;
+    connection_error_.clear();
 }
 
 void Game::start_gameplay() {
@@ -137,7 +221,60 @@ void Game::start_gameplay() {
     TraceLog(LOG_INFO, "  %s-%s - Select tool",
              core::key_name(controls.tool_1).c_str(),
              core::key_name(controls.tool_5).c_str());
-    TraceLog(LOG_INFO, "  %s - Exit", core::key_name(controls.exit).c_str());
+    TraceLog(LOG_INFO, "  %s - Pause menu", core::key_name(controls.exit).c_str());
+}
+
+void Game::return_to_main_menu() {
+    TraceLog(LOG_INFO, "Returning to main menu...");
+
+    // Clean up gameplay state
+    if (block_interaction_) {
+        block_interaction_->destroy();
+        block_interaction_.reset();
+    }
+
+    // Reset ECS systems
+    input_system_.reset();
+    physics_system_.reset();
+    player_system_.reset();
+    render_system_.reset();
+
+    // Clear ECS registry (removes player entity and any other entities)
+    registry_.clear();
+    player_entity_ = entt::null;
+
+    // Reset world
+    world_.reset();
+
+    // Reset session
+    session_.reset();
+
+    // Disconnect from network if multiplayer
+    if (is_multiplayer_ && owned_net_client_) {
+        owned_net_client_->disconnect();
+        owned_net_client_.reset();
+    }
+    netClient_ = nullptr;
+    
+    // Stop local server if singleplayer
+    if (local_server_) {
+        local_server_->stop();
+        local_server_.reset();
+    }
+
+    // Reset multiplayer state
+    is_multiplayer_ = false;
+    connection_error_.clear();
+
+    // Reset game state
+    gameplay_initialized_ = false;
+    game_screen_ = ui::GameScreen::MainMenu;
+
+    // Enable cursor for menu navigation
+    EnableCursor();
+    cursor_enabled_ = true;
+
+    TraceLog(LOG_INFO, "Returned to main menu.");
 }
 
 void Game::set_cursor_enabled(bool enabled) {
@@ -161,7 +298,8 @@ void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
                 registry_.get<ecs::PlayerController>(player_entity_).camera_sensitivity = s->value;
             }
         } else if (std::get_if<ui::StartGame>(&cmd)) {
-            start_gameplay();
+            // Start singleplayer mode
+            start_singleplayer();
         } else if (std::get_if<ui::QuitGame>(&cmd)) {
             should_exit_ = true;
         } else if (std::get_if<ui::OpenSettings>(&cmd)) {
@@ -173,6 +311,24 @@ void Game::apply_ui_commands(const ui::UIFrameOutput& out) {
                 DisableCursor();
                 cursor_enabled_ = false;
             }
+        } else if (std::get_if<ui::OpenPauseMenu>(&cmd)) {
+            if (gameplay_initialized_) {
+                game_screen_ = ui::GameScreen::Paused;
+                EnableCursor();
+                cursor_enabled_ = true;
+            }
+        } else if (std::get_if<ui::ReturnToMainMenu>(&cmd)) {
+            return_to_main_menu();
+        } else if (std::get_if<ui::ShowConnectScreen>(&cmd)) {
+            game_screen_ = ui::GameScreen::ConnectMenu;
+            connection_error_.clear();
+        } else if (std::get_if<ui::HideConnectScreen>(&cmd)) {
+            game_screen_ = ui::GameScreen::MainMenu;
+            connection_error_.clear();
+        } else if (const auto* c = std::get_if<ui::ConnectToServer>(&cmd)) {
+            connect_to_server(c->host, c->port);
+        } else if (std::get_if<ui::DisconnectFromServer>(&cmd)) {
+            disconnect_from_server();
         }
     }
 }
@@ -223,6 +379,10 @@ void Game::refresh_ui_view_model(float delta_time) {
     }
 
     ui_vm_.net = {};
+    ui_vm_.net.is_connecting = (game_screen_ == ui::GameScreen::Connecting);
+    ui_vm_.net.connection_failed = !connection_error_.empty();
+    ui_vm_.net.connection_error = connection_error_;
+    
     if (session_) {
         const auto& hello = session_->server_hello();
         ui_vm_.net.has_server_hello = hello.has_value();
@@ -269,6 +429,23 @@ void Game::shutdown() {
     render_system_.reset();
     renderer::Skybox::instance().shutdown();
 
+    // Clean up session
+    session_.reset();
+    
+    // Clean up network
+    if (owned_net_client_) {
+        owned_net_client_->disconnect();
+        owned_net_client_.reset();
+    }
+    netClient_ = nullptr;
+    enet_init_.reset();
+    
+    // Stop local server
+    if (local_server_) {
+        local_server_->stop();
+        local_server_.reset();
+    }
+
     core::Logger::instance().shutdown();
 
     // Shutdown resource system (VFS) before CloseWindow.
@@ -278,9 +455,8 @@ void Game::shutdown() {
 }
 
 void Game::handle_global_input() {
-    if (IsKeyPressed(core::Config::instance().controls().exit)) {
-        should_exit_ = true;
-    }
+    // ESC is now handled by UI (pause menu toggle)
+    // Quit only via menu or window close
 }
 
 void Game::update(float delta_time) {
@@ -296,6 +472,7 @@ void Game::update(float delta_time) {
     ui_in.dt = delta_time;
     ui_in.toggle_debug_ui = IsKeyPressed(KEY_F1);
     ui_in.toggle_debug_overlay = IsKeyPressed(KEY_F2);
+    ui_in.toggle_pause = IsKeyPressed(core::Config::instance().controls().exit);
 
     const ui::UIFrameOutput ui_out = ui_.update(ui_in, ui_vm_);
     ui_captures_input_ = ui_out.capture.captured();

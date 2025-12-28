@@ -315,11 +315,82 @@ void UIDocument::layout(Node& node, Rectangle available, const UIViewModel& vm) 
         const float pw = node.computed_rect.width - node.style.padding.left - node.style.padding.right;
         const float ph = node.computed_rect.height - node.style.padding.top - node.style.padding.bottom;
 
+        // Calculate total children size for justify-content
+        float totalChildrenSize = 0;
+        for (auto& child : node.children) {
+            if (node.style.direction == UIDirection::Column) {
+                totalChildrenSize += child.style.height.has_value() ? *child.style.height : measure_content_height(child);
+            } else {
+                totalChildrenSize += child.style.width.has_value() ? *child.style.width : measure_content_width(child);
+            }
+        }
+        if (node.children.size() > 1) {
+            totalChildrenSize += static_cast<float>((node.children.size() - 1) * node.style.gap);
+        }
+
+        // Calculate starting position based on justify-content
         float curX = node.computed_rect.x + px;
         float curY = node.computed_rect.y + py;
 
+        const float mainAxisSize = (node.style.direction == UIDirection::Column) ? ph : pw;
+        float mainAxisStart = 0;
+
+        switch (node.style.justify_content) {
+            case UIAlign::Start:
+                mainAxisStart = 0;
+                break;
+            case UIAlign::Center:
+                mainAxisStart = (mainAxisSize - totalChildrenSize) / 2;
+                break;
+            case UIAlign::End:
+                mainAxisStart = mainAxisSize - totalChildrenSize;
+                break;
+        }
+
+        if (node.style.direction == UIDirection::Column) {
+            curY += mainAxisStart;
+        } else {
+            curX += mainAxisStart;
+        }
+
         for (auto& child : node.children) {
-            Rectangle childAvail{curX, curY, pw, ph};
+            // Get child size
+            float childW = child.style.width.has_value() ? static_cast<float>(*child.style.width) : static_cast<float>(measure_content_width(child));
+            float childH = child.style.height.has_value() ? static_cast<float>(*child.style.height) : static_cast<float>(measure_content_height(child));
+
+            // Apply align-items (cross-axis alignment)
+            float alignedX = curX;
+            float alignedY = curY;
+
+            if (node.style.direction == UIDirection::Column) {
+                // Cross axis is horizontal
+                switch (node.style.align_items) {
+                    case UIAlign::Start:
+                        alignedX = curX;
+                        break;
+                    case UIAlign::Center:
+                        alignedX = curX + (pw - childW) / 2;
+                        break;
+                    case UIAlign::End:
+                        alignedX = curX + pw - childW;
+                        break;
+                }
+            } else {
+                // Cross axis is vertical
+                switch (node.style.align_items) {
+                    case UIAlign::Start:
+                        alignedY = curY;
+                        break;
+                    case UIAlign::Center:
+                        alignedY = curY + (ph - childH) / 2;
+                        break;
+                    case UIAlign::End:
+                        alignedY = curY + ph - childH;
+                        break;
+                }
+            }
+
+            Rectangle childAvail{alignedX, alignedY, childW, childH};
             layout(child, childAvail, vm);
 
             if (node.style.direction == UIDirection::Column) {
@@ -486,8 +557,38 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
 
     const int fontSize = node.style.font_size;
     const Color color = to_raylib_color(node.style.color);
+    const int textW = MeasureText(node.text.c_str(), fontSize);
+    const Rectangle& r = node.computed_rect;
 
-    DrawText(node.text.c_str(), static_cast<int>(node.computed_rect.x), static_cast<int>(node.computed_rect.y), fontSize, color);
+    // Horizontal alignment
+    int tx = static_cast<int>(r.x);
+    switch (node.style.text_align) {
+        case UITextAlign::Left:
+            tx = static_cast<int>(r.x);
+            break;
+        case UITextAlign::Center:
+            tx = static_cast<int>(r.x + (r.width - textW) / 2);
+            break;
+        case UITextAlign::Right:
+            tx = static_cast<int>(r.x + r.width - textW);
+            break;
+    }
+
+    // Vertical alignment
+    int ty = static_cast<int>(r.y);
+    switch (node.style.vertical_align) {
+        case UIVerticalAlign::Top:
+            ty = static_cast<int>(r.y);
+            break;
+        case UIVerticalAlign::Middle:
+            ty = static_cast<int>(r.y + (r.height - fontSize) / 2);
+            break;
+        case UIVerticalAlign::Bottom:
+            ty = static_cast<int>(r.y + r.height - fontSize);
+            break;
+    }
+
+    DrawText(node.text.c_str(), tx, ty, fontSize, color);
 }
 
 void UIDocument::render_button(const Node& node, const UIViewModel& vm) {

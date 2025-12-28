@@ -30,6 +30,18 @@ enum class UIAlign {
     End,
 };
 
+enum class UITextAlign {
+    Left,
+    Center,
+    Right,
+};
+
+enum class UIVerticalAlign {
+    Top,
+    Middle,
+    Bottom,
+};
+
 struct UIBox {
     int left{0};
     int top{0};
@@ -65,6 +77,8 @@ struct UIStyle {
 
     int font_size{20};
     UIColor color{255, 255, 255, 255};
+    UITextAlign text_align{UITextAlign::Left};
+    UIVerticalAlign vertical_align{UIVerticalAlign::Top};
 
     std::optional<UIColor> background_color{};
 

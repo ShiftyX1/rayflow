@@ -1,62 +1,80 @@
+/* Main Menu Styles - Modern Dark Theme */
 
 .fullscreen-menu {
   anchor: center;
-  width: 400;
-  height: 450;
+  width: 420;
+  height: 520;
   padding: 40;
-  gap: 20;
+  gap: 24;
   direction: column;
-  background-color: #1a1a2ecc;
-  border-radius: 16;
-  border-width: 2;
-  border-color: #4a4a6a;
+  align-items: center;
+  justify-content: center;
+  background-color: #0d1117f0;
+  border-radius: 20;
+  border-width: 1;
+  border-color: #30363d;
+}
+
+.logo-section {
+  gap: 8;
+  direction: column;
+  align-items: center;
+  padding: 10;
 }
 
 .game-title {
-  font-size: 48;
-  color: #ffffff;
-  anchor: top;
+  font-size: 56;
+  color: #58a6ff;
+  text-align: center;
 }
 
 .game-subtitle {
-  font-size: 20;
-  color: #888899;
+  font-size: 18;
+  color: #8b949e;
+  text-align: center;
 }
 
 .menu-buttons {
-  gap: 12;
+  gap: 14;
   direction: column;
-  padding: 20;
+  align-items: center;
+  padding: 16;
 }
 
 .menu-button {
-  width: 280;
-  height: 50;
-  font-size: 22;
-  color: white;
-  background-color: #3a3a5a;
-  border-radius: 8;
+  width: 300;
+  height: 52;
+  font-size: 20;
+  color: #c9d1d9;
+  text-align: center;
+  vertical-align: middle;
+  background-color: #21262d;
+  border-radius: 10;
   border-width: 1;
-  border-color: #5a5a7a;
-  padding: 12;
+  border-color: #30363d;
+  padding: 14;
 }
 
-#btn-play {
-  background-color: #2a5a3a;
-  border-color: #4a8a5a;
+.primary-button {
+  background-color: #238636;
+  border-color: #2ea043;
+  color: #ffffff;
 }
 
-#btn-quit {
-  background-color: #5a2a3a;
-  border-color: #8a4a5a;
+.multiplayer-button {
+  background-color: #1f6feb;
+  border-color: #388bfd;
+  color: #ffffff;
 }
 
-#btn-credits {
-  background-color: #3a3a7a;
-  border-color: #5a5a9a;
+.danger-button {
+  background-color: #21262d;
+  border-color: #f85149;
+  color: #f85149;
 }
 
 .version-text {
-  font-size: 14;
-  color: #666677;
+  font-size: 12;
+  color: #484f58;
+  text-align: center;
 }

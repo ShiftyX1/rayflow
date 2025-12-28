@@ -1,0 +1,14 @@
+<UI>
+  <Panel id="pause-overlay" class="fullscreen-overlay">
+    <Panel id="pause-menu" class="pause-menu-panel">
+      <Text id="pause-title" class="pause-title">Paused</Text>
+      
+      <Panel id="pause-buttons" class="pause-buttons">
+        <Button id="btn-resume" action="resume_game" class="pause-button">Resume</Button>
+        <Button id="btn-settings" action="open_settings" class="pause-button">Settings</Button>
+        <Button id="btn-main-menu" action="return_to_main_menu" class="pause-button main-menu-button">Main Menu</Button>
+        <Button id="btn-quit" action="quit_game" class="pause-button quit-button">Quit Game</Button>
+      </Panel>
+    </Panel>
+  </Panel>
+</UI>

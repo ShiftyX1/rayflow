@@ -1,0 +1,61 @@
+/* Pause Menu Styles - Modern Dark Theme */
+
+.pause-menu-panel {
+  anchor: center;
+  width: 380;
+  height: 380;
+  padding: 36;
+  gap: 24;
+  direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #0d1117f0;
+  border-radius: 16;
+  border-width: 1;
+  border-color: #30363d;
+}
+
+.pause-title {
+  font-size: 36;
+  color: #c9d1d9;
+  text-align: center;
+}
+
+.pause-buttons {
+  gap: 12;
+  direction: column;
+  align-items: center;
+  padding: 16;
+}
+
+.pause-button {
+  width: 280;
+  height: 48;
+  font-size: 18;
+  color: #c9d1d9;
+  text-align: center;
+  vertical-align: middle;
+  background-color: #21262d;
+  border-radius: 8;
+  border-width: 1;
+  border-color: #30363d;
+  padding: 12;
+}
+
+#btn-resume {
+  background-color: #238636;
+  border-color: #2ea043;
+  color: #ffffff;
+}
+
+.main-menu-button {
+  background-color: #21262d;
+  border-color: #d29922;
+  color: #d29922;
+}
+
+.quit-button {
+  background-color: #21262d;
+  border-color: #f85149;
+  color: #f85149;
+}

@@ -1,0 +1,26 @@
+<UI>
+  <Panel id="connect-overlay" class="fullscreen-overlay">
+    <Panel id="connect-menu" class="connect-panel">
+      <Text id="connect-title" class="panel-title">Multiplayer</Text>
+      <Text id="connect-subtitle" class="panel-subtitle">Connect to Server</Text>
+      
+      <Panel id="input-section" class="input-section">
+        <Text id="address-label" class="input-label">Server Address</Text>
+        <Panel id="address-input-bg" class="text-input-container">
+          <Text id="address-hint" class="input-hint">localhost:7777</Text>
+        </Panel>
+      </Panel>
+      
+      <Panel id="connect-buttons" class="button-row">
+        <Button id="btn-connect" action="connect_to_server" class="connect-button primary-button">
+          Connect
+        </Button>
+        <Button id="btn-back" action="hide_connect_screen" class="connect-button secondary-button">
+          Back
+        </Button>
+      </Panel>
+      
+      <Text id="status-text" class="status-text"></Text>
+    </Panel>
+  </Panel>
+</UI>
