@@ -561,7 +561,14 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
-        terrain_->set_block(req.x, req.y, req.z, shared::voxel::BlockType::Air);
+        // Check if block is protected (template blocks, bedrock, etc.)
+        if (!terrain_->can_player_break(req.x, req.y, req.z, cur)) {
+            shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::ProtectedBlock};
+            client.connection->send(rej);
+            return;
+        }
+
+        terrain_->break_player_block(req.x, req.y, req.z);
 
         shared::proto::BlockBroken broken;
         broken.x = req.x;
@@ -644,7 +651,7 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
-        terrain_->set_block(req.x, req.y, req.z, req.blockType);
+        terrain_->place_player_block(req.x, req.y, req.z, req.blockType);
 
         shared::proto::BlockPlaced placed;
         placed.x = req.x;
