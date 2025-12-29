@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace client::net {
 
@@ -40,10 +41,17 @@ public:
     void set_on_block_broken(std::function<void(const shared::proto::BlockBroken&)> cb) { onBlockBroken_ = std::move(cb); }
     void set_on_action_rejected(std::function<void(const shared::proto::ActionRejected&)> cb) { onActionRejected_ = std::move(cb); }
     void set_on_export_result(std::function<void(const shared::proto::ExportResult&)> cb) { onExportResult_ = std::move(cb); }
+    void set_on_chunk_data(std::function<void(const shared::proto::ChunkData&)> cb) { onChunkData_ = std::move(cb); }
 
     const std::optional<shared::proto::ServerHello>& server_hello() const { return serverHello_; }
     const std::optional<shared::proto::JoinAck>& join_ack() const { return joinAck_; }
     const std::optional<shared::proto::StateSnapshot>& latest_snapshot() const { return latestSnapshot_; }
+
+    // Get pending block changes that arrived before world was ready.
+    // Clears the buffer after returning.
+    std::vector<shared::proto::BlockPlaced> take_pending_block_placed();
+    std::vector<shared::proto::BlockBroken> take_pending_block_broken();
+    std::vector<shared::proto::ChunkData> take_pending_chunk_data();
 
 private:
     std::shared_ptr<shared::transport::IEndpoint> endpoint_;
@@ -59,6 +67,12 @@ private:
     std::function<void(const shared::proto::BlockBroken&)> onBlockBroken_;
     std::function<void(const shared::proto::ActionRejected&)> onActionRejected_;
     std::function<void(const shared::proto::ExportResult&)> onExportResult_;
+    std::function<void(const shared::proto::ChunkData&)> onChunkData_;
+
+    // Buffer for block changes that arrive before callbacks are set or world is ready
+    std::vector<shared::proto::BlockPlaced> pendingBlockPlaced_;
+    std::vector<shared::proto::BlockBroken> pendingBlockBroken_;
+    std::vector<shared::proto::ChunkData> pendingChunkData_;
 };
 
 } // namespace client::net

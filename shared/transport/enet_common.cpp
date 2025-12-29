@@ -62,6 +62,7 @@ enum class MessageTypeIndex : std::uint8_t {
     ActionRejected = 11,
     TryExportMap = 12,
     ExportResult = 13,
+    ChunkData = 14,
 };
 
 class BinaryWriter {
@@ -299,6 +300,16 @@ std::vector<std::uint8_t> serialize_message(const shared::proto::Message& msg) {
             w.write_u8(static_cast<std::uint8_t>(m.reason));
             w.write_string(m.path);
         }
+        else if constexpr (std::is_same_v<T, shared::proto::ChunkData>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::ChunkData));
+            w.write_i32(m.chunkX);
+            w.write_i32(m.chunkZ);
+            // Write block count (should be 65536 for 16x256x16)
+            w.write_u32(static_cast<std::uint32_t>(m.blocks.size()));
+            for (auto b : m.blocks) {
+                w.write_u8(b);
+            }
+        }
     }, msg);
     
     return w.take();
@@ -457,6 +468,20 @@ bool deserialize_message(const std::uint8_t* data, std::size_t size,
             if (!r.read_u8(reason)) return false;
             m.reason = static_cast<shared::proto::RejectReason>(reason);
             if (!r.read_string(m.path)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::ChunkData: {
+            shared::proto::ChunkData m;
+            if (!r.read_i32(m.chunkX)) return false;
+            if (!r.read_i32(m.chunkZ)) return false;
+            std::uint32_t blockCount;
+            if (!r.read_u32(blockCount)) return false;
+            if (!r.has_remaining(blockCount)) return false;
+            m.blocks.resize(blockCount);
+            for (std::uint32_t i = 0; i < blockCount; ++i) {
+                if (!r.read_u8(m.blocks[i])) return false;
+            }
             outMsg = m;
             return true;
         }

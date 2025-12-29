@@ -118,10 +118,19 @@ void ClientSession::poll() {
             latestSnapshot_ = std::get<shared::proto::StateSnapshot>(msg);
         } else if (std::holds_alternative<shared::proto::BlockPlaced>(msg)) {
             const auto& ev = std::get<shared::proto::BlockPlaced>(msg);
+            // Always buffer - Game will apply after world is ready
+            pendingBlockPlaced_.push_back(ev);
             if (onBlockPlaced_) onBlockPlaced_(ev);
         } else if (std::holds_alternative<shared::proto::BlockBroken>(msg)) {
             const auto& ev = std::get<shared::proto::BlockBroken>(msg);
+            // Always buffer - Game will apply after world is ready
+            pendingBlockBroken_.push_back(ev);
             if (onBlockBroken_) onBlockBroken_(ev);
+        } else if (std::holds_alternative<shared::proto::ChunkData>(msg)) {
+            const auto& cd = std::get<shared::proto::ChunkData>(msg);
+            // Always buffer - Game will apply chunks after world is ready
+            pendingChunkData_.push_back(cd);
+            if (onChunkData_) onChunkData_(cd);
         } else if (std::holds_alternative<shared::proto::ActionRejected>(msg)) {
             const auto& rej = std::get<shared::proto::ActionRejected>(msg);
             TraceLog(LOG_WARNING, "[net] ActionRejected: seq=%u reason=%u", rej.seq, static_cast<unsigned>(rej.reason));
@@ -136,6 +145,18 @@ void ClientSession::poll() {
             if (onExportResult_) onExportResult_(ev);
         }
     }
+}
+
+std::vector<shared::proto::BlockPlaced> ClientSession::take_pending_block_placed() {
+    return std::move(pendingBlockPlaced_);
+}
+
+std::vector<shared::proto::BlockBroken> ClientSession::take_pending_block_broken() {
+    return std::move(pendingBlockBroken_);
+}
+
+std::vector<shared::proto::ChunkData> ClientSession::take_pending_chunk_data() {
+    return std::move(pendingChunkData_);
 }
 
 } // namespace client::net

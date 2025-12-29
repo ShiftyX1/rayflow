@@ -9,6 +9,7 @@
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace server::voxel {
 
@@ -33,6 +34,17 @@ public:
     bool has_map_template() const { return map_template_.has_value(); }
     const shared::maps::MapTemplate* map_template() const { return map_template_ ? &*map_template_ : nullptr; }
     void set_map_template(shared::maps::MapTemplate map);
+
+    // Get all block modifications (for sending to new clients)
+    struct BlockModification {
+        int x, y, z;
+        shared::voxel::BlockType type;
+    };
+    std::vector<BlockModification> get_all_modifications() const;
+
+    // Get full chunk data for replication (16x256x16 = 65536 blocks)
+    // Returns block types in Y-major order: index = y * 256 + z * 16 + x (local coords)
+    std::vector<std::uint8_t> get_chunk_data(int chunkX, int chunkZ) const;
 
     // Editor mode helper: when no map template is set, treat the base world as empty/void (all Air).
     // This ensures map exports contain only authored blocks, not procedural terrain.

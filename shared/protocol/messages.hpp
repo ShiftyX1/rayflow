@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "../voxel/block.hpp"
 
@@ -20,6 +21,8 @@ enum class RejectReason : std::uint8_t {
     NotEnoughResources = 3,
     OutOfRange = 4,
     ProtectedBlock = 5,
+    Collision = 6,
+    NoLineOfSight = 7,
 };
 
 struct ClientHello {
@@ -117,6 +120,16 @@ struct ActionRejected {
     RejectReason reason{RejectReason::Unknown};
 };
 
+// Server -> Client: full chunk data for world replication.
+// Sent when client joins or enters a new area.
+struct ChunkData {
+    int chunkX{0};
+    int chunkZ{0};
+    // Flat array of blocks: [y][z][x] order, 16x256x16 = 65536 blocks
+    // Each block is stored as uint8_t (BlockType).
+    std::vector<std::uint8_t> blocks;
+};
+
 // Client -> Server: request server-side export of a finite map template.
 // Bounds are provided in chunk coordinates (inclusive).
 struct TryExportMap {
@@ -168,7 +181,8 @@ using Message = std::variant<
     BlockBroken,
     ActionRejected,
     TryExportMap,
-    ExportResult
+    ExportResult,
+    ChunkData
 >;
 
 } // namespace shared::proto

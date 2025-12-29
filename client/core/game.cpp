@@ -169,6 +169,10 @@ void Game::start_gameplay() {
             if (!world_) return;
             world_->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(voxel::BlockType::Air));
         });
+        session_->set_on_chunk_data([this](const shared::proto::ChunkData& cd) {
+            if (!world_) return;
+            world_->apply_chunk_data(cd.chunkX, cd.chunkZ, cd.blocks);
+        });
         session_->set_on_action_rejected([this](const shared::proto::ActionRejected&) {
             if (block_interaction_) block_interaction_->on_action_rejected();
         });
@@ -508,6 +512,19 @@ void Game::update(float delta_time) {
                 if (physics_system_) physics_system_->set_world(world_.get());
                 if (player_system_) player_system_->set_world(world_.get());
                 if (render_system_) render_system_->set_world(world_.get());
+
+                // Apply chunk data received from server (replaces local generation)
+                for (const auto& cd : session_->take_pending_chunk_data()) {
+                    world_->apply_chunk_data(cd.chunkX, cd.chunkZ, cd.blocks);
+                }
+
+                // Apply any block changes that arrived before world was ready
+                for (const auto& ev : session_->take_pending_block_placed()) {
+                    world_->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(ev.blockType));
+                }
+                for (const auto& ev : session_->take_pending_block_broken()) {
+                    world_->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(voxel::BlockType::Air));
+                }
             }
 
             // MT-1: if server advertises a finite map template, load it locally for rendering.

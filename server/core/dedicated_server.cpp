@@ -196,6 +196,61 @@ static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem
     return true;
 }
 
+// Raycast from eye position to target block.
+// Returns true if the target block is reachable (no solid blocks in the way).
+static bool raycast_hit_block(const server::voxel::Terrain& terrain,
+                              float eyeX, float eyeY, float eyeZ,
+                              int targetX, int targetY, int targetZ,
+                              float maxDist) {
+    // Target block center
+    const float tx = targetX + 0.5f;
+    const float ty = targetY + 0.5f;
+    const float tz = targetZ + 0.5f;
+
+    // Direction
+    float dx = tx - eyeX;
+    float dy = ty - eyeY;
+    float dz = tz - eyeZ;
+    const float dist = std::sqrt(dx*dx + dy*dy + dz*dz);
+    
+    if (dist < kEps) return true;  // Already at target
+    if (dist > maxDist) return false;  // Too far
+
+    // Normalize
+    dx /= dist;
+    dy /= dist;
+    dz /= dist;
+
+    // Step through blocks using DDA-like algorithm
+    const float stepSize = 0.25f;  // Step in world units
+    float t = 0.0f;
+
+    while (t < dist) {
+        const float px = eyeX + dx * t;
+        const float py = eyeY + dy * t;
+        const float pz = eyeZ + dz * t;
+
+        const int bx = fast_floor(px);
+        const int by = fast_floor(py);
+        const int bz = fast_floor(pz);
+
+        // If we reached the target block, success
+        if (bx == targetX && by == targetY && bz == targetZ) {
+            return true;
+        }
+
+        // If we hit a solid block that's not our target, fail
+        if (shared::voxel::util::is_solid(terrain.get_block(bx, by, bz))) {
+            return false;
+        }
+
+        t += stepSize;
+    }
+
+    // Check final position (the target itself)
+    return true;
+}
+
 } // namespace
 
 // =============================================================================
@@ -435,6 +490,24 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         client.connection->send(ack);
         logf(serverTick_, "tx", "JoinAck playerId=%u", client.playerId);
 
+        // Send chunk data for the initial view radius around spawn (0,0)
+        // For now send a fixed radius of chunks. In the future this should be dynamic
+        // based on player position and view distance settings.
+        constexpr int INITIAL_CHUNK_RADIUS = 4;  // Send 9x9 = 81 chunks initially
+        
+        int chunksSent = 0;
+        for (int cz = -INITIAL_CHUNK_RADIUS; cz <= INITIAL_CHUNK_RADIUS; ++cz) {
+            for (int cx = -INITIAL_CHUNK_RADIUS; cx <= INITIAL_CHUNK_RADIUS; ++cx) {
+                shared::proto::ChunkData chunkMsg;
+                chunkMsg.chunkX = cx;
+                chunkMsg.chunkZ = cz;
+                chunkMsg.blocks = terrain_->get_chunk_data(cx, cz);
+                client.connection->send(chunkMsg);
+                chunksSent++;
+            }
+        }
+        logf(serverTick_, "tx", "sent %d chunks to player=%u", chunksSent, client.playerId);
+
         if (onPlayerJoin) {
             onPlayerJoin(client.playerId);
         }
@@ -461,12 +534,22 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         }
 
         // Check reach distance
+        const float eyeX = client.px;
+        const float eyeY = client.py + shared::kPlayerEyeHeight;
+        const float eyeZ = client.pz;
         const float cx = req.x + 0.5f, cy = req.y + 0.5f, cz = req.z + 0.5f;
-        const float dx = cx - client.px;
-        const float dy = cy - (client.py + shared::kPlayerEyeHeight);
-        const float dz = cz - client.pz;
+        const float dx = cx - eyeX;
+        const float dy = cy - eyeY;
+        const float dz = cz - eyeZ;
         if (dx*dx + dy*dy + dz*dz > shared::kBlockReachDistance * shared::kBlockReachDistance) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::OutOfRange};
+            client.connection->send(rej);
+            return;
+        }
+
+        // Raycast line-of-sight check
+        if (!raycast_hit_block(*terrain_, eyeX, eyeY, eyeZ, req.x, req.y, req.z, shared::kBlockReachDistance)) {
+            shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::NoLineOfSight};
             client.connection->send(rej);
             return;
         }
@@ -499,12 +582,22 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
+        const float eyeX = client.px;
+        const float eyeY = client.py + shared::kPlayerEyeHeight;
+        const float eyeZ = client.pz;
         const float cx = req.x + 0.5f, cy = req.y + 0.5f, cz = req.z + 0.5f;
-        const float dx = cx - client.px;
-        const float dy = cy - (client.py + shared::kPlayerEyeHeight);
-        const float dz = cz - client.pz;
+        const float dx = cx - eyeX;
+        const float dy = cy - eyeY;
+        const float dz = cz - eyeZ;
         if (dx*dx + dy*dy + dz*dz > shared::kBlockReachDistance * shared::kBlockReachDistance) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::OutOfRange};
+            client.connection->send(rej);
+            return;
+        }
+
+        // Raycast line-of-sight check (must be able to see the position to place)
+        if (!raycast_hit_block(*terrain_, eyeX, eyeY, eyeZ, req.x, req.y, req.z, shared::kBlockReachDistance)) {
+            shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::NoLineOfSight};
             client.connection->send(rej);
             return;
         }
@@ -512,6 +605,41 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         auto cur = terrain_->get_block(req.x, req.y, req.z);
         if (cur != shared::voxel::BlockType::Air) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::Invalid};
+            client.connection->send(rej);
+            return;
+        }
+
+        // Check collision with all players
+        const float blockMinX = static_cast<float>(req.x);
+        const float blockMaxX = static_cast<float>(req.x + 1);
+        const float blockMinY = static_cast<float>(req.y);
+        const float blockMaxY = static_cast<float>(req.y + 1);
+        const float blockMinZ = static_cast<float>(req.z);
+        const float blockMaxZ = static_cast<float>(req.z + 1);
+
+        bool collides = false;
+        for (const auto& [playerId, other] : clients_) {
+            if (other.phase != ClientState::Phase::InGame) continue;
+
+            const float hw = kPlayerWidth * 0.5f;
+            const float playerMinX = other.px - hw;
+            const float playerMaxX = other.px + hw;
+            const float playerMinY = other.py;
+            const float playerMaxY = other.py + kPlayerHeight;
+            const float playerMinZ = other.pz - hw;
+            const float playerMaxZ = other.pz + hw;
+
+            // AABB intersection test
+            if (blockMinX < playerMaxX && blockMaxX > playerMinX &&
+                blockMinY < playerMaxY && blockMaxY > playerMinY &&
+                blockMinZ < playerMaxZ && blockMaxZ > playerMinZ) {
+                collides = true;
+                break;
+            }
+        }
+
+        if (collides) {
+            shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::Collision};
             client.connection->send(rej);
             return;
         }

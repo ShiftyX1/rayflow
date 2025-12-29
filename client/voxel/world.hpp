@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <memory>
 #include <functional>
+#include <vector>
+#include <cstdint>
 
 #include "../../shared/maps/rfmap_io.hpp"
 
@@ -35,6 +37,10 @@ public:
     // Chunk management
     Chunk* get_chunk(int chunk_x, int chunk_z);
     Chunk* get_or_create_chunk(int chunk_x, int chunk_z);
+    
+    // Apply chunk data received from server (replaces local generation)
+    // blockData is Y-major: index = y * 256 + z * 16 + x
+    void apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint8_t>& blockData);
     
     // Update and render
     void update(const Vector3& player_position);

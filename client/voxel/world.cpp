@@ -241,6 +241,61 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
     return ptr;
 }
 
+void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint8_t>& blockData) {
+    constexpr std::size_t EXPECTED_SIZE = static_cast<std::size_t>(CHUNK_WIDTH) *
+                                          static_cast<std::size_t>(CHUNK_DEPTH) *
+                                          static_cast<std::size_t>(CHUNK_HEIGHT);
+    
+    if (blockData.size() != EXPECTED_SIZE) {
+        TraceLog(LOG_WARNING, "apply_chunk_data: invalid size %zu (expected %zu) for chunk (%d, %d)",
+                 blockData.size(), EXPECTED_SIZE, chunkX, chunkZ);
+        return;
+    }
+    
+    auto key = std::make_pair(chunkX, chunkZ);
+    auto it = chunks_.find(key);
+    
+    Chunk* chunk = nullptr;
+    if (it != chunks_.end()) {
+        chunk = it->second.get();
+    } else {
+        auto newChunk = std::make_unique<Chunk>(chunkX, chunkZ);
+        chunk = newChunk.get();
+        chunks_[key] = std::move(newChunk);
+    }
+    
+    // Apply block data from server
+    // Index order: y * (WIDTH * DEPTH) + z * WIDTH + x
+    for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+        for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
+            for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
+                const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(CHUNK_WIDTH * CHUNK_DEPTH) +
+                                        static_cast<std::size_t>(lz) * static_cast<std::size_t>(CHUNK_WIDTH) +
+                                        static_cast<std::size_t>(lx);
+                Block bt = static_cast<Block>(blockData[idx]);
+                chunk->set_block(lx, y, lz, bt);
+            }
+        }
+    }
+    
+    chunk->set_generated(true);
+    chunk->mark_dirty();
+    
+    // Mark neighbor chunks dirty to rebuild their meshes
+    auto mark_neighbor = [this](int cx, int cz) {
+        auto neighborIt = chunks_.find({cx, cz});
+        if (neighborIt != chunks_.end()) {
+            neighborIt->second->mark_dirty();
+        }
+    };
+    mark_neighbor(chunkX - 1, chunkZ);
+    mark_neighbor(chunkX + 1, chunkZ);
+    mark_neighbor(chunkX, chunkZ - 1);
+    mark_neighbor(chunkX, chunkZ + 1);
+    
+    TraceLog(LOG_DEBUG, "Applied chunk data for (%d, %d)", chunkX, chunkZ);
+}
+
 void World::generate_chunk_terrain(Chunk& chunk) {
     int chunk_x = chunk.get_chunk_x();
     int chunk_z = chunk.get_chunk_z();

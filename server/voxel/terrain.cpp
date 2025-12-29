@@ -288,4 +288,48 @@ void Terrain::set_block(int x, int y, int z, shared::voxel::BlockType type) {
     set_override_(x, y, z, type, /*keep_if_matches_base=*/false);
 }
 
+std::vector<Terrain::BlockModification> Terrain::get_all_modifications() const {
+    std::vector<BlockModification> result;
+    result.reserve(overrides_.size());
+    for (const auto& [key, type] : overrides_) {
+        result.push_back({key.x, key.y, key.z, type});
+    }
+    return result;
+}
+
+std::vector<std::uint8_t> Terrain::get_chunk_data(int chunkX, int chunkZ) const {
+    constexpr int WIDTH = shared::voxel::CHUNK_WIDTH;
+    constexpr int DEPTH = shared::voxel::CHUNK_DEPTH;
+    constexpr int HEIGHT = shared::voxel::CHUNK_HEIGHT;
+    constexpr std::size_t CHUNK_SIZE = static_cast<std::size_t>(WIDTH) * 
+                                       static_cast<std::size_t>(DEPTH) * 
+                                       static_cast<std::size_t>(HEIGHT);
+
+    std::vector<std::uint8_t> blocks(CHUNK_SIZE);
+
+    const int worldBaseX = chunkX * WIDTH;
+    const int worldBaseZ = chunkZ * DEPTH;
+
+    // Fill chunk with block data
+    // Index order: y * (WIDTH * DEPTH) + z * WIDTH + x (local coords)
+    for (int y = 0; y < HEIGHT; ++y) {
+        for (int lz = 0; lz < DEPTH; ++lz) {
+            for (int lx = 0; lx < WIDTH; ++lx) {
+                const int worldX = worldBaseX + lx;
+                const int worldZ = worldBaseZ + lz;
+                
+                // get_block handles overrides, template, and base terrain
+                const auto blockType = get_block(worldX, y, worldZ);
+                
+                const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(WIDTH * DEPTH) +
+                                        static_cast<std::size_t>(lz) * static_cast<std::size_t>(WIDTH) +
+                                        static_cast<std::size_t>(lx);
+                blocks[idx] = static_cast<std::uint8_t>(blockType);
+            }
+        }
+    }
+
+    return blocks;
+}
+
 } // namespace server::voxel
