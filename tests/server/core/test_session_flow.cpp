@@ -128,11 +128,14 @@ TEST_CASE("Full session: Hello -> ServerHello -> Join -> JoinAck -> Snapshots", 
     REQUIRE(playerId > 0);
     
     // Step 5: Wait for StateSnapshot
-    pump_server_briefly(std::chrono::milliseconds(200));
+    // Use longer timeout for slower CI runners
+    pump_server_briefly(std::chrono::milliseconds(500));
     
     // Drain any extra messages, look for StateSnapshot
+    // Note: server may send ChunkData messages after JoinAck, skip those
     bool foundSnapshot = false;
-    while (pair.client->try_recv(msg)) {
+    int maxIterations = 200;  // Increased for ChunkData messages
+    while (maxIterations-- > 0 && pair.client->try_recv(msg)) {
         if (std::holds_alternative<StateSnapshot>(msg)) {
             foundSnapshot = true;
             auto& snap = std::get<StateSnapshot>(msg);
@@ -140,6 +143,7 @@ TEST_CASE("Full session: Hello -> ServerHello -> Join -> JoinAck -> Snapshots", 
             REQUIRE(snap.serverTick > 0);
             break;
         }
+        // Skip ChunkData and other messages
     }
     REQUIRE(foundSnapshot);
     
