@@ -137,7 +137,7 @@ static bool check_block_collision_y(shared::voxel::BlockType block_type, int by,
     
     // Block collision bounds in world coordinates
     float block_min_y = static_cast<float>(by) + coll.minY;
-    float block_max_y = static_cast<float>(by) + std::min(coll.maxY, 1.0f);
+    float block_max_y = static_cast<float>(by) + coll.maxY;
     
     // Player bounds
     float player_min_y = player_y;
@@ -151,7 +151,7 @@ static bool check_block_collision_y(shared::voxel::BlockType block_type, int by,
 static float get_block_ground_height(shared::voxel::BlockType block_type, int by) {
     auto coll = shared::voxel::get_collision_info(block_type);
     if (!coll.hasCollision) return static_cast<float>(by);
-    return static_cast<float>(by) + std::min(coll.maxY, 1.0f);
+    return static_cast<float>(by) + coll.maxY;
 }
 
 // Find the maximum obstacle height in front of the player at feet level.
@@ -375,7 +375,7 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
                             continue; // No XZ overlap
                         }
                         
-                        float ground_height = static_cast<float>(checkY) + std::min(coll.maxY, 1.0f);
+                        float ground_height = static_cast<float>(checkY) + coll.maxY;
                         
                         if (py <= ground_height + kEps && py > ground_height - 0.5f) {
                             py = ground_height;
