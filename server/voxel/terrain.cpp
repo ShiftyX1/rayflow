@@ -268,8 +268,8 @@ shared::voxel::BlockType Terrain::get_base_block_(int x, int y, int z) const {
                 // 10% dandelion
                 return BlockType::Dandelion;
             } else {
-                // 10% blue orchid
-                return BlockType::BlueOrchid;
+                // 10% dead bush
+                return BlockType::DeadBush;
             }
         }
     }

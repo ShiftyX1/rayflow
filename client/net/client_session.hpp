@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../shared/transport/endpoint.hpp"
+#include "../../shared/game/team_types.hpp"
+#include "../../shared/game/item_types.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -37,11 +39,24 @@ public:
                              float temperature,
                              float humidity);
 
+    // Block event callbacks
     void set_on_block_placed(std::function<void(const shared::proto::BlockPlaced&)> cb) { onBlockPlaced_ = std::move(cb); }
     void set_on_block_broken(std::function<void(const shared::proto::BlockBroken&)> cb) { onBlockBroken_ = std::move(cb); }
     void set_on_action_rejected(std::function<void(const shared::proto::ActionRejected&)> cb) { onActionRejected_ = std::move(cb); }
     void set_on_export_result(std::function<void(const shared::proto::ExportResult&)> cb) { onExportResult_ = std::move(cb); }
     void set_on_chunk_data(std::function<void(const shared::proto::ChunkData&)> cb) { onChunkData_ = std::move(cb); }
+
+    // Game event callbacks
+    void set_on_team_assigned(std::function<void(const shared::proto::TeamAssigned&)> cb) { onTeamAssigned_ = std::move(cb); }
+    void set_on_health_update(std::function<void(const shared::proto::HealthUpdate&)> cb) { onHealthUpdate_ = std::move(cb); }
+    void set_on_player_died(std::function<void(const shared::proto::PlayerDied&)> cb) { onPlayerDied_ = std::move(cb); }
+    void set_on_player_respawned(std::function<void(const shared::proto::PlayerRespawned&)> cb) { onPlayerRespawned_ = std::move(cb); }
+    void set_on_bed_destroyed(std::function<void(const shared::proto::BedDestroyed&)> cb) { onBedDestroyed_ = std::move(cb); }
+    void set_on_team_eliminated(std::function<void(const shared::proto::TeamEliminated&)> cb) { onTeamEliminated_ = std::move(cb); }
+    void set_on_match_ended(std::function<void(const shared::proto::MatchEnded&)> cb) { onMatchEnded_ = std::move(cb); }
+    void set_on_item_spawned(std::function<void(const shared::proto::ItemSpawned&)> cb) { onItemSpawned_ = std::move(cb); }
+    void set_on_item_picked_up(std::function<void(const shared::proto::ItemPickedUp&)> cb) { onItemPickedUp_ = std::move(cb); }
+    void set_on_inventory_update(std::function<void(const shared::proto::InventoryUpdate&)> cb) { onInventoryUpdate_ = std::move(cb); }
 
     const std::optional<shared::proto::ServerHello>& server_hello() const { return serverHello_; }
     const std::optional<shared::proto::JoinAck>& join_ack() const { return joinAck_; }
@@ -61,11 +76,24 @@ private:
     std::optional<shared::proto::JoinAck> joinAck_;
     std::optional<shared::proto::StateSnapshot> latestSnapshot_;
 
+    // Block event callbacks
     std::function<void(const shared::proto::BlockPlaced&)> onBlockPlaced_;
     std::function<void(const shared::proto::BlockBroken&)> onBlockBroken_;
     std::function<void(const shared::proto::ActionRejected&)> onActionRejected_;
     std::function<void(const shared::proto::ExportResult&)> onExportResult_;
     std::function<void(const shared::proto::ChunkData&)> onChunkData_;
+
+    // Game event callbacks
+    std::function<void(const shared::proto::TeamAssigned&)> onTeamAssigned_;
+    std::function<void(const shared::proto::HealthUpdate&)> onHealthUpdate_;
+    std::function<void(const shared::proto::PlayerDied&)> onPlayerDied_;
+    std::function<void(const shared::proto::PlayerRespawned&)> onPlayerRespawned_;
+    std::function<void(const shared::proto::BedDestroyed&)> onBedDestroyed_;
+    std::function<void(const shared::proto::TeamEliminated&)> onTeamEliminated_;
+    std::function<void(const shared::proto::MatchEnded&)> onMatchEnded_;
+    std::function<void(const shared::proto::ItemSpawned&)> onItemSpawned_;
+    std::function<void(const shared::proto::ItemPickedUp&)> onItemPickedUp_;
+    std::function<void(const shared::proto::InventoryUpdate&)> onInventoryUpdate_;
 
     std::vector<shared::proto::BlockPlaced> pendingBlockPlaced_;
     std::vector<shared::proto::BlockBroken> pendingBlockBroken_;

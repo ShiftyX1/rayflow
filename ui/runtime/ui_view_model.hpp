@@ -3,8 +3,12 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <raylib.h>
+
+#include "../../shared/game/team_types.hpp"
+#include "../../shared/game/item_types.hpp"
 
 namespace ui {
 
@@ -15,6 +19,12 @@ enum class GameScreen {
     Playing,
     Paused,
     Settings,
+};
+
+// Resource count for HUD display
+struct ResourceCount {
+    shared::game::ItemType type{shared::game::ItemType::None};
+    std::uint16_t count{0};
 };
 
 struct PlayerViewModel {
@@ -32,6 +42,16 @@ struct PlayerViewModel {
     // HUD stats (client-side view only; authoritative source is server/game state)
     int health{20};
     int max_health{20};
+    
+    // Team info
+    shared::game::TeamId team_id{shared::game::Teams::None};
+    bool can_respawn{true};  // False when bed is destroyed
+    
+    // Resources (hotbar display)
+    std::uint16_t iron{0};
+    std::uint16_t gold{0};
+    std::uint16_t diamond{0};
+    std::uint16_t emerald{0};
 };
 
 struct NetViewModel {
@@ -51,6 +71,37 @@ struct NetViewModel {
     std::string connection_error{};
 };
 
+// Kill feed entry
+struct KillFeedEntry {
+    std::uint32_t killer_id{0};
+    std::uint32_t victim_id{0};
+    bool is_final_kill{false};
+    float time_remaining{5.0f};  // Seconds until entry disappears
+};
+
+// Game event notification
+struct GameNotification {
+    std::string message;
+    Color color{WHITE};
+    float time_remaining{3.0f};
+};
+
+struct GameViewModel {
+    // Match state
+    bool match_in_progress{false};
+    bool match_ended{false};
+    shared::game::TeamId winner_team{shared::game::Teams::None};
+    
+    // Kill feed (most recent first)
+    std::vector<KillFeedEntry> kill_feed;
+    
+    // Game notifications (bed destroyed, team eliminated, etc.)
+    std::vector<GameNotification> notifications;
+    
+    // Team bed status (true = bed intact)
+    bool team_beds[shared::game::Teams::MaxTeams + 1]{true, true, true, true, true, true, true, true, true};
+};
+
 struct UIViewModel {
     int screen_width{0};
     int screen_height{0};
@@ -62,6 +113,7 @@ struct UIViewModel {
 
     PlayerViewModel player{};
     NetViewModel net{};
+    GameViewModel game{};
 };
 
 } // namespace ui

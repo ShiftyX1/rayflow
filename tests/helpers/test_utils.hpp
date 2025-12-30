@@ -91,12 +91,39 @@ inline shared::proto::PlayerId perform_handshake(
 
     pump_server();
 
-    // Receive JoinAck
-    if (!client.try_recv(msg)) return 0;
-    auto* ack = get_message<shared::proto::JoinAck>(msg);
-    if (!ack) return 0;
+    // Receive JoinAck (skip game event messages like TeamAssigned, HealthUpdate)
+    int maxIterations = 20;
+    while (maxIterations-- > 0 && client.try_recv(msg)) {
+        if (is_message_type<shared::proto::JoinAck>(msg)) {
+            auto* ack = get_message<shared::proto::JoinAck>(msg);
+            if (!ack) return 0;
+            return ack->playerId;
+        }
+        // Skip TeamAssigned, HealthUpdate, and other game event messages
+    }
 
-    return ack->playerId;
+    return 0;
+}
+
+/**
+ * @brief Receive a message of a specific type, skipping other messages.
+ * 
+ * @tparam T The message type to receive
+ * @param client Client endpoint
+ * @param out_msg Output for the received message of type T
+ * @param max_skip Maximum number of messages to skip
+ * @return true if found, false if not found within max_skip
+ */
+template <typename T>
+bool receive_message_type(shared::transport::IEndpoint& client, T& out_msg, int max_skip = 50) {
+    shared::proto::Message msg;
+    while (max_skip-- > 0 && client.try_recv(msg)) {
+        if (is_message_type<T>(msg)) {
+            out_msg = std::get<T>(msg);
+            return true;
+        }
+    }
+    return false;
 }
 
 // =============================================================================

@@ -9,6 +9,12 @@ add_library(server_lib STATIC
     voxel/terrain.cpp
     scripting/script_engine.cpp
     scripting/game_api.cpp
+    game/inventory.cpp
+    game/player_state.cpp
+    game/team.cpp
+    game/generator.cpp
+    game/bed.cpp
+    game/game_state.cpp
 )
 
 target_include_directories(server_lib PUBLIC

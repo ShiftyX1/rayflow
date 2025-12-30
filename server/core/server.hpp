@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "../voxel/terrain.hpp"
+#include "../game/game_state.hpp"
 
 namespace server::scripting {
 class ScriptEngine;
@@ -94,6 +95,15 @@ private:
 
     // Rate-limit noisy input logs (approx. 1Hz). Logging every frame is too spammy at 30 TPS.
     std::uint64_t lastInputLogTick_{0};
+    
+    // BedWars game state
+    std::unique_ptr<server::game::GameState> gameState_;
+    
+    // Setup game state callbacks
+    void setup_game_callbacks_();
+    
+    // Sync physics position to game state
+    void sync_player_position_(float x, float y, float z);
 };
 
 } // namespace server::core

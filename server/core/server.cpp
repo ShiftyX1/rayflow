@@ -15,6 +15,7 @@
 #include "../../shared/maps/runtime_paths.hpp"
 #include "../../shared/voxel/block_state.hpp"
 #include "../scripting/script_engine.hpp"
+#include "../game/game_state.hpp"
 
 namespace server::core {
 
@@ -555,6 +556,14 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options o
         }
     }
 
+    // Initialize BedWars game state (for singleplayer)
+    gameState_ = std::make_unique<server::game::GameState>();
+    server::game::MatchConfig matchConfig;
+    matchConfig.teamCount = 4;
+    matchConfig.maxPlayersPerTeam = 1;  // Singleplayer
+    gameState_->init(matchConfig);
+    setup_game_callbacks_();
+
     logf(serverTick_, "init", "tickRate=%u worldSeed=%u", tickRate_, worldSeed_);
 }
 
@@ -747,6 +756,12 @@ void Server::tick_once_() {
             process_script_commands_();
         }
 
+        // Update game state (generators, respawns, etc.)
+        if (gameState_) {
+            gameState_->update(dt, serverTick_);
+            sync_player_position_(px_, py_, pz_);
+        }
+
         // Periodic snapshot (every tick for now; can be throttled later)
         shared::proto::StateSnapshot snap;
         snap.serverTick = serverTick_;
@@ -831,6 +846,29 @@ void Server::handle_message_(shared::proto::Message& msg) {
         }
 
         joined_ = true;
+
+        // Add player to game state (singleplayer)
+        if (gameState_) {
+            gameState_->add_player(playerId_, "Player");
+            auto teamId = gameState_->assign_player_to_team(playerId_);
+            logf(serverTick_, "init", "player assigned to team %s", shared::game::team_name(teamId));
+            
+            // Send TeamAssigned
+            shared::proto::TeamAssigned teamMsg;
+            teamMsg.playerId = playerId_;
+            teamMsg.teamId = teamId;
+            endpoint_->send(teamMsg);
+            
+            // Send initial health update
+            auto* playerState = gameState_->get_player(playerId_);
+            if (playerState) {
+                shared::proto::HealthUpdate healthMsg;
+                healthMsg.playerId = playerId_;
+                healthMsg.hp = playerState->health;
+                healthMsg.maxHp = playerState->maxHealth;
+                endpoint_->send(healthMsg);
+            }
+        }
 
         if (scriptEngine_ && scriptEngine_->has_scripts()) {
             scriptEngine_->on_player_join(playerId_);
@@ -967,7 +1005,7 @@ void Server::handle_message_(shared::proto::Message& msg) {
 
         if (req.y < 0 || req.y >= shared::voxel::CHUNK_HEIGHT) {
             shared::proto::ActionRejected rej;
-            rej.seq = req.seq;
+            rej.seq = req.seq; 
             rej.reason = shared::proto::RejectReason::Invalid;
             logf(serverTick_, "tx", "ActionRejected seq=%u reason=%u (bad y)", rej.seq, static_cast<unsigned>(rej.reason));
             endpoint_->send(std::move(rej));
@@ -1393,6 +1431,134 @@ void Server::process_script_commands_() {
                 break;
         }
     }
+}
+
+void Server::setup_game_callbacks_() {
+    if (!gameState_) return;
+    
+    // Player death callback
+    gameState_->onPlayerKilled = [this](shared::proto::PlayerId killer, shared::proto::PlayerId victim) {
+        logf(serverTick_, "game", "player %u killed player %u", killer, victim);
+        
+        // Determine if this is a final kill
+        auto* victimState = gameState_->get_player(victim);
+        bool isFinalKill = victimState && !victimState->canRespawn;
+        
+        // Send death notification
+        shared::proto::PlayerDied deathMsg;
+        deathMsg.victimId = victim;
+        deathMsg.killerId = killer;
+        deathMsg.isFinalKill = isFinalKill;
+        endpoint_->send(deathMsg);
+    };
+    
+    // Player respawn callback
+    gameState_->onPlayerRespawned = [this](shared::proto::PlayerId playerId, float x, float y, float z) {
+        logf(serverTick_, "game", "player %u respawned at (%.1f, %.1f, %.1f)", playerId, x, y, z);
+        if (playerId == playerId_) {
+            px_ = x;
+            py_ = y;
+            pz_ = z;
+            vx_ = 0.0f;
+            vy_ = 0.0f;
+            vz_ = 0.0f;
+        }
+        
+        // Send respawn notification
+        shared::proto::PlayerRespawned respawnMsg;
+        respawnMsg.playerId = playerId;
+        respawnMsg.x = x;
+        respawnMsg.y = y;
+        respawnMsg.z = z;
+        endpoint_->send(respawnMsg);
+        
+        // Also send health update for the respawned player
+        auto* playerState = gameState_->get_player(playerId);
+        if (playerState) {
+            shared::proto::HealthUpdate healthMsg;
+            healthMsg.playerId = playerId;
+            healthMsg.hp = playerState->health;
+            healthMsg.maxHp = playerState->maxHealth;
+            endpoint_->send(healthMsg);
+        }
+    };
+    
+    // Bed destroyed callback
+    gameState_->onBedDestroyed = [this](shared::game::TeamId teamId, shared::proto::PlayerId destroyer) {
+        logf(serverTick_, "game", "team %s bed destroyed by player %u", 
+             shared::game::team_name(teamId), destroyer);
+        
+        // Send bed destroyed notification
+        shared::proto::BedDestroyed bedMsg;
+        bedMsg.teamId = teamId;
+        bedMsg.destroyerId = destroyer;
+        endpoint_->send(bedMsg);
+    };
+    
+    // Team eliminated callback
+    gameState_->onTeamEliminated = [this](shared::game::TeamId teamId) {
+        logf(serverTick_, "game", "team %s eliminated", shared::game::team_name(teamId));
+        
+        // Send team eliminated notification
+        shared::proto::TeamEliminated elimMsg;
+        elimMsg.teamId = teamId;
+        endpoint_->send(elimMsg);
+    };
+    
+    // Match ended callback
+    gameState_->onMatchEnded = [this](shared::game::TeamId winner) {
+        logf(serverTick_, "game", "match ended, winner: team %s", shared::game::team_name(winner));
+        
+        // Send match ended notification
+        shared::proto::MatchEnded endMsg;
+        endMsg.winnerTeamId = winner;
+        endpoint_->send(endMsg);
+    };
+    
+    // Item spawned callback (from generators)
+    gameState_->onItemSpawned = [this](const server::game::DroppedItem& item) {
+        logf(serverTick_, "game", "item spawned: %s at (%.1f, %.1f, %.1f)", 
+             shared::game::item_name(item.itemType), item.x, item.y, item.z);
+        
+        // Send item spawn notification
+        shared::proto::ItemSpawned itemMsg;
+        itemMsg.entityId = item.id;
+        itemMsg.itemType = item.itemType;
+        itemMsg.x = item.x;
+        itemMsg.y = item.y;
+        itemMsg.z = item.z;
+        itemMsg.count = item.count;
+        endpoint_->send(itemMsg);
+    };
+    
+    // Health changed callback
+    gameState_->onHealthChanged = [this](shared::proto::PlayerId playerId, std::uint8_t hp, std::uint8_t maxHp) {
+        logf(serverTick_, "game", "player %u health: %u/%u", playerId, hp, maxHp);
+        
+        // Send health update
+        shared::proto::HealthUpdate healthMsg;
+        healthMsg.playerId = playerId;
+        healthMsg.hp = hp;
+        healthMsg.maxHp = maxHp;
+        endpoint_->send(healthMsg);
+    };
+    
+    // Item picked up callback
+    gameState_->onItemPickedUp = [this](server::game::EntityId entityId) {
+        logf(serverTick_, "game", "item %u picked up", entityId);
+        
+        shared::proto::ItemPickedUp pickupMsg;
+        pickupMsg.entityId = entityId;
+        pickupMsg.playerId = playerId_;  // In singleplayer, it's always the local player
+        endpoint_->send(pickupMsg);
+    };
+}
+
+void Server::sync_player_position_(float x, float y, float z) {
+    // For item pickup, combat range checks, etc.
+    (void)x;
+    (void)y;
+    (void)z;
 }
 
 } // namespace server::core

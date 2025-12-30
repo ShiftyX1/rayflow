@@ -63,6 +63,17 @@ enum class MessageTypeIndex : std::uint8_t {
     TryExportMap = 12,
     ExportResult = 13,
     ChunkData = 14,
+    // Game event messages
+    TeamAssigned = 15,
+    HealthUpdate = 16,
+    PlayerDied = 17,
+    PlayerRespawned = 18,
+    BedDestroyed = 19,
+    TeamEliminated = 20,
+    MatchEnded = 21,
+    ItemSpawned = 22,
+    ItemPickedUp = 23,
+    InventoryUpdate = 24,
 };
 
 class BinaryWriter {
@@ -315,6 +326,65 @@ std::vector<std::uint8_t> serialize_message(const shared::proto::Message& msg) {
                 w.write_u8(b);
             }
         }
+        // Game event messages
+        else if constexpr (std::is_same_v<T, shared::proto::TeamAssigned>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::TeamAssigned));
+            w.write_u32(m.playerId);
+            w.write_u8(static_cast<std::uint8_t>(m.teamId));
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::HealthUpdate>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::HealthUpdate));
+            w.write_u32(m.playerId);
+            w.write_u8(m.hp);
+            w.write_u8(m.maxHp);
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::PlayerDied>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::PlayerDied));
+            w.write_u32(m.victimId);
+            w.write_u32(m.killerId);
+            w.write_bool(m.isFinalKill);
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::PlayerRespawned>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::PlayerRespawned));
+            w.write_u32(m.playerId);
+            w.write_f32(m.x);
+            w.write_f32(m.y);
+            w.write_f32(m.z);
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::BedDestroyed>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::BedDestroyed));
+            w.write_u8(static_cast<std::uint8_t>(m.teamId));
+            w.write_u32(m.destroyerId);
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::TeamEliminated>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::TeamEliminated));
+            w.write_u8(static_cast<std::uint8_t>(m.teamId));
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::MatchEnded>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::MatchEnded));
+            w.write_u8(static_cast<std::uint8_t>(m.winnerTeamId));
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::ItemSpawned>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::ItemSpawned));
+            w.write_u32(m.entityId);
+            w.write_u8(static_cast<std::uint8_t>(m.itemType));
+            w.write_f32(m.x);
+            w.write_f32(m.y);
+            w.write_f32(m.z);
+            w.write_u16(m.count);
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::ItemPickedUp>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::ItemPickedUp));
+            w.write_u32(m.entityId);
+            w.write_u32(m.playerId);
+        }
+        else if constexpr (std::is_same_v<T, shared::proto::InventoryUpdate>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::InventoryUpdate));
+            w.write_u32(m.playerId);
+            w.write_u8(static_cast<std::uint8_t>(m.itemType));
+            w.write_u16(m.count);
+            w.write_u8(m.slot);
+        }
     }, msg);
     
     return w.take();
@@ -492,6 +562,97 @@ bool deserialize_message(const std::uint8_t* data, std::size_t size,
             for (std::uint32_t i = 0; i < blockCount; ++i) {
                 if (!r.read_u8(m.blocks[i])) return false;
             }
+            outMsg = m;
+            return true;
+        }
+        // Game event messages
+        case MessageTypeIndex::TeamAssigned: {
+            shared::proto::TeamAssigned m;
+            if (!r.read_u32(m.playerId)) return false;
+            std::uint8_t teamId;
+            if (!r.read_u8(teamId)) return false;
+            m.teamId = static_cast<shared::game::TeamId>(teamId);
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::HealthUpdate: {
+            shared::proto::HealthUpdate m;
+            if (!r.read_u32(m.playerId)) return false;
+            if (!r.read_u8(m.hp)) return false;
+            if (!r.read_u8(m.maxHp)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::PlayerDied: {
+            shared::proto::PlayerDied m;
+            if (!r.read_u32(m.victimId)) return false;
+            if (!r.read_u32(m.killerId)) return false;
+            if (!r.read_bool(m.isFinalKill)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::PlayerRespawned: {
+            shared::proto::PlayerRespawned m;
+            if (!r.read_u32(m.playerId)) return false;
+            if (!r.read_f32(m.x)) return false;
+            if (!r.read_f32(m.y)) return false;
+            if (!r.read_f32(m.z)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::BedDestroyed: {
+            shared::proto::BedDestroyed m;
+            std::uint8_t teamId;
+            if (!r.read_u8(teamId)) return false;
+            m.teamId = static_cast<shared::game::TeamId>(teamId);
+            if (!r.read_u32(m.destroyerId)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::TeamEliminated: {
+            shared::proto::TeamEliminated m;
+            std::uint8_t teamId;
+            if (!r.read_u8(teamId)) return false;
+            m.teamId = static_cast<shared::game::TeamId>(teamId);
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::MatchEnded: {
+            shared::proto::MatchEnded m;
+            std::uint8_t teamId;
+            if (!r.read_u8(teamId)) return false;
+            m.winnerTeamId = static_cast<shared::game::TeamId>(teamId);
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::ItemSpawned: {
+            shared::proto::ItemSpawned m;
+            if (!r.read_u32(m.entityId)) return false;
+            std::uint8_t itemType;
+            if (!r.read_u8(itemType)) return false;
+            m.itemType = static_cast<shared::game::ItemType>(itemType);
+            if (!r.read_f32(m.x)) return false;
+            if (!r.read_f32(m.y)) return false;
+            if (!r.read_f32(m.z)) return false;
+            if (!r.read_u16(m.count)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::ItemPickedUp: {
+            shared::proto::ItemPickedUp m;
+            if (!r.read_u32(m.entityId)) return false;
+            if (!r.read_u32(m.playerId)) return false;
+            outMsg = m;
+            return true;
+        }
+        case MessageTypeIndex::InventoryUpdate: {
+            shared::proto::InventoryUpdate m;
+            if (!r.read_u32(m.playerId)) return false;
+            std::uint8_t itemType;
+            if (!r.read_u8(itemType)) return false;
+            m.itemType = static_cast<shared::game::ItemType>(itemType);
+            if (!r.read_u16(m.count)) return false;
+            if (!r.read_u8(m.slot)) return false;
             outMsg = m;
             return true;
         }

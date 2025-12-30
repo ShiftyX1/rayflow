@@ -62,11 +62,10 @@ TEST_CASE("Integration: complete session lifecycle", "[integration][session]") {
     
     pump_ms(100);
     
-    // Step 4: Receive JoinAck
-    REQUIRE(pair.client->try_recv(msg));
-    REQUIRE(is_message_type<JoinAck>(msg));
-    
-    PlayerId playerId = std::get<JoinAck>(msg).playerId;
+    // Step 4: Receive JoinAck (skip game event messages like TeamAssigned, HealthUpdate)
+    JoinAck ack;
+    REQUIRE(receive_message_type(*pair.client, ack));
+    PlayerId playerId = ack.playerId;
     REQUIRE(playerId > 0);
     
     // Step 5: Receive StateSnapshots

@@ -5,6 +5,8 @@
 #include <variant>
 #include <vector>
 
+#include "../game/item_types.hpp"
+#include "../game/team_types.hpp"
 #include "../voxel/block.hpp"
 #include "../voxel/block_state.hpp"
 
@@ -173,6 +175,78 @@ struct ExportResult {
     std::string path;
 };
 
+// ============================================================================
+// Game Events (Server -> Client)
+// ============================================================================
+
+// Server -> Client: player assigned to a team
+struct TeamAssigned {
+    PlayerId playerId{0};
+    shared::game::TeamId teamId{shared::game::Teams::None};
+};
+
+// Server -> Client: player health update
+struct HealthUpdate {
+    PlayerId playerId{0};
+    std::uint8_t hp{20};      // Current health (0-20, half-hearts)
+    std::uint8_t maxHp{20};   // Maximum health
+};
+
+// Server -> Client: player killed another player (or died)
+struct PlayerDied {
+    PlayerId victimId{0};
+    PlayerId killerId{0};     // 0 if no killer (environmental death)
+    bool isFinalKill{false};  // True if victim cannot respawn (no bed)
+};
+
+// Server -> Client: player respawned
+struct PlayerRespawned {
+    PlayerId playerId{0};
+    float x{0.0f};
+    float y{0.0f};
+    float z{0.0f};
+};
+
+// Server -> Client: bed destroyed
+struct BedDestroyed {
+    shared::game::TeamId teamId{shared::game::Teams::None};
+    PlayerId destroyerId{0};  // 0 if destroyed by game mechanics
+};
+
+// Server -> Client: team eliminated
+struct TeamEliminated {
+    shared::game::TeamId teamId{shared::game::Teams::None};
+};
+
+// Server -> Client: match ended
+struct MatchEnded {
+    shared::game::TeamId winnerTeamId{shared::game::Teams::None};
+};
+
+// Server -> Client: item spawned in the world
+struct ItemSpawned {
+    std::uint32_t entityId{0};
+    shared::game::ItemType itemType{shared::game::ItemType::None};
+    float x{0.0f};
+    float y{0.0f};
+    float z{0.0f};
+    std::uint16_t count{1};
+};
+
+// Server -> Client: item picked up (despawned)
+struct ItemPickedUp {
+    std::uint32_t entityId{0};
+    PlayerId playerId{0};     // Who picked it up
+};
+
+// Server -> Client: player inventory update
+struct InventoryUpdate {
+    PlayerId playerId{0};
+    shared::game::ItemType itemType{shared::game::ItemType::None};
+    std::uint16_t count{0};   // New total count
+    std::uint8_t slot{0};     // Inventory slot (0 = hotbar slot 0, etc.)
+};
+
 using Message = std::variant<
     ClientHello,
     ServerHello,
@@ -188,7 +262,18 @@ using Message = std::variant<
     ActionRejected,
     TryExportMap,
     ExportResult,
-    ChunkData
+    ChunkData,
+    // Game events
+    TeamAssigned,
+    HealthUpdate,
+    PlayerDied,
+    PlayerRespawned,
+    BedDestroyed,
+    TeamEliminated,
+    MatchEnded,
+    ItemSpawned,
+    ItemPickedUp,
+    InventoryUpdate
 >;
 
 } // namespace shared::proto

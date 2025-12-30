@@ -81,11 +81,9 @@ TEST_CASE("Server responds to JoinMatch with JoinAck", "[server][session]") {
     pair.client->send(JoinMatch{});
     pump_server_briefly();
     
-    // Should receive JoinAck
-    REQUIRE(pair.client->try_recv(msg));
-    REQUIRE(std::holds_alternative<JoinAck>(msg));
-    
-    auto& ack = std::get<JoinAck>(msg);
+    // Should receive JoinAck (may need to skip game event messages like TeamAssigned, HealthUpdate)
+    JoinAck ack;
+    REQUIRE(receive_message_type(*pair.client, ack));
     REQUIRE(ack.playerId > 0);
     
     server.stop();
@@ -121,10 +119,10 @@ TEST_CASE("Full session: Hello -> ServerHello -> Join -> JoinAck -> Snapshots", 
     pair.client->send(JoinMatch{});
     pump_server_briefly();
     
-    // Step 4: JoinAck
-    REQUIRE(pair.client->try_recv(msg));
-    REQUIRE(std::holds_alternative<JoinAck>(msg));
-    auto playerId = std::get<JoinAck>(msg).playerId;
+    // Step 4: JoinAck (skip game event messages like TeamAssigned, HealthUpdate)
+    JoinAck ack;
+    REQUIRE(receive_message_type(*pair.client, ack));
+    auto playerId = ack.playerId;
     REQUIRE(playerId > 0);
     
     // Step 5: Wait for StateSnapshot

@@ -38,8 +38,10 @@ PlayerId join_session(LocalTransport::Pair& pair) {
     pair.client->send(JoinMatch{});
     pump_briefly();
     
-    if (pair.client->try_recv(msg) && std::holds_alternative<JoinAck>(msg)) {
-        return std::get<JoinAck>(msg).playerId;
+    // Receive JoinAck (skip game event messages like TeamAssigned, HealthUpdate)
+    JoinAck ack;
+    if (receive_message_type(*pair.client, ack)) {
+        return ack.playerId;
     }
     return 0;
 }

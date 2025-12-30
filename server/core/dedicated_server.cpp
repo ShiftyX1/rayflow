@@ -12,6 +12,7 @@
 #include "../../shared/maps/runtime_paths.hpp"
 #include "../../shared/voxel/block_state.hpp"
 #include "../scripting/script_engine.hpp"
+#include "../game/game_state.hpp"
 
 namespace server::core {
 
@@ -525,6 +526,13 @@ DedicatedServer::DedicatedServer(const Config& config)
              path.filename().string().c_str(), mapId_.c_str(), mapVersion_);
     }
 
+    gameState_ = std::make_unique<server::game::GameState>();
+    server::game::MatchConfig matchConfig;
+    matchConfig.teamCount = 4;  // Default 4 teams
+    matchConfig.maxPlayersPerTeam = 4;
+    gameState_->init(matchConfig);
+    setup_game_callbacks_();
+
     logf(0, "init", "tickRate=%u worldSeed=%u maxClients=%zu",
          tickRate_, worldSeed_, config_.maxClients);
 }
@@ -603,6 +611,9 @@ void DedicatedServer::tick_once_() {
         if (client.phase == ClientState::Phase::InGame) {
             simulate_client_(client, dt);
 
+            // Sync position to game state for gameplay logic (item pickup, etc.)
+            sync_player_position_(client.playerId, client.px, client.py, client.pz);
+
             shared::proto::StateSnapshot snap;
             snap.serverTick = serverTick_;
             snap.playerId = client.playerId;
@@ -614,6 +625,11 @@ void DedicatedServer::tick_once_() {
             snap.vz = client.vz;
             client.connection->send(snap);
         }
+    }
+
+    // Update game state (generators, respawns, etc.)
+    if (gameState_) {
+        gameState_->update(dt, serverTick_);
     }
 
     if (scriptEngine_ && scriptEngine_->has_scripts()) {
@@ -648,6 +664,11 @@ void DedicatedServer::handle_client_disconnect_(std::shared_ptr<shared::transpor
     if (clientIt != clients_.end()) {
         bool wasInGame = (clientIt->second.phase == ClientState::Phase::InGame);
         clients_.erase(clientIt);
+
+        // Remove from game state
+        if (wasInGame && gameState_) {
+            gameState_->remove_player(playerId);
+        }
 
         logf(serverTick_, "init", "client disconnected playerId=%u", playerId);
 
@@ -724,6 +745,30 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             }
         }
         logf(serverTick_, "tx", "sent %d chunks to player=%u", chunksSent, client.playerId);
+
+        // Add player to game state and assign to team
+        if (gameState_) {
+            gameState_->add_player(client.playerId, "Player" + std::to_string(client.playerId));
+            auto teamId = gameState_->assign_player_to_team(client.playerId);
+            logf(serverTick_, "init", "player=%u assigned to team %s", 
+                 client.playerId, shared::game::team_name(teamId));
+            
+            // Send TeamAssigned to all clients
+            shared::proto::TeamAssigned teamMsg;
+            teamMsg.playerId = client.playerId;
+            teamMsg.teamId = teamId;
+            broadcast_(teamMsg);
+            
+            // Send initial health update to this player
+            auto* playerState = gameState_->get_player(client.playerId);
+            if (playerState) {
+                shared::proto::HealthUpdate healthMsg;
+                healthMsg.playerId = client.playerId;
+                healthMsg.hp = playerState->health;
+                healthMsg.maxHp = playerState->maxHealth;
+                client.connection->send(healthMsg);
+            }
+        }
 
         if (onPlayerJoin) {
             onPlayerJoin(client.playerId);
@@ -1061,6 +1106,144 @@ void DedicatedServer::init_script_engine_() {
 
 void DedicatedServer::process_script_commands_() {
     // TODO: process script commands and broadcast to clients
+}
+
+void DedicatedServer::setup_game_callbacks_() {
+    if (!gameState_) return;
+    
+    // Player death callback
+    gameState_->onPlayerKilled = [this](shared::proto::PlayerId killer, shared::proto::PlayerId victim) {
+        logf(serverTick_, "game", "player %u killed player %u", killer, victim);
+        
+        auto* victimState = gameState_->get_player(victim);
+        bool isFinalKill = victimState && !victimState->canRespawn;
+        
+        shared::proto::PlayerDied deathMsg;
+        deathMsg.victimId = victim;
+        deathMsg.killerId = killer;
+        deathMsg.isFinalKill = isFinalKill;
+        broadcast_(deathMsg);
+    };
+    
+    // Player respawn callback
+    gameState_->onPlayerRespawned = [this](shared::proto::PlayerId playerId, float x, float y, float z) {
+        logf(serverTick_, "game", "player %u respawned at (%.1f, %.1f, %.1f)", playerId, x, y, z);
+        
+        // Update physics position
+        auto it = clients_.find(playerId);
+        if (it != clients_.end()) {
+            it->second.px = x;
+            it->second.py = y;
+            it->second.pz = z;
+            it->second.vx = 0.0f;
+            it->second.vy = 0.0f;
+            it->second.vz = 0.0f;
+        }
+        
+        shared::proto::PlayerRespawned respawnMsg;
+        respawnMsg.playerId = playerId;
+        respawnMsg.x = x;
+        respawnMsg.y = y;
+        respawnMsg.z = z;
+        broadcast_(respawnMsg);
+        
+        // Also send health update for the respawned player
+        auto* playerState = gameState_->get_player(playerId);
+        if (playerState) {
+            shared::proto::HealthUpdate healthMsg;
+            healthMsg.playerId = playerId;
+            healthMsg.hp = playerState->health;
+            healthMsg.maxHp = playerState->maxHealth;
+            broadcast_(healthMsg);
+        }
+    };
+    
+    // Bed destroyed callback
+    gameState_->onBedDestroyed = [this](shared::game::TeamId teamId, shared::proto::PlayerId destroyer) {
+        logf(serverTick_, "game", "team %s bed destroyed by player %u", 
+             shared::game::team_name(teamId), destroyer);
+        
+        // Send bed destroyed notification to all clients
+        shared::proto::BedDestroyed bedMsg;
+        bedMsg.teamId = teamId;
+        bedMsg.destroyerId = destroyer;
+        broadcast_(bedMsg);
+    };
+    
+    // Team eliminated callback
+    gameState_->onTeamEliminated = [this](shared::game::TeamId teamId) {
+        logf(serverTick_, "game", "team %s eliminated", shared::game::team_name(teamId));
+        
+        // Send team eliminated notification to all clients
+        shared::proto::TeamEliminated elimMsg;
+        elimMsg.teamId = teamId;
+        broadcast_(elimMsg);
+    };
+    
+    // Match ended callback
+    gameState_->onMatchEnded = [this](shared::game::TeamId winner) {
+        logf(serverTick_, "game", "match ended, winner: team %s", shared::game::team_name(winner));
+        
+        // Send match ended notification to all clients
+        shared::proto::MatchEnded endMsg;
+        endMsg.winnerTeamId = winner;
+        broadcast_(endMsg);
+    };
+    
+    // Item spawned callback (from generators)
+    gameState_->onItemSpawned = [this](const server::game::DroppedItem& item) {
+        logf(serverTick_, "game", "item spawned: %s at (%.1f, %.1f, %.1f)", 
+             shared::game::item_name(item.itemType), item.x, item.y, item.z);
+        
+        // Send item spawn to all clients
+        shared::proto::ItemSpawned itemMsg;
+        itemMsg.entityId = item.id;
+        itemMsg.itemType = item.itemType;
+        itemMsg.x = item.x;
+        itemMsg.y = item.y;
+        itemMsg.z = item.z;
+        itemMsg.count = item.count;
+        broadcast_(itemMsg);
+    };
+    
+    // Health changed callback
+    gameState_->onHealthChanged = [this](shared::proto::PlayerId playerId, std::uint8_t hp, std::uint8_t maxHp) {
+        logf(serverTick_, "game", "player %u health: %u/%u", playerId, hp, maxHp);
+        
+        // Send health update to client
+        shared::proto::HealthUpdate healthMsg;
+        healthMsg.playerId = playerId;
+        healthMsg.hp = hp;
+        healthMsg.maxHp = maxHp;
+        
+        // Send to the specific player (private info)
+        auto it = clients_.find(playerId);
+        if (it != clients_.end() && it->second.connection) {
+            it->second.connection->send(healthMsg);
+        }
+    };
+    
+    // Item picked up callback
+    gameState_->onItemPickedUp = [this](server::game::EntityId entityId) {
+        logf(serverTick_, "game", "item %u picked up", entityId);
+        
+        // Note: we don't have the player ID here, so we broadcast without it
+        // The game state should be updated to include who picked it up
+        shared::proto::ItemPickedUp pickupMsg;
+        pickupMsg.entityId = entityId;
+        pickupMsg.playerId = 0;  // TODO: pass player ID in callback
+        broadcast_(pickupMsg);
+    };
+}
+
+void DedicatedServer::sync_player_position_(shared::proto::PlayerId playerId, float x, float y, float z) {
+    // This would be used for item pickup collision checks
+    // For now, we're not storing physics position in GameState (it uses PlayerState for game logic)
+    // The physics position is in ClientState, game logic position could be synced here if needed
+    (void)playerId;
+    (void)x;
+    (void)y;
+    (void)z;
 }
 
 } // namespace server::core

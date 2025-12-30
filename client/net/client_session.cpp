@@ -145,6 +145,58 @@ void ClientSession::poll() {
                      ev.path.c_str());
             if (onExportResult_) onExportResult_(ev);
         }
+        // === Game Events ===
+        else if (std::holds_alternative<shared::proto::TeamAssigned>(msg)) {
+            const auto& ev = std::get<shared::proto::TeamAssigned>(msg);
+            TraceLog(LOG_INFO, "[net] TeamAssigned: playerId=%u teamId=%u (%s)",
+                     ev.playerId, ev.teamId, shared::game::team_name(ev.teamId));
+            if (onTeamAssigned_) onTeamAssigned_(ev);
+        } else if (std::holds_alternative<shared::proto::HealthUpdate>(msg)) {
+            const auto& ev = std::get<shared::proto::HealthUpdate>(msg);
+            TraceLog(LOG_DEBUG, "[net] HealthUpdate: playerId=%u hp=%u/%u",
+                     ev.playerId, ev.hp, ev.maxHp);
+            if (onHealthUpdate_) onHealthUpdate_(ev);
+        } else if (std::holds_alternative<shared::proto::PlayerDied>(msg)) {
+            const auto& ev = std::get<shared::proto::PlayerDied>(msg);
+            TraceLog(LOG_INFO, "[net] PlayerDied: victimId=%u killerId=%u finalKill=%d",
+                     ev.victimId, ev.killerId, ev.isFinalKill ? 1 : 0);
+            if (onPlayerDied_) onPlayerDied_(ev);
+        } else if (std::holds_alternative<shared::proto::PlayerRespawned>(msg)) {
+            const auto& ev = std::get<shared::proto::PlayerRespawned>(msg);
+            TraceLog(LOG_INFO, "[net] PlayerRespawned: playerId=%u pos=(%.1f,%.1f,%.1f)",
+                     ev.playerId, ev.x, ev.y, ev.z);
+            if (onPlayerRespawned_) onPlayerRespawned_(ev);
+        } else if (std::holds_alternative<shared::proto::BedDestroyed>(msg)) {
+            const auto& ev = std::get<shared::proto::BedDestroyed>(msg);
+            TraceLog(LOG_INFO, "[net] BedDestroyed: teamId=%u (%s) destroyerId=%u",
+                     ev.teamId, shared::game::team_name(ev.teamId), ev.destroyerId);
+            if (onBedDestroyed_) onBedDestroyed_(ev);
+        } else if (std::holds_alternative<shared::proto::TeamEliminated>(msg)) {
+            const auto& ev = std::get<shared::proto::TeamEliminated>(msg);
+            TraceLog(LOG_INFO, "[net] TeamEliminated: teamId=%u (%s)",
+                     ev.teamId, shared::game::team_name(ev.teamId));
+            if (onTeamEliminated_) onTeamEliminated_(ev);
+        } else if (std::holds_alternative<shared::proto::MatchEnded>(msg)) {
+            const auto& ev = std::get<shared::proto::MatchEnded>(msg);
+            TraceLog(LOG_INFO, "[net] MatchEnded: winnerTeamId=%u (%s)",
+                     ev.winnerTeamId, shared::game::team_name(ev.winnerTeamId));
+            if (onMatchEnded_) onMatchEnded_(ev);
+        } else if (std::holds_alternative<shared::proto::ItemSpawned>(msg)) {
+            const auto& ev = std::get<shared::proto::ItemSpawned>(msg);
+            TraceLog(LOG_DEBUG, "[net] ItemSpawned: entityId=%u type=%u pos=(%.1f,%.1f,%.1f) count=%u",
+                     ev.entityId, static_cast<unsigned>(ev.itemType), ev.x, ev.y, ev.z, ev.count);
+            if (onItemSpawned_) onItemSpawned_(ev);
+        } else if (std::holds_alternative<shared::proto::ItemPickedUp>(msg)) {
+            const auto& ev = std::get<shared::proto::ItemPickedUp>(msg);
+            TraceLog(LOG_DEBUG, "[net] ItemPickedUp: entityId=%u playerId=%u",
+                     ev.entityId, ev.playerId);
+            if (onItemPickedUp_) onItemPickedUp_(ev);
+        } else if (std::holds_alternative<shared::proto::InventoryUpdate>(msg)) {
+            const auto& ev = std::get<shared::proto::InventoryUpdate>(msg);
+            TraceLog(LOG_DEBUG, "[net] InventoryUpdate: playerId=%u type=%u count=%u slot=%u",
+                     ev.playerId, static_cast<unsigned>(ev.itemType), ev.count, ev.slot);
+            if (onInventoryUpdate_) onInventoryUpdate_(ev);
+        }
     }
 }
 

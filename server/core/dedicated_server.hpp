@@ -7,6 +7,7 @@
 #include "../../shared/transport/enet_connection.hpp"
 #include "../../shared/protocol/messages.hpp"
 #include "../voxel/terrain.hpp"
+#include "../game/game_state.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -123,6 +124,15 @@ private:
     std::unordered_map<shared::proto::PlayerId, ClientState> clients_;
     
     std::unordered_map<shared::transport::ENetConnection*, shared::proto::PlayerId> connToPlayer_;
+    
+    // BedWars game state
+    std::unique_ptr<server::game::GameState> gameState_;
+    
+    // Setup game state callbacks
+    void setup_game_callbacks_();
+    
+    // Sync physics position to game state
+    void sync_player_position_(shared::proto::PlayerId playerId, float x, float y, float z);
 };
 
 } // namespace server::core

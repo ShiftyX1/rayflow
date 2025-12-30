@@ -171,6 +171,106 @@ void Game::start_gameplay() {
         session_->set_on_action_rejected([this](const shared::proto::ActionRejected&) {
             if (block_interaction_) block_interaction_->on_action_rejected();
         });
+        
+        // Game event callbacks
+        session_->set_on_team_assigned([this](const shared::proto::TeamAssigned& ev) {
+            // Update local player's team if it's us
+            if (session_->join_ack() && ev.playerId == session_->join_ack()->playerId) {
+                ui_vm_.player.team_id = ev.teamId;
+            }
+        });
+        session_->set_on_health_update([this](const shared::proto::HealthUpdate& ev) {
+            // Update local player's health if it's us
+            if (session_->join_ack() && ev.playerId == session_->join_ack()->playerId) {
+                ui_vm_.player.health = ev.hp;
+                ui_vm_.player.max_health = ev.maxHp;
+            }
+        });
+        session_->set_on_player_died([this](const shared::proto::PlayerDied& ev) {
+            // Add to kill feed
+            ui::KillFeedEntry entry;
+            entry.killer_id = ev.killerId;
+            entry.victim_id = ev.victimId;
+            entry.is_final_kill = ev.isFinalKill;
+            entry.time_remaining = 5.0f;
+            ui_vm_.game.kill_feed.insert(ui_vm_.game.kill_feed.begin(), entry);
+            
+            // Limit kill feed size
+            if (ui_vm_.game.kill_feed.size() > 5) {
+                ui_vm_.game.kill_feed.pop_back();
+            }
+        });
+        session_->set_on_bed_destroyed([this](const shared::proto::BedDestroyed& ev) {
+            // Update bed status
+            if (ev.teamId <= shared::game::Teams::MaxTeams) {
+                ui_vm_.game.team_beds[ev.teamId] = false;
+            }
+            
+            // If our bed was destroyed, update can_respawn
+            if (ev.teamId == ui_vm_.player.team_id) {
+                ui_vm_.player.can_respawn = false;
+                
+                // Add notification
+                ui::GameNotification notif;
+                notif.message = "Your bed was destroyed!";
+                notif.color = RED;
+                notif.time_remaining = 5.0f;
+                ui_vm_.game.notifications.push_back(notif);
+            } else {
+                // Another team's bed destroyed
+                ui::GameNotification notif;
+                notif.message = std::string(shared::game::team_name(ev.teamId)) + " bed destroyed!";
+                auto color = shared::game::TeamColor::from_team_id(ev.teamId);
+                notif.color = Color{color.r, color.g, color.b, 255};
+                notif.time_remaining = 3.0f;
+                ui_vm_.game.notifications.push_back(notif);
+            }
+        });
+        session_->set_on_team_eliminated([this](const shared::proto::TeamEliminated& ev) {
+            ui::GameNotification notif;
+            notif.message = std::string(shared::game::team_name(ev.teamId)) + " has been eliminated!";
+            auto color = shared::game::TeamColor::from_team_id(ev.teamId);
+            notif.color = Color{color.r, color.g, color.b, 255};
+            notif.time_remaining = 4.0f;
+            ui_vm_.game.notifications.push_back(notif);
+        });
+        session_->set_on_match_ended([this](const shared::proto::MatchEnded& ev) {
+            ui_vm_.game.match_ended = true;
+            ui_vm_.game.winner_team = ev.winnerTeamId;
+            
+            ui::GameNotification notif;
+            if (ev.winnerTeamId == ui_vm_.player.team_id) {
+                notif.message = "Victory!";
+                notif.color = GOLD;
+            } else {
+                notif.message = std::string(shared::game::team_name(ev.winnerTeamId)) + " wins!";
+                auto color = shared::game::TeamColor::from_team_id(ev.winnerTeamId);
+                notif.color = Color{color.r, color.g, color.b, 255};
+            }
+            notif.time_remaining = 10.0f;
+            ui_vm_.game.notifications.push_back(notif);
+        });
+        session_->set_on_inventory_update([this](const shared::proto::InventoryUpdate& ev) {
+            // Update resource counts for local player
+            if (session_->join_ack() && ev.playerId == session_->join_ack()->playerId) {
+                switch (ev.itemType) {
+                    case shared::game::ItemType::Iron:
+                        ui_vm_.player.iron = ev.count;
+                        break;
+                    case shared::game::ItemType::Gold:
+                        ui_vm_.player.gold = ev.count;
+                        break;
+                    case shared::game::ItemType::Diamond:
+                        ui_vm_.player.diamond = ev.count;
+                        break;
+                    case shared::game::ItemType::Emerald:
+                        ui_vm_.player.emerald = ev.count;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        });
     }
     
     block_interaction_ = std::make_unique<voxel::BlockInteraction>();
@@ -336,8 +436,8 @@ void Game::refresh_ui_view_model(float delta_time) {
     ui_vm_.fps = GetFPS();
     ui_vm_.game_screen = game_screen_;
 
-    ui_vm_.player.health = 20;
-    ui_vm_.player.max_health = 20;
+    // Note: health, max_health, team_id, etc. are updated by network callbacks
+    // Don't overwrite them here
 
     if (gameplay_initialized_ && player_entity_ != entt::null) {
         if (registry_.all_of<ecs::Transform>(player_entity_)) {
@@ -357,6 +457,26 @@ void Game::refresh_ui_view_model(float delta_time) {
             const auto& cam = registry_.get<ecs::FirstPersonCamera>(player_entity_);
             ui_vm_.player.yaw = cam.yaw;
             ui_vm_.player.pitch = cam.pitch;
+        }
+    }
+
+    // Update kill feed timers and remove expired entries
+    for (auto it = ui_vm_.game.kill_feed.begin(); it != ui_vm_.game.kill_feed.end(); ) {
+        it->time_remaining -= delta_time;
+        if (it->time_remaining <= 0.0f) {
+            it = ui_vm_.game.kill_feed.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // Update notification timers and remove expired entries
+    for (auto it = ui_vm_.game.notifications.begin(); it != ui_vm_.game.notifications.end(); ) {
+        it->time_remaining -= delta_time;
+        if (it->time_remaining <= 0.0f) {
+            it = ui_vm_.game.notifications.erase(it);
+        } else {
+            ++it;
         }
     }
 

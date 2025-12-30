@@ -118,9 +118,11 @@ TEST_CASE("Replication: playerId remains constant in snapshots", "[integration][
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
     pump_ms(100);
-    REQUIRE(pair.client->try_recv(msg));
     
-    PlayerId assignedId = std::get<JoinAck>(msg).playerId;
+    // Receive JoinAck (skip game event messages like TeamAssigned, HealthUpdate)
+    JoinAck ack;
+    REQUIRE(receive_message_type(*pair.client, ack));
+    PlayerId assignedId = ack.playerId;
     REQUIRE(assignedId > 0);
     
     // Collect snapshots
@@ -324,8 +326,11 @@ TEST_CASE("Replication: client can rebuild state from snapshots", "[integration]
     pair.client->try_recv(msg);
     pair.client->send(JoinMatch{});
     pump_ms(100);
-    REQUIRE(pair.client->try_recv(msg));
-    state.playerId = std::get<JoinAck>(msg).playerId;
+    
+    // Receive JoinAck (skip game event messages like TeamAssigned, HealthUpdate)
+    JoinAck ack;
+    REQUIRE(receive_message_type(*pair.client, ack));
+    state.playerId = ack.playerId;
     
     // Run simulation with input
     for (int i = 0; i < 30; ++i) {
