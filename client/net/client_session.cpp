@@ -61,13 +61,15 @@ void ClientSession::send_try_place_block(int x, int y, int z, shared::voxel::Blo
     endpoint_->send(std::move(req));
 }
 
-void ClientSession::send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType) {
+void ClientSession::send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType, float hitY, std::uint8_t face) {
     shared::proto::TrySetBlock req;
     req.seq = ++actionSeq_;
     req.x = x;
     req.y = y;
     req.z = z;
     req.blockType = blockType;
+    req.hitY = hitY;
+    req.face = face;
     endpoint_->send(std::move(req));
 }
 

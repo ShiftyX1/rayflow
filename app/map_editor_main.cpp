@@ -206,6 +206,7 @@ struct RaycastHit {
     int y{0};
     int z{0};
     int face{0};
+    float hitY{0.5f};  // Y position within the hit block (0-1), for slab placement
     voxel::BlockType blockType{voxel::BlockType::Air};
 };
 
@@ -245,6 +246,16 @@ static RaycastHit raycast_voxels(const voxel::World& world, const Vector3& origi
             result.z = z;
             result.face = face;
             result.blockType = static_cast<voxel::BlockType>(b);
+            
+            Vector3 hitPoint{
+                origin.x + dir.x * dist,
+                origin.y + dir.y * dist,
+                origin.z + dir.z * dist
+            };
+            result.hitY = hitPoint.y - static_cast<float>(y);
+            if (result.hitY < 0.0f) result.hitY = 0.0f;
+            if (result.hitY > 1.0f) result.hitY = 1.0f;
+            
             return result;
         }
 
@@ -949,7 +960,8 @@ int main() {
                         selected = paletteTypes[activeBlockIndex];
                     }
 
-                    session->send_try_set_block(px, py, pz, static_cast<shared::voxel::BlockType>(selected));
+                    session->send_try_set_block(px, py, pz, static_cast<shared::voxel::BlockType>(selected), 
+                                                hit.hitY, static_cast<std::uint8_t>(hit.face));
                 }
             }
         }

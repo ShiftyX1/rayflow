@@ -22,7 +22,7 @@ public:
 
     void send_try_break_block(int x, int y, int z);
     void send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType, float hitY = 0.5f, std::uint8_t face = 0);
-    void send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType);
+    void send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType, float hitY = 0.5f, std::uint8_t face = 2);
     void send_try_export_map(const std::string& mapId,
                              std::uint32_t version,
                              int chunkMinX,

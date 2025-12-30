@@ -5,18 +5,15 @@
 namespace ecs {
 
 void RenderSystem::update(entt::registry& registry, float delta_time) {
-    // This system doesn't update state, it's called separately for rendering
     (void)registry;
     (void)delta_time;
 }
 
 void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
-    // Render voxel world
     if (world_) {
         world_->render(camera);
     }
     
-    // Render meshes
     auto mesh_view = registry.view<Transform, MeshComponent>();
     for (auto entity : mesh_view) {
         auto& transform = mesh_view.get<Transform>(entity);
@@ -26,7 +23,6 @@ void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
                  MatrixTranslate(transform.position.x, transform.position.y, transform.position.z));
     }
     
-    // Render models
     auto model_view = registry.view<Transform, ModelComponent>();
     for (auto entity : model_view) {
         auto& transform = model_view.get<Transform>(entity);
@@ -49,11 +45,9 @@ void RenderSystem::render_crosshair(int screen_width, int screen_height) {
     int size = 10;
     int thickness = 2;
     
-    // Draw crosshair
     DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, WHITE);
     DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, WHITE);
     
-    // Draw outline for visibility
     DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1, 
                        size * 2 + 2, thickness + 2, BLACK);
     DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1, 

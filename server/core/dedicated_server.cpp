@@ -63,18 +63,15 @@ static inline int fast_floor(float v) {
     return static_cast<int>(std::floor(v));
 }
 
-// Check full 3D AABB collision between player and block
-static bool check_block_collision_3d(
-    shared::voxel::BlockType block_type, 
+static bool check_aabb_collision(
+    const shared::voxel::BlockCollisionInfo& coll,
     int bx, int by, int bz,
     float player_x, float player_y, float player_z,
     float player_half_w, float player_height, float player_half_d
 ) {
-    auto coll = shared::voxel::get_collision_info(block_type);
     if (!coll.hasCollision) return false;
     
     // Block collision bounds in world coordinates
-    // Note: Use full collision height (e.g., 1.5 for fences) to prevent jumping over
     float block_min_x = static_cast<float>(bx) + coll.minX;
     float block_max_x = static_cast<float>(bx) + coll.maxX;
     float block_min_y = static_cast<float>(by) + coll.minY;
@@ -94,6 +91,38 @@ static bool check_block_collision_3d(
     return player_min_x < block_max_x && player_max_x > block_min_x &&
            player_min_y < block_max_y && player_max_y > block_min_y &&
            player_min_z < block_max_z && player_max_z > block_min_z;
+}
+
+static bool check_block_collision_3d(
+    shared::voxel::BlockType block_type, 
+    int bx, int by, int bz,
+    float player_x, float player_y, float player_z,
+    float player_half_w, float player_height, float player_half_d
+) {
+    auto coll = shared::voxel::get_collision_info(block_type);
+    if (!coll.hasCollision) return false;
+    
+    return check_aabb_collision(coll, bx, by, bz, player_x, player_y, player_z,
+                                player_half_w, player_height, player_half_d);
+}
+
+static bool check_block_collision_3d_with_state(
+    shared::voxel::BlockType block_type,
+    shared::voxel::BlockRuntimeState state,
+    int bx, int by, int bz,
+    float player_x, float player_y, float player_z,
+    float player_half_w, float player_height, float player_half_d
+) {
+    shared::voxel::BlockCollisionInfo boxes[5];
+    int count = shared::voxel::get_collision_boxes(block_type, state, boxes, 5);
+    
+    for (int i = 0; i < count; ++i) {
+        if (check_aabb_collision(boxes[i], bx, by, bz, player_x, player_y, player_z,
+                                 player_half_w, player_height, player_half_d)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Check if player AABB at given Y overlaps with block's collision shape (Y-only check for full blocks)
@@ -217,10 +246,17 @@ static void resolve_x(const server::voxel::Terrain& terrain, float& px, float py
         for (int by = minY; by <= maxY; by++) {
             for (int bz = minZ; bz <= maxZ; bz++) {
                 auto block_type = terrain.get_block(checkX, by, bz);
-                // Use full 3D check for all blocks
-                if (check_block_collision_3d(block_type, checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
-                    auto coll = shared::voxel::get_collision_info(block_type);
-                    float block_edge = static_cast<float>(checkX) + coll.minX;
+                auto block_state = terrain.get_block_state(checkX, by, bz);
+                if (check_block_collision_3d_with_state(block_type, block_state, checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
+                    shared::voxel::BlockCollisionInfo boxes[5];
+                    int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
+                    float block_edge = static_cast<float>(checkX) + 1.0f; // Default to full block
+                    for (int i = 0; i < count; ++i) {
+                        if (check_aabb_collision(boxes[i], checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
+                            float edge = static_cast<float>(checkX) + boxes[i].minX;
+                            if (edge < block_edge) block_edge = edge;
+                        }
+                    }
                     px = block_edge - hw - kSkin;
                     vx = 0.0f;
                     return;
@@ -232,10 +268,17 @@ static void resolve_x(const server::voxel::Terrain& terrain, float& px, float py
         for (int by = minY; by <= maxY; by++) {
             for (int bz = minZ; bz <= maxZ; bz++) {
                 auto block_type = terrain.get_block(checkX, by, bz);
-                // Use full 3D check for all blocks
-                if (check_block_collision_3d(block_type, checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
-                    auto coll = shared::voxel::get_collision_info(block_type);
-                    float block_edge = static_cast<float>(checkX) + coll.maxX;
+                auto block_state = terrain.get_block_state(checkX, by, bz);
+                if (check_block_collision_3d_with_state(block_type, block_state, checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
+                    shared::voxel::BlockCollisionInfo boxes[5];
+                    int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
+                    float block_edge = static_cast<float>(checkX);
+                    for (int i = 0; i < count; ++i) {
+                        if (check_aabb_collision(boxes[i], checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
+                            float edge = static_cast<float>(checkX) + boxes[i].maxX;
+                            if (edge > block_edge) block_edge = edge;
+                        }
+                    }
                     px = block_edge + hw + kSkin;
                     vx = 0.0f;
                     return;
@@ -261,10 +304,17 @@ static void resolve_z(const server::voxel::Terrain& terrain, float px, float py,
         for (int by = minY; by <= maxY; by++) {
             for (int bx = minX; bx <= maxX; bx++) {
                 auto block_type = terrain.get_block(bx, by, checkZ);
-                // Use full 3D check for all blocks
-                if (check_block_collision_3d(block_type, bx, by, checkZ, px, py, pz, hw, kPlayerHeight, hw)) {
-                    auto coll = shared::voxel::get_collision_info(block_type);
-                    float block_edge = static_cast<float>(checkZ) + coll.minZ;
+                auto block_state = terrain.get_block_state(bx, by, checkZ);
+                if (check_block_collision_3d_with_state(block_type, block_state, bx, by, checkZ, px, py, pz, hw, kPlayerHeight, hw)) {
+                    shared::voxel::BlockCollisionInfo boxes[5];
+                    int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
+                    float block_edge = static_cast<float>(checkZ) + 1.0f;
+                    for (int i = 0; i < count; ++i) {
+                        if (check_aabb_collision(boxes[i], bx, by, checkZ, px, py, pz, hw, kPlayerHeight, hw)) {
+                            float edge = static_cast<float>(checkZ) + boxes[i].minZ;
+                            if (edge < block_edge) block_edge = edge;
+                        }
+                    }
                     pz = block_edge - hw - kSkin;
                     vz = 0.0f;
                     return;
@@ -276,10 +326,17 @@ static void resolve_z(const server::voxel::Terrain& terrain, float px, float py,
         for (int by = minY; by <= maxY; by++) {
             for (int bx = minX; bx <= maxX; bx++) {
                 auto block_type = terrain.get_block(bx, by, checkZ);
-                // Use full 3D check for all blocks
-                if (check_block_collision_3d(block_type, bx, by, checkZ, px, py, pz, hw, kPlayerHeight, hw)) {
-                    auto coll = shared::voxel::get_collision_info(block_type);
-                    float block_edge = static_cast<float>(checkZ) + coll.maxZ;
+                auto block_state = terrain.get_block_state(bx, by, checkZ);
+                if (check_block_collision_3d_with_state(block_type, block_state, bx, by, checkZ, px, py, pz, hw, kPlayerHeight, hw)) {
+                    shared::voxel::BlockCollisionInfo boxes[5];
+                    int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
+                    float block_edge = static_cast<float>(checkZ);
+                    for (int i = 0; i < count; ++i) {
+                        if (check_aabb_collision(boxes[i], bx, by, checkZ, px, py, pz, hw, kPlayerHeight, hw)) {
+                            float edge = static_cast<float>(checkZ) + boxes[i].maxZ;
+                            if (edge > block_edge) block_edge = edge;
+                        }
+                    }
                     pz = block_edge + hw + kSkin;
                     vz = 0.0f;
                     return;
@@ -299,11 +356,15 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
             for (int bx = fast_floor(px - hw + kEps); bx <= fast_floor(px + hw - kEps); bx++) {
                 for (int bz = fast_floor(pz - hw + kEps); bz <= fast_floor(pz + hw - kEps); bz++) {
                     auto block_type = terrain.get_block(bx, checkY, bz);
-                    auto coll = shared::voxel::get_collision_info(block_type);
-                    if (!coll.hasCollision) continue;
+                    auto block_state = terrain.get_block_state(bx, checkY, bz);
                     
-                    // For non-full XZ blocks (fences), check if player actually overlaps in XZ
-                    if (!shared::voxel::is_full_collision_block(block_type)) {
+                    shared::voxel::BlockCollisionInfo boxes[5];
+                    int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
+                    
+                    for (int i = 0; i < count; ++i) {
+                        const auto& coll = boxes[i];
+                        if (!coll.hasCollision) continue;
+                        
                         float block_min_x = static_cast<float>(bx) + coll.minX;
                         float block_max_x = static_cast<float>(bx) + coll.maxX;
                         float block_min_z = static_cast<float>(bz) + coll.minZ;
@@ -313,16 +374,15 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
                               pz - hw < block_max_z && pz + hw > block_min_z)) {
                             continue; // No XZ overlap
                         }
-                    }
-                    
-                    float ground_height = get_block_ground_height(block_type, checkY);
-                    
-                    // Check if player would land on this block
-                    if (py <= ground_height + kEps && py > ground_height - 0.5f) {
-                        py = ground_height;
-                        if (vy < 0.0f) vy = 0.0f;
-                        onGround = true;
-                        return;
+                        
+                        float ground_height = static_cast<float>(checkY) + std::min(coll.maxY, 1.0f);
+                        
+                        if (py <= ground_height + kEps && py > ground_height - 0.5f) {
+                            py = ground_height;
+                            if (vy < 0.0f) vy = 0.0f;
+                            onGround = true;
+                            return;
+                        }
                     }
                 }
             }
@@ -334,11 +394,15 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
         for (int bx = fast_floor(px - hw + kEps); bx <= fast_floor(px + hw - kEps); bx++) {
             for (int bz = fast_floor(pz - hw + kEps); bz <= fast_floor(pz + hw - kEps); bz++) {
                 auto block_type = terrain.get_block(bx, checkY, bz);
-                auto coll = shared::voxel::get_collision_info(block_type);
-                if (!coll.hasCollision) continue;
+                auto block_state = terrain.get_block_state(bx, checkY, bz);
                 
-                // For non-full XZ blocks (fences), check if player actually overlaps in XZ
-                if (!shared::voxel::is_full_collision_block(block_type)) {
+                shared::voxel::BlockCollisionInfo boxes[5];
+                int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
+                
+                for (int i = 0; i < count; ++i) {
+                    const auto& coll = boxes[i];
+                    if (!coll.hasCollision) continue;
+                    
                     float block_min_x = static_cast<float>(bx) + coll.minX;
                     float block_max_x = static_cast<float>(bx) + coll.maxX;
                     float block_min_z = static_cast<float>(bz) + coll.minZ;
@@ -348,15 +412,14 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
                           pz - hw < block_max_z && pz + hw > block_min_z)) {
                         continue; // No XZ overlap
                     }
-                }
-                
-                // For ceiling check, we care about the bottom of the block's collision
-                float block_bottom = static_cast<float>(checkY) + coll.minY;
-                
-                if (py + kPlayerHeight > block_bottom) {
-                    py = block_bottom - kPlayerHeight;
-                    if (vy > 0.0f) vy = 0.0f;
-                    return;
+                    
+                    float block_bottom = static_cast<float>(checkY) + coll.minY;
+                    
+                    if (py + kPlayerHeight > block_bottom) {
+                        py = block_bottom - kPlayerHeight;
+                        if (vy > 0.0f) vy = 0.0f;
+                        return;
+                    }
                 }
             }
         }

@@ -50,6 +50,41 @@ void Terrain::set_map_template(shared::maps::MapTemplate map) {
             }
         }
     }
+    
+    if (map_template_) {
+        const auto& bounds = map_template_->bounds;
+        for (int cz = bounds.chunkMinZ; cz <= bounds.chunkMaxZ; ++cz) {
+            for (int cx = bounds.chunkMinX; cx <= bounds.chunkMaxX; ++cx) {
+                const auto* chunkData = map_template_->find_chunk(cx, cz);
+                if (!chunkData) continue;
+                
+                const int baseX = cx * shared::voxel::CHUNK_WIDTH;
+                const int baseZ = cz * shared::voxel::CHUNK_DEPTH;
+                
+                for (int y = 0; y < shared::voxel::CHUNK_HEIGHT; ++y) {
+                    for (int lz = 0; lz < shared::voxel::CHUNK_DEPTH; ++lz) {
+                        for (int lx = 0; lx < shared::voxel::CHUNK_WIDTH; ++lx) {
+                            const std::size_t idx = 
+                                static_cast<std::size_t>(y) * shared::voxel::CHUNK_WIDTH * shared::voxel::CHUNK_DEPTH +
+                                static_cast<std::size_t>(lz) * shared::voxel::CHUNK_WIDTH +
+                                static_cast<std::size_t>(lx);
+                            
+                            auto blockType = chunkData->blocks[idx];
+                            
+                            if (shared::voxel::uses_connections(blockType) || shared::voxel::is_slab(blockType)) {
+                                int wx = baseX + lx;
+                                int wz = baseZ + lz;
+                                auto state = compute_block_state(wx, y, wz, blockType);
+                                if (state != shared::voxel::BlockRuntimeState::defaults()) {
+                                    set_block_state(wx, y, wz, state);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 void Terrain::set_override_(int x, int y, int z, shared::voxel::BlockType type, bool keep_if_matches_base) {

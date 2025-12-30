@@ -91,6 +91,8 @@ struct TrySetBlock {
     int y{0};
     int z{0};
     shared::voxel::BlockType blockType{shared::voxel::BlockType::Air};
+    float hitY{0.5f};
+    std::uint8_t face{2};
 };
 
 struct StateSnapshot {
