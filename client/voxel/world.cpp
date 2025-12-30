@@ -488,7 +488,7 @@ void World::generate_chunk_terrain(Chunk& chunk) {
                         } else if (typeChance < 0.90f) {
                             block_type = static_cast<Block>(BlockType::Dandelion);
                         } else {
-                            block_type = static_cast<Block>(BlockType::BlueOrchid);
+                            block_type = static_cast<Block>(BlockType::DeadBush);
                         }
                     } else {
                         block_type = static_cast<Block>(BlockType::Air);

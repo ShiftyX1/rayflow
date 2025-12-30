@@ -172,7 +172,7 @@ void BlockModelLoader::register_builtin_models() {
         auto model = models::make_cross();
         model.id = "blue_orchid";
         model.textures["cross"] = "blocks/flower_blue_orchid";
-        register_model(BlockType::BlueOrchid, model);
+        register_model(BlockType::DeadBush, model);
     }
 }
 

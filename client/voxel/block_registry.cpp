@@ -188,8 +188,8 @@ void BlockRegistry::register_blocks() {
         "Dandelion", false, true, 0.0f, 0, {13, 13, 13, 13, 13, 13}
     };
     
-    blocks_[static_cast<size_t>(BlockType::BlueOrchid)] = {
-        "Blue Orchid", false, true, 0.0f, 0, {175, 175, 175, 175, 175, 175}
+    blocks_[static_cast<size_t>(BlockType::DeadBush)] = {
+        "Dead Bush", false, true, 0.0f, 0, {55, 55, 55, 55, 55, 55}
     };
 }
 

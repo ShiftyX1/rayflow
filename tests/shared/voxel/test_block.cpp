@@ -44,7 +44,7 @@ TEST_CASE("BlockType enum values are stable", "[voxel][enum]") {
     REQUIRE(static_cast<int>(BlockType::TallGrass) == 20);
     REQUIRE(static_cast<int>(BlockType::Poppy) == 21);
     REQUIRE(static_cast<int>(BlockType::Dandelion) == 22);
-    REQUIRE(static_cast<int>(BlockType::BlueOrchid) == 23);
+    REQUIRE(static_cast<int>(BlockType::DeadBush) == 23);
     
     REQUIRE(static_cast<int>(BlockType::Count) == 24);
 }
@@ -280,7 +280,7 @@ TEST_CASE("is_vegetation correctly identifies vegetation blocks", "[voxel][util]
     REQUIRE(is_vegetation(BlockType::TallGrass));
     REQUIRE(is_vegetation(BlockType::Poppy));
     REQUIRE(is_vegetation(BlockType::Dandelion));
-    REQUIRE(is_vegetation(BlockType::BlueOrchid));
+    REQUIRE(is_vegetation(BlockType::DeadBush));
     
     REQUIRE_FALSE(is_vegetation(BlockType::Air));
     REQUIRE_FALSE(is_vegetation(BlockType::Grass));
@@ -298,20 +298,20 @@ TEST_CASE("Vegetation blocks have no collision", "[voxel][collision]") {
     auto dandelion = get_collision_info(BlockType::Dandelion);
     REQUIRE_FALSE(dandelion.hasCollision);
     
-    auto blue_orchid = get_collision_info(BlockType::BlueOrchid);
-    REQUIRE_FALSE(blue_orchid.hasCollision);
+    auto dead_bush = get_collision_info(BlockType::DeadBush);
+    REQUIRE_FALSE(dead_bush.hasCollision);
 }
 
 TEST_CASE("Vegetation blocks are transparent", "[voxel][util]") {
     REQUIRE(util::is_transparent(BlockType::TallGrass));
     REQUIRE(util::is_transparent(BlockType::Poppy));
     REQUIRE(util::is_transparent(BlockType::Dandelion));
-    REQUIRE(util::is_transparent(BlockType::BlueOrchid));
+    REQUIRE(util::is_transparent(BlockType::DeadBush));
 }
 
 TEST_CASE("Vegetation blocks are not solid", "[voxel][util]") {
     REQUIRE_FALSE(util::is_solid(BlockType::TallGrass));
     REQUIRE_FALSE(util::is_solid(BlockType::Poppy));
     REQUIRE_FALSE(util::is_solid(BlockType::Dandelion));
-    REQUIRE_FALSE(util::is_solid(BlockType::BlueOrchid));
+    REQUIRE_FALSE(util::is_solid(BlockType::DeadBush));
 }

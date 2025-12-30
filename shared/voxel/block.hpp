@@ -39,7 +39,7 @@ enum class BlockType : std::uint8_t {
     TallGrass,
     Poppy,
     Dandelion,
-    BlueOrchid,
+    DeadBush,
     
     Count
 };
@@ -104,7 +104,7 @@ constexpr BlockLightProps BLOCK_LIGHT_PROPS[static_cast<std::size_t>(BlockType::
     BlockLightProps{ 0u, 0u, 0u, false, false },
     // Dandelion - transparent vegetation
     BlockLightProps{ 0u, 0u, 0u, false, false },
-    // BlueOrchid - transparent vegetation
+    // DeadBush - transparent vegetation
     BlockLightProps{ 0u, 0u, 0u, false, false },
 };
 
@@ -154,7 +154,7 @@ constexpr BlockCollisionInfo get_collision_info(BlockType type) {
         case BlockType::TallGrass:
         case BlockType::Poppy:
         case BlockType::Dandelion:
-        case BlockType::BlueOrchid:
+        case BlockType::DeadBush:
             return {0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, false};
         
         default:
@@ -204,7 +204,7 @@ constexpr bool is_vegetation(BlockType type) {
     return type == BlockType::TallGrass || 
            type == BlockType::Poppy || 
            type == BlockType::Dandelion || 
-           type == BlockType::BlueOrchid;
+           type == BlockType::DeadBush;
 }
 
 namespace util {
