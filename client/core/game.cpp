@@ -504,6 +504,13 @@ void Game::refresh_ui_view_model(float delta_time) {
         if (snap.has_value()) {
             ui_vm_.net.server_tick = snap->serverTick;
         }
+        if (is_multiplayer_ && owned_net_client_ && owned_net_client_->is_connected()) {
+            ui_vm_.net.is_remote_connection = true;
+            ui_vm_.net.ping_ms = owned_net_client_->connection()->ping_ms();
+        } else {
+            ui_vm_.net.is_remote_connection = false;
+            ui_vm_.net.ping_ms = 0;
+        }
     }
 }
 

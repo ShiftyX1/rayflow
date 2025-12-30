@@ -69,6 +69,9 @@ struct NetViewModel {
     bool is_connecting{false};
     bool connection_failed{false};
     std::string connection_error{};
+
+    bool is_remote_connection{false};
+    std::uint32_t ping_ms{0};
 };
 
 // Kill feed entry

@@ -59,6 +59,22 @@ static void draw_net_info(const UIViewModel& vm) {
         DrawText(TextFormat("serverTick: %llu", static_cast<unsigned long long>(n.server_tick)), 10, y, 16, DARKGRAY);
         y += 18;
     }
+
+    if (n.is_remote_connection) {
+        Color ping_color = DARKGRAY;
+        if (n.ping_ms >= 200) {
+            ping_color = RED;
+        } else if (n.ping_ms >= 100) {
+            ping_color = ORANGE;
+        } else if (n.ping_ms >= 50) {
+            ping_color = YELLOW;
+        } else {
+            ping_color = DARKGREEN;
+        }
+        
+        DrawText(TextFormat("Ping: %u ms", n.ping_ms), 10, y, 16, ping_color);
+        y += 18;
+    } 
 }
 
 DebugUIResult draw_interactive(const DebugUIState& current, const UIViewModel& vm) {
