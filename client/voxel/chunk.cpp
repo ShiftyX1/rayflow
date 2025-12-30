@@ -402,6 +402,111 @@ void Chunk::generate_mesh(const World& world) {
         }
     };
     
+    // Lambda for rendering cross-shaped vegetation (tall grass, flowers)
+    // Creates two diagonal quads forming an X shape when viewed from above
+    auto add_cross_model = [&](
+        float bx, float by, float bz,
+        BlockType block_type,
+        float foliageMask,
+        Color tint
+    ) {
+        Rectangle tex_rect = registry.get_texture_rect(block_type, 0);
+        float u0 = tex_rect.x / atlas_size;
+        float v0 = tex_rect.y / atlas_size;
+        
+        // Cross vertices: two diagonal planes at 45 degrees
+        // Plane 1: from (0,0,0) to (1,1,1) diagonal
+        // Plane 2: from (1,0,0) to (0,1,1) diagonal
+        
+        // Offset to center the cross slightly for visual appeal
+        const float offset = 0.15f;  // Small offset from block edges
+        
+        // Diagonal plane 1 (NW-SE): from (offset, 0, offset) to (1-offset, 1, 1-offset)
+        // Front face
+        float cross1_verts[6][3] = {
+            {offset, 0.0f, offset},
+            {offset, 1.0f, offset},
+            {1.0f - offset, 1.0f, 1.0f - offset},
+            {offset, 0.0f, offset},
+            {1.0f - offset, 1.0f, 1.0f - offset},
+            {1.0f - offset, 0.0f, 1.0f - offset}
+        };
+        float cross1_uvs[6][2] = {
+            {0.0f, 1.0f}, {0.0f, 0.0f}, {1.0f, 0.0f},
+            {0.0f, 1.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}
+        };
+        // Normal pointing perpendicular to diagonal (normalized (-1, 0, 1))
+        float cross1_normal[3] = {-0.707f, 0.0f, 0.707f};
+        
+        // Back face of plane 1
+        float cross1b_verts[6][3] = {
+            {1.0f - offset, 0.0f, 1.0f - offset},
+            {1.0f - offset, 1.0f, 1.0f - offset},
+            {offset, 1.0f, offset},
+            {1.0f - offset, 0.0f, 1.0f - offset},
+            {offset, 1.0f, offset},
+            {offset, 0.0f, offset}
+        };
+        float cross1b_normal[3] = {0.707f, 0.0f, -0.707f};
+        
+        // Diagonal plane 2 (NE-SW): from (1-offset, 0, offset) to (offset, 1, 1-offset)
+        // Front face
+        float cross2_verts[6][3] = {
+            {1.0f - offset, 0.0f, offset},
+            {1.0f - offset, 1.0f, offset},
+            {offset, 1.0f, 1.0f - offset},
+            {1.0f - offset, 0.0f, offset},
+            {offset, 1.0f, 1.0f - offset},
+            {offset, 0.0f, 1.0f - offset}
+        };
+        float cross2_uvs[6][2] = {
+            {0.0f, 1.0f}, {0.0f, 0.0f}, {1.0f, 0.0f},
+            {0.0f, 1.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}
+        };
+        float cross2_normal[3] = {0.707f, 0.0f, 0.707f};
+        
+        // Back face of plane 2
+        float cross2b_verts[6][3] = {
+            {offset, 0.0f, 1.0f - offset},
+            {offset, 1.0f, 1.0f - offset},
+            {1.0f - offset, 1.0f, offset},
+            {offset, 0.0f, 1.0f - offset},
+            {1.0f - offset, 1.0f, offset},
+            {1.0f - offset, 0.0f, offset}
+        };
+        float cross2b_normal[3] = {-0.707f, 0.0f, -0.707f};
+        
+        auto emit_cross_face = [&](float verts[6][3], float uvs[6][2], float normal[3]) {
+            for (int v = 0; v < 6; v++) {
+                vertices.push_back(bx + verts[v][0]);
+                vertices.push_back(by + verts[v][1]);
+                vertices.push_back(bz + verts[v][2]);
+                
+                texcoords.push_back(u0 + uvs[v][0] * uv_size);
+                texcoords.push_back(v0 + uvs[v][1] * uv_size);
+                
+                // No AO for cross models (they're transparent)
+                texcoords2.push_back(foliageMask);
+                texcoords2.push_back(1.0f);  // Full brightness (no AO)
+                
+                normals.push_back(normal[0]);
+                normals.push_back(normal[1]);
+                normals.push_back(normal[2]);
+                
+                colors.push_back(tint.r);
+                colors.push_back(tint.g);
+                colors.push_back(tint.b);
+                colors.push_back(255);
+            }
+        };
+        
+        // Emit all 4 faces (2 planes, front and back each)
+        emit_cross_face(cross1_verts, cross1_uvs, cross1_normal);
+        emit_cross_face(cross1b_verts, cross1_uvs, cross1b_normal);
+        emit_cross_face(cross2_verts, cross2_uvs, cross2_normal);
+        emit_cross_face(cross2b_verts, cross2_uvs, cross2b_normal);
+    };
+    
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
@@ -426,6 +531,15 @@ void Chunk::generate_mesh(const World& world) {
                 float bx = world_position_.x + x;
                 float by = static_cast<float>(y);
                 float bz = world_position_.z + z;
+                
+                // Handle vegetation (cross-shaped blocks like tall grass, flowers)
+                if (shared::voxel::is_vegetation(block_type)) {
+                    // Vegetation uses foliage tint for tall grass, white for flowers
+                    const float foliageMask = (block_type == BlockType::TallGrass) ? 1.0f : 0.0f;
+                    const Color tint = (foliageMask > 0.5f) ? grass_tint : WHITE;
+                    add_cross_model(bx, by, bz, block_type, foliageMask, tint);
+                    continue;
+                }
                 
                 const auto* block_model = BlockModelLoader::instance().get_model(block_type);
                 

@@ -239,6 +239,40 @@ shared::voxel::BlockType Terrain::get_base_block_(int x, int y, int z) const {
     if (y == height - 1) {
         return BlockType::Grass;
     }
+    
+    // Vegetation generation: check if this is the block above grass
+    if (y == height) {
+        // Use deterministic hash based on position and seed for vegetation placement
+        // Hash function to get a deterministic value for this position
+        std::uint32_t hash = seed_;
+        hash ^= static_cast<std::uint32_t>(x) * 374761393u;
+        hash ^= static_cast<std::uint32_t>(z) * 668265263u;
+        hash ^= static_cast<std::uint32_t>(y) * 1013904223u;
+        hash = (hash ^ (hash >> 13)) * 1274126177u;
+        hash ^= hash >> 16;
+        
+        const float chance = static_cast<float>(hash & 0xFFFF) / 65535.0f;
+        
+        // ~15% chance for vegetation on grass
+        if (chance < 0.15f) {
+            // Determine vegetation type based on hash
+            const float typeChance = static_cast<float>((hash >> 16) & 0xFFFF) / 65535.0f;
+            
+            if (typeChance < 0.70f) {
+                // 70% tall grass
+                return BlockType::TallGrass;
+            } else if (typeChance < 0.80f) {
+                // 10% poppy
+                return BlockType::Poppy;
+            } else if (typeChance < 0.90f) {
+                // 10% dandelion
+                return BlockType::Dandelion;
+            } else {
+                // 10% blue orchid
+                return BlockType::BlueOrchid;
+            }
+        }
+    }
 
     return BlockType::Air;
 }

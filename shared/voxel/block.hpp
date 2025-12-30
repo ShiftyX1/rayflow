@@ -35,6 +35,12 @@ enum class BlockType : std::uint8_t {
     WoodSlabTop,
     OakFence,
     
+    // Vegetation (cross-shaped, no collision)
+    TallGrass,
+    Poppy,
+    Dandelion,
+    BlueOrchid,
+    
     Count
 };
 
@@ -92,6 +98,14 @@ constexpr BlockLightProps BLOCK_LIGHT_PROPS[static_cast<std::size_t>(BlockType::
     BlockLightProps{ 0u, 0u, 0u, false, false },
     // OakFence - mostly transparent
     BlockLightProps{ 0u, 0u, 0u, false, false },
+    // TallGrass - transparent vegetation
+    BlockLightProps{ 0u, 0u, 0u, false, false },
+    // Poppy - transparent vegetation
+    BlockLightProps{ 0u, 0u, 0u, false, false },
+    // Dandelion - transparent vegetation
+    BlockLightProps{ 0u, 0u, 0u, false, false },
+    // BlueOrchid - transparent vegetation
+    BlockLightProps{ 0u, 0u, 0u, false, false },
 };
 
 inline constexpr const BlockLightProps& get_light_props(BlockType bt) {
@@ -136,6 +150,13 @@ constexpr BlockCollisionInfo get_collision_info(BlockType type) {
             // Fence post: 6/16 to 10/16 in XZ, full height + extra for jumping prevention
             return {6.0f/16.0f, 10.0f/16.0f, 0.0f, 1.5f, 6.0f/16.0f, 10.0f/16.0f, true};
         
+        // Vegetation - no collision
+        case BlockType::TallGrass:
+        case BlockType::Poppy:
+        case BlockType::Dandelion:
+        case BlockType::BlueOrchid:
+            return {0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, false};
+        
         default:
             return {0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, true};  // Full block
     }
@@ -178,13 +199,25 @@ constexpr bool is_top_slab(BlockType type) {
     return type == BlockType::StoneSlabTop || type == BlockType::WoodSlabTop;
 }
 
+// Check if a block is vegetation (cross-shaped, no collision)
+constexpr bool is_vegetation(BlockType type) {
+    return type == BlockType::TallGrass || 
+           type == BlockType::Poppy || 
+           type == BlockType::Dandelion || 
+           type == BlockType::BlueOrchid;
+}
+
 namespace util {
 
 inline bool is_solid(BlockType type) {
+    // Vegetation blocks are not solid
+    if (is_vegetation(type)) return false;
     return type != BlockType::Air && type != BlockType::Water && type != BlockType::Light;
 }
 
 inline bool is_transparent(BlockType type) {
+    // Vegetation is always transparent
+    if (is_vegetation(type)) return true;
     // Slabs and fences are partially transparent (can see adjacent faces)
     if (is_slab(type) || type == BlockType::OakFence) {
         return true;
@@ -194,6 +227,7 @@ inline bool is_transparent(BlockType type) {
 
 // Check if a block fully occludes faces of adjacent blocks
 inline bool is_full_opaque(BlockType type) {
+    if (is_vegetation(type)) return false;
     if (is_slab(type) || type == BlockType::OakFence) {
         return false;
     }

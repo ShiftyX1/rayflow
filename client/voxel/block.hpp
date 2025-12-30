@@ -15,6 +15,7 @@ constexpr int CHUNK_SIZE = shared::voxel::CHUNK_SIZE;
 
 inline bool is_solid(BlockType type) { return shared::voxel::util::is_solid(type); }
 inline bool is_transparent(BlockType type) { return shared::voxel::util::is_transparent(type); }
+inline bool is_vegetation(BlockType type) { return shared::voxel::is_vegetation(type); }
 
 using Block = std::uint8_t;
 

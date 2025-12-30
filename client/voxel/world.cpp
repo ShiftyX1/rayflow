@@ -449,6 +449,8 @@ void World::generate_chunk_terrain(Chunk& chunk) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             float world_x = static_cast<float>(chunk_x * CHUNK_WIDTH + x);
             float world_z = static_cast<float>(chunk_z * CHUNK_DEPTH + z);
+            int world_xi = chunk_x * CHUNK_WIDTH + x;
+            int world_zi = chunk_z * CHUNK_DEPTH + z;
             
             float noise = octave_perlin(world_x * 0.02f, world_z * 0.02f, 4, 0.5f);
             int height = static_cast<int>(60 + noise * 20);
@@ -464,6 +466,33 @@ void World::generate_chunk_terrain(Chunk& chunk) {
                     block_type = static_cast<Block>(BlockType::Dirt);
                 } else if (y == height - 1) {
                     block_type = static_cast<Block>(BlockType::Grass);
+                } else if (y == height) {
+                    // Vegetation generation: use deterministic hash based on position and seed
+                    std::uint32_t hash = seed_;
+                    hash ^= static_cast<std::uint32_t>(world_xi) * 374761393u;
+                    hash ^= static_cast<std::uint32_t>(world_zi) * 668265263u;
+                    hash ^= static_cast<std::uint32_t>(y) * 1013904223u;
+                    hash = (hash ^ (hash >> 13)) * 1274126177u;
+                    hash ^= hash >> 16;
+                    
+                    const float chance = static_cast<float>(hash & 0xFFFF) / 65535.0f;
+                    
+                    // ~15% chance for vegetation on grass
+                    if (chance < 0.15f) {
+                        const float typeChance = static_cast<float>((hash >> 16) & 0xFFFF) / 65535.0f;
+                        
+                        if (typeChance < 0.70f) {
+                            block_type = static_cast<Block>(BlockType::TallGrass);
+                        } else if (typeChance < 0.80f) {
+                            block_type = static_cast<Block>(BlockType::Poppy);
+                        } else if (typeChance < 0.90f) {
+                            block_type = static_cast<Block>(BlockType::Dandelion);
+                        } else {
+                            block_type = static_cast<Block>(BlockType::BlueOrchid);
+                        }
+                    } else {
+                        block_type = static_cast<Block>(BlockType::Air);
+                    }
                 } else {
                     block_type = static_cast<Block>(BlockType::Air);
                 }

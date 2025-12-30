@@ -145,6 +145,35 @@ void BlockModelLoader::register_builtin_models() {
         model.textures["post"] = "blocks/planks_oak";
         register_model(BlockType::OakFence, model);
     }
+    
+    // Vegetation (cross-shaped models)
+    {
+        auto model = models::make_cross();
+        model.id = "tall_grass";
+        model.textures["cross"] = "blocks/tallgrass";
+        register_model(BlockType::TallGrass, model);
+    }
+    
+    {
+        auto model = models::make_cross();
+        model.id = "poppy";
+        model.textures["cross"] = "blocks/flower_rose";
+        register_model(BlockType::Poppy, model);
+    }
+    
+    {
+        auto model = models::make_cross();
+        model.id = "dandelion";
+        model.textures["cross"] = "blocks/flower_dandelion";
+        register_model(BlockType::Dandelion, model);
+    }
+    
+    {
+        auto model = models::make_cross();
+        model.id = "blue_orchid";
+        model.textures["cross"] = "blocks/flower_blue_orchid";
+        register_model(BlockType::BlueOrchid, model);
+    }
 }
 
 namespace json_parser {

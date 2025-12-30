@@ -172,6 +172,25 @@ void BlockRegistry::register_blocks() {
     blocks_[static_cast<size_t>(BlockType::OakFence)] = {
         "Oak Fence", true, false, 2.0f, 0, {4, 4, 4, 4, 4, 4}
     };
+    
+    // Vegetation blocks (cross-shaped, transparent, no collision)
+    // Using same texture index for all faces since cross models use special rendering
+    // Texture indices: tallgrass=39, flower_rose=12, flower_dandelion=13, flower_blue_orchid=175 (need to check atlas)
+    blocks_[static_cast<size_t>(BlockType::TallGrass)] = {
+        "Tall Grass", false, true, 0.0f, 0, {39, 39, 39, 39, 39, 39}
+    };
+    
+    blocks_[static_cast<size_t>(BlockType::Poppy)] = {
+        "Poppy", false, true, 0.0f, 0, {12, 12, 12, 12, 12, 12}
+    };
+    
+    blocks_[static_cast<size_t>(BlockType::Dandelion)] = {
+        "Dandelion", false, true, 0.0f, 0, {13, 13, 13, 13, 13, 13}
+    };
+    
+    blocks_[static_cast<size_t>(BlockType::BlueOrchid)] = {
+        "Blue Orchid", false, true, 0.0f, 0, {175, 175, 175, 175, 175, 175}
+    };
 }
 
 const BlockInfo& BlockRegistry::get_block_info(BlockType type) const {

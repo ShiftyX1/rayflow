@@ -40,7 +40,13 @@ TEST_CASE("BlockType enum values are stable", "[voxel][enum]") {
     REQUIRE(static_cast<int>(BlockType::WoodSlabTop) == 18);
     REQUIRE(static_cast<int>(BlockType::OakFence) == 19);
     
-    REQUIRE(static_cast<int>(BlockType::Count) == 20);
+    // Vegetation (cross-shaped, no collision)
+    REQUIRE(static_cast<int>(BlockType::TallGrass) == 20);
+    REQUIRE(static_cast<int>(BlockType::Poppy) == 21);
+    REQUIRE(static_cast<int>(BlockType::Dandelion) == 22);
+    REQUIRE(static_cast<int>(BlockType::BlueOrchid) == 23);
+    
+    REQUIRE(static_cast<int>(BlockType::Count) == 24);
 }
 
 // =============================================================================
@@ -264,4 +270,48 @@ TEST_CASE("Slabs are transparent for rendering", "[voxel][util]") {
     REQUIRE(util::is_transparent(BlockType::StoneSlabTop));
     REQUIRE(util::is_transparent(BlockType::WoodSlab));
     REQUIRE(util::is_transparent(BlockType::WoodSlabTop));
+}
+
+// =============================================================================
+// Vegetation tests
+// =============================================================================
+
+TEST_CASE("is_vegetation correctly identifies vegetation blocks", "[voxel][util]") {
+    REQUIRE(is_vegetation(BlockType::TallGrass));
+    REQUIRE(is_vegetation(BlockType::Poppy));
+    REQUIRE(is_vegetation(BlockType::Dandelion));
+    REQUIRE(is_vegetation(BlockType::BlueOrchid));
+    
+    REQUIRE_FALSE(is_vegetation(BlockType::Air));
+    REQUIRE_FALSE(is_vegetation(BlockType::Grass));
+    REQUIRE_FALSE(is_vegetation(BlockType::Stone));
+    REQUIRE_FALSE(is_vegetation(BlockType::Leaves));
+}
+
+TEST_CASE("Vegetation blocks have no collision", "[voxel][collision]") {
+    auto tall_grass = get_collision_info(BlockType::TallGrass);
+    REQUIRE_FALSE(tall_grass.hasCollision);
+    
+    auto poppy = get_collision_info(BlockType::Poppy);
+    REQUIRE_FALSE(poppy.hasCollision);
+    
+    auto dandelion = get_collision_info(BlockType::Dandelion);
+    REQUIRE_FALSE(dandelion.hasCollision);
+    
+    auto blue_orchid = get_collision_info(BlockType::BlueOrchid);
+    REQUIRE_FALSE(blue_orchid.hasCollision);
+}
+
+TEST_CASE("Vegetation blocks are transparent", "[voxel][util]") {
+    REQUIRE(util::is_transparent(BlockType::TallGrass));
+    REQUIRE(util::is_transparent(BlockType::Poppy));
+    REQUIRE(util::is_transparent(BlockType::Dandelion));
+    REQUIRE(util::is_transparent(BlockType::BlueOrchid));
+}
+
+TEST_CASE("Vegetation blocks are not solid", "[voxel][util]") {
+    REQUIRE_FALSE(util::is_solid(BlockType::TallGrass));
+    REQUIRE_FALSE(util::is_solid(BlockType::Poppy));
+    REQUIRE_FALSE(util::is_solid(BlockType::Dandelion));
+    REQUIRE_FALSE(util::is_solid(BlockType::BlueOrchid));
 }

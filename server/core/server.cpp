@@ -74,7 +74,6 @@ static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem
     shared::maps::MapTemplate map;
     std::string err;
     if (!shared::maps::read_rfmap(bestPath, &map, &err)) {
-        // Defer to filtered sv logger.
         std::fprintf(stderr, "[sv][init][map] failed to read %s: %s\n", bestPath.generic_string().c_str(), err.c_str());
         return false;
     }
@@ -91,7 +90,6 @@ static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem
 }
 
 static bool should_log_movement(std::uint64_t serverTick) {
-    // Roughly 1 Hz at 30 TPS.
     return (serverTick % 30) == 0;
 }
 
@@ -110,15 +108,12 @@ static bool sv_tag_enabled(const char* tag) {
     if (!g_sv_log.enabled) return false;
     if (!tag) return false;
 
-    // Tags used in this file:
-    // init, rx, tx, move, coll
     if (std::strcmp(tag, "init") == 0) return g_sv_log.init;
     if (std::strcmp(tag, "rx") == 0) return g_sv_log.rx;
     if (std::strcmp(tag, "tx") == 0) return g_sv_log.tx;
     if (std::strcmp(tag, "move") == 0) return g_sv_log.move;
     if (std::strcmp(tag, "coll") == 0) return g_sv_log.coll;
 
-    // Unknown tag: keep it if logging is enabled.
     return true;
 }
 
@@ -137,7 +132,6 @@ static inline int fast_floor_to_int(float v) {
     return static_cast<int>(std::floor(v));
 }
 
-// Maximum height that can be auto-stepped up without jumping (like Minecraft's 0.5 block step-up)
 constexpr float kMaxStepUpHeight = 0.5f + kEps;
 
 static bool check_aabb_collision(
@@ -148,7 +142,6 @@ static bool check_aabb_collision(
 ) {
     if (!coll.hasCollision) return false;
     
-    // Block collision bounds in world coordinates
     float block_min_x = static_cast<float>(bx) + coll.minX;
     float block_max_x = static_cast<float>(bx) + coll.maxX;
     float block_min_y = static_cast<float>(by) + coll.minY;
@@ -156,7 +149,6 @@ static bool check_aabb_collision(
     float block_min_z = static_cast<float>(bz) + coll.minZ;
     float block_max_z = static_cast<float>(bz) + coll.maxZ;
     
-    // Player bounds
     float player_min_x = player_x - player_half_w;
     float player_max_x = player_x + player_half_w;
     float player_min_y = player_y;
@@ -164,7 +156,6 @@ static bool check_aabb_collision(
     float player_min_z = player_z - player_half_d;
     float player_max_z = player_z + player_half_d;
     
-    // Check AABB overlap in all 3 axes
     return player_min_x < block_max_x && player_max_x > block_min_x &&
            player_min_y < block_max_y && player_max_y > block_min_y &&
            player_min_z < block_max_z && player_max_z > block_min_z;
@@ -200,38 +191,29 @@ static bool check_block_collision_3d_with_state(
     return false;
 }
 
-// Check if player AABB at given Y overlaps with block's collision shape (Y-only check for slabs)
 static bool check_block_collision_y(shared::voxel::BlockType block_type, int by, float player_y, float player_height) {
     auto coll = shared::voxel::get_collision_info(block_type);
     if (!coll.hasCollision) return false;
     
-    // For non-full XZ blocks (like fences), this simple Y check doesn't apply
-    // We should use the full 3D check instead
     if (!shared::voxel::is_full_collision_block(block_type)) {
         return false; // Handled by 3D check
     }
     
-    // Block collision bounds in world coordinates
     float block_min_y = static_cast<float>(by) + coll.minY;
     float block_max_y = static_cast<float>(by) + std::min(coll.maxY, 1.0f);
     
-    // Player bounds
     float player_min_y = player_y;
     float player_max_y = player_y + player_height;
     
-    // Check AABB overlap in Y
     return player_min_y < block_max_y && player_max_y > block_min_y;
 }
 
-// Get the effective ground height at a block position (top of collision shape)
 static float get_block_ground_height(shared::voxel::BlockType block_type, int by) {
     auto coll = shared::voxel::get_collision_info(block_type);
     if (!coll.hasCollision) return static_cast<float>(by);
     return static_cast<float>(by) + std::min(coll.maxY, 1.0f);
 }
 
-// Find the maximum obstacle height in front of the player at feet level.
-// Returns the height above player's feet (0 = no obstacle, 0.5 = half slab, 1.0+ = full block or fence).
 static float get_obstacle_step_height(
     const server::voxel::Terrain& terrain,
     float px, float py, float pz,
@@ -240,14 +222,12 @@ static float get_obstacle_step_height(
     int feet_y = fast_floor_to_int(py);
     float max_step_height = 0.0f;
     
-    // Check blocks at feet level in the player's footprint
     for (int bx = fast_floor_to_int(px - half_w + kEps); bx <= fast_floor_to_int(px + half_w - kEps); bx++) {
         for (int bz = fast_floor_to_int(pz - half_d + kEps); bz <= fast_floor_to_int(pz + half_d - kEps); bz++) {
             auto block_type = terrain.get_block(bx, feet_y, bz);
             auto coll = shared::voxel::get_collision_info(block_type);
             if (!coll.hasCollision) continue;
             
-            // Check if player overlaps with this block in XZ
             float block_min_x = static_cast<float>(bx) + coll.minX;
             float block_max_x = static_cast<float>(bx) + coll.maxX;
             float block_min_z = static_cast<float>(bz) + coll.minZ;
@@ -267,8 +247,6 @@ static float get_obstacle_step_height(
     return max_step_height;
 }
 
-// Try to step up onto blocks when moving horizontally.
-// Returns true if step-up was applied.
 static bool try_step_up(
     const server::voxel::Terrain& terrain,
     float px, float& py, float pz,
@@ -277,12 +255,10 @@ static bool try_step_up(
 ) {
     float step_height = get_obstacle_step_height(terrain, px, py, pz, half_w, half_d);
     
-    // Only step up if obstacle is low enough
     if (step_height <= 0.0f || step_height > kMaxStepUpHeight) {
         return false;
     }
     
-    // Check if there's headroom after stepping up
     float new_y = py + step_height + kSkin;
     int head_y = fast_floor_to_int(new_y + height - kEps);
     
@@ -292,14 +268,12 @@ static bool try_step_up(
             auto coll = shared::voxel::get_collision_info(block_type);
             if (!coll.hasCollision) continue;
             
-            // Check if would collide after step-up
             if (check_block_collision_3d(block_type, bx, head_y, bz, px, new_y, pz, half_w, height, half_d)) {
                 return false; // No headroom
             }
         }
     }
     
-    // Apply step-up
     py = new_y;
     logf(serverTick, "coll", "step-up height=%.3f new_y=%.3f", step_height, py);
     return true;
@@ -312,7 +286,6 @@ static void resolve_voxel_x(const server::voxel::Terrain& terrain, float& px, fl
     const float height = kPlayerHeight;
     const float half_d = kPlayerWidth * 0.5f;
 
-    // Check from one block below (for tall collision like fences with 1.5 height)
     int min_y = fast_floor_to_int(py + kEps) - 1;
     if (min_y < 0) min_y = 0;
     int max_y = fast_floor_to_int(py + height - kEps);
@@ -436,9 +409,7 @@ static void resolve_voxel_y(const server::voxel::Terrain& terrain, float px, flo
     const float height = kPlayerHeight;
     const float half_d = kPlayerWidth * 0.5f;
 
-    // Ground check
     if (dy <= 0.0f) {
-        // Check both the block at player's feet and one below
         for (int check_y = fast_floor_to_int(py - kEps); check_y >= fast_floor_to_int(py - 1.0f); check_y--) {
             for (int bx = fast_floor_to_int(px - half_w + kEps); bx <= fast_floor_to_int(px + half_w - kEps); bx++) {
                 for (int bz = fast_floor_to_int(pz - half_d + kEps); bz <= fast_floor_to_int(pz + half_d - kEps); bz++) {
@@ -461,7 +432,6 @@ static void resolve_voxel_y(const server::voxel::Terrain& terrain, float px, flo
                         float block_min_z = static_cast<float>(bz) + coll.minZ;
                         float block_max_z = static_cast<float>(bz) + coll.maxZ;
                         
-                        // Check XZ overlap
                         if (!(px - half_w < block_max_x && px + half_w > block_min_x &&
                               pz - half_d < block_max_z && pz + half_d > block_min_z)) {
                             continue;
@@ -476,7 +446,6 @@ static void resolve_voxel_y(const server::voxel::Terrain& terrain, float px, flo
                     
                     if (!found_xz_overlap) continue;
                     
-                    // Check if player would land on this block
                     if (py <= best_ground_height + kEps && py > best_ground_height - 0.5f) {
                         py = best_ground_height;
                         if (vy < 0.0f) vy = 0.0f;
@@ -489,7 +458,6 @@ static void resolve_voxel_y(const server::voxel::Terrain& terrain, float px, flo
         }
     }
 
-    // Ceiling check
     if (dy > 0.0f) {
         int check_y = fast_floor_to_int((py + height) - kEps);
         for (int bx = fast_floor_to_int(px - half_w + kEps); bx <= fast_floor_to_int(px + half_w - kEps); bx++) {
@@ -513,7 +481,6 @@ static void resolve_voxel_y(const server::voxel::Terrain& terrain, float px, flo
                     float block_min_z = static_cast<float>(bz) + coll.minZ;
                     float block_max_z = static_cast<float>(bz) + coll.maxZ;
                     
-                    // Check XZ overlap
                     if (!(px - half_w < block_max_x && px + half_w > block_min_x &&
                           pz - half_d < block_max_z && pz + half_d > block_min_z)) {
                         continue;
@@ -546,7 +513,6 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint)
 
 Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options opts)
     : endpoint_(std::move(endpoint)), opts_(opts) {
-    // Apply logging options before any init logs.
     g_sv_log.enabled = opts_.logging.enabled;
     g_sv_log.init = opts_.logging.init;
     g_sv_log.rx = opts_.logging.rx;
@@ -554,19 +520,14 @@ Server::Server(std::shared_ptr<shared::transport::IEndpoint> endpoint, Options o
     g_sv_log.move = opts_.logging.move;
     g_sv_log.coll = opts_.logging.coll;
 
-    // Pick a seed once per server instance; client will render the same seed.
     worldSeed_ = static_cast<std::uint32_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
     terrain_ = std::make_unique<server::voxel::Terrain>(worldSeed_);
 
-    // Map editor runs against an empty/void base terrain (no procedural generation).
-    // Authored blocks are applied as overrides and exported as the template.
     if (opts_.editorCameraMode) {
         terrain_->set_void_base(true);
     }
 
-    // MT-1: if a map template exists on disk, prefer it over procedural base terrain.
-    // The map editor disables this to avoid accidentally loading an unrelated map.
     if (opts.loadLatestMapTemplateFromDisk) {
         shared::maps::MapTemplate map;
         std::filesystem::path path;
@@ -641,12 +602,10 @@ void Server::tick_once_() {
         handle_message_(msg);
     }
 
-    // Authoritative movement integration: client sends only intent.
     if (joined_) {
         const float dt = 1.0f / static_cast<float>(tickRate_);
         const float speed = lastInput_.sprint ? 8.0f : 5.0f;
 
-        // Move relative to yaw, similar to the old client-side implementation.
         const float yawRad = lastInput_.yaw * kDegToRad;
 
         const float forwardX = std::sin(yawRad);
@@ -655,10 +614,6 @@ void Server::tick_once_() {
         const float rightZ = -std::sin(yawRad);
 
         if (opts_.editorCameraMode) {
-            // Editor camera: free-fly controls similar to typical map editors.
-            // - WASD: horizontal movement relative to yaw
-            // - Shift (sprint): faster movement
-            // - camUp/camDown: vertical movement (no gravity)
             const float camSpeed = lastInput_.sprint ? 18.0f : 9.0f;
 
             const float moveX = lastInput_.moveX * camSpeed;
@@ -684,7 +639,6 @@ void Server::tick_once_() {
             vx_ = rightX * moveX + forwardX * moveZ;
             vz_ = rightZ * moveX + forwardZ * moveZ;
 
-            // Jump edge detection to avoid re-triggering while held.
             const bool jumpHeld = lastInput_.jump;
             const bool jumpPressed = jumpHeld && !lastJumpHeld_;
             lastJumpHeld_ = jumpHeld;
@@ -694,15 +648,12 @@ void Server::tick_once_() {
                 onGround_ = false;
             }
 
-            // Gravity
             if (!onGround_) {
                 vy_ -= kGravity * dt;
             } else if (vy_ < 0.0f) {
                 vy_ = 0.0f;
             }
 
-            // Integrate per-axis and resolve against voxel terrain blocks.
-            // Step-up: if player is on ground and gets blocked by low obstacle, elevate and retry.
             const float half_w = kPlayerWidth * 0.5f;
             const float half_d = kPlayerWidth * 0.5f;
             
@@ -712,13 +663,10 @@ void Server::tick_once_() {
                 px_ += dx;
                 resolve_voxel_x(*terrain_, px_, py_, pz_, vx_, dx, serverTick_);
                 
-                // If we got blocked and we're on ground, try step-up
                 if (onGround_ && px_ == old_px && vx_ == 0.0f) {
-                    // Temporarily move to where we wanted to go
                     px_ = old_px + dx;
                     float step_height = get_obstacle_step_height(*terrain_, px_, py_, pz_, half_w, half_d);
                     if (step_height > 0.0f && step_height <= kMaxStepUpHeight) {
-                        // Check headroom
                         float new_y = py_ + step_height + kSkin;
                         int head_y = fast_floor_to_int(new_y + kPlayerHeight - kEps);
                         bool has_headroom = true;

@@ -52,6 +52,7 @@ enum class BlockShape : std::uint8_t {
     Fence,          // Central post + conditional arms
     Wall,           // Similar to fence but different dimensions
     Stairs,         // L-shaped with orientation
+    Cross,          // X-shaped (vegetation: tall grass, flowers)
     Custom          // Uses custom collision boxes from model
 };
 
@@ -337,6 +338,24 @@ inline ModelElement make_slab_element(SlabType slabType) {
     }
     
     return elem;
+}
+
+/**
+ * @brief Creates a cross-shaped (X) model for vegetation like tall grass and flowers.
+ * The model consists of two diagonal planes forming an X when viewed from above.
+ * This is how Minecraft renders flowers and tall grass.
+ */
+inline BlockModel make_cross() {
+    BlockModel m;
+    m.shape = BlockShape::Cross;
+    // No collision for vegetation
+    m.ambientOcclusion = false;
+    
+    // Cross models use two diagonal planes at 45 degrees
+    // We create custom elements that will be rendered specially
+    // The actual rendering happens in chunk.cpp using specialized cross rendering
+    
+    return m;
 }
 
 } // namespace models
