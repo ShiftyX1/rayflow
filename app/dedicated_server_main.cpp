@@ -11,7 +11,7 @@
 #include <string>
 
 #ifndef RAYFLOW_VERSION
-#define RAYFLOW_VERSION "0.0.0-dev"
+#define RAYFLOW_VERSION "v0.3.1"
 #endif
 
 namespace {
@@ -77,7 +77,7 @@ Args parse_args(int argc, char* argv[]) {
             args.tickRate = static_cast<std::uint32_t>(std::atoi(argv[++i]));
         }
         else if (std::strcmp(arg, "--map") == 0 && i + 1 < argc) {
-            ++i; // Currently unused
+            ++i;
         }
         else if (std::strcmp(arg, "--verbose") == 0) {
             args.verbose = true;
@@ -105,14 +105,12 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     
-    // Initialize ENet
     shared::transport::ENetInitializer enetInit;
     if (!enetInit.isInitialized()) {
         std::cerr << "[ERROR] Failed to initialize ENet\n";
         return 1;
     }
     
-    // Configure server
     server::core::DedicatedServer::Config config;
     config.port = args.port;
     config.maxClients = args.maxPlayers;
@@ -125,7 +123,6 @@ int main(int argc, char* argv[]) {
         config.logging.coll = true;
     }
     
-    // Create and start server
     server::core::DedicatedServer server(config);
     
     server.onPlayerJoin = [](shared::proto::PlayerId id) {
@@ -146,11 +143,9 @@ int main(int argc, char* argv[]) {
     std::cout << "[INFO] Tick rate: " << args.tickRate << " TPS\n";
     std::cout << "[INFO] Press Ctrl+C to stop\n\n";
     
-    // Setup signal handlers
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
     
-    // Wait for shutdown signal
     while (g_running && server.is_running()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }

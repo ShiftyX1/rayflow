@@ -218,6 +218,75 @@ void World::set_block(int x, int y, int z, Block type) {
     }
 }
 
+shared::voxel::BlockRuntimeState World::get_block_state(int x, int y, int z) const {
+    if (y < 0 || y >= CHUNK_HEIGHT) {
+        return shared::voxel::BlockRuntimeState::defaults();
+    }
+    
+    int chunk_x = (x >= 0) ? (x / CHUNK_WIDTH) : ((x + 1) / CHUNK_WIDTH - 1);
+    int chunk_z = (z >= 0) ? (z / CHUNK_DEPTH) : ((z + 1) / CHUNK_DEPTH - 1);
+    
+    auto it = chunks_.find({chunk_x, chunk_z});
+    if (it == chunks_.end()) {
+        return shared::voxel::BlockRuntimeState::defaults();
+    }
+    
+    int local_x = x - chunk_x * CHUNK_WIDTH;
+    int local_z = z - chunk_z * CHUNK_DEPTH;
+    
+    return it->second->get_block_state(local_x, y, local_z);
+}
+
+void World::set_block_state(int x, int y, int z, shared::voxel::BlockRuntimeState state) {
+    if (y < 0 || y >= CHUNK_HEIGHT) return;
+    
+    int chunk_x = (x >= 0) ? (x / CHUNK_WIDTH) : ((x + 1) / CHUNK_WIDTH - 1);
+    int chunk_z = (z >= 0) ? (z / CHUNK_DEPTH) : ((z + 1) / CHUNK_DEPTH - 1);
+    
+    auto it = chunks_.find({chunk_x, chunk_z});
+    if (it == chunks_.end()) return;
+    
+    int local_x = x - chunk_x * CHUNK_WIDTH;
+    int local_z = z - chunk_z * CHUNK_DEPTH;
+    
+    it->second->set_block_state(local_x, y, local_z, state);
+}
+
+void World::set_block_with_state(int x, int y, int z, Block type, shared::voxel::BlockRuntimeState state) {
+    if (y < 0 || y >= CHUNK_HEIGHT) return;
+    
+    int chunk_x = (x >= 0) ? (x / CHUNK_WIDTH) : ((x + 1) / CHUNK_WIDTH - 1);
+    int chunk_z = (z >= 0) ? (z / CHUNK_DEPTH) : ((z + 1) / CHUNK_DEPTH - 1);
+    
+    auto it = chunks_.find({chunk_x, chunk_z});
+    if (it == chunks_.end()) return;
+    
+    int local_x = x - chunk_x * CHUNK_WIDTH;
+    int local_z = z - chunk_z * CHUNK_DEPTH;
+    
+    it->second->set_block_with_state(local_x, y, local_z, type, state);
+
+    // If we edited a block on a chunk edge, the adjacent chunk's mesh must be rebuilt
+    auto mark_chunk_dirty = [this](int cx, int cz) {
+        auto it2 = chunks_.find({cx, cz});
+        if (it2 != chunks_.end()) {
+            it2->second->mark_dirty();
+        }
+    };
+
+    if (local_x == 0) {
+        mark_chunk_dirty(chunk_x - 1, chunk_z);
+    } else if (local_x == CHUNK_WIDTH - 1) {
+        mark_chunk_dirty(chunk_x + 1, chunk_z);
+    }
+
+    if (local_z == 0) {
+        mark_chunk_dirty(chunk_x, chunk_z - 1);
+    } else if (local_z == CHUNK_DEPTH - 1) {
+        mark_chunk_dirty(chunk_x, chunk_z + 1);
+    }
+}
+
 Chunk* World::get_chunk(int chunk_x, int chunk_z) {
     auto it = chunks_.find({chunk_x, chunk_z});
     return it != chunks_.end() ? it->second.get() : nullptr;
@@ -237,6 +306,8 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
     
     auto* ptr = chunk.get();
     chunks_[key] = std::move(chunk);
+    
+    recompute_chunk_states(chunk_x, chunk_z);
     
     return ptr;
 }
@@ -264,8 +335,6 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
         chunks_[key] = std::move(newChunk);
     }
     
-    // Apply block data from server
-    // Index order: y * (WIDTH * DEPTH) + z * WIDTH + x
     for (int y = 0; y < CHUNK_HEIGHT; ++y) {
         for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
             for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
@@ -281,7 +350,6 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
     chunk->set_generated(true);
     chunk->mark_dirty();
     
-    // Mark neighbor chunks dirty to rebuild their meshes
     auto mark_neighbor = [this](int cx, int cz) {
         auto neighborIt = chunks_.find({cx, cz});
         if (neighborIt != chunks_.end()) {
@@ -293,7 +361,52 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
     mark_neighbor(chunkX, chunkZ - 1);
     mark_neighbor(chunkX, chunkZ + 1);
     
+    recompute_chunk_states(chunkX, chunkZ);
+    
     TraceLog(LOG_DEBUG, "Applied chunk data for (%d, %d)", chunkX, chunkZ);
+}
+
+void World::recompute_chunk_states(int chunkX, int chunkZ) {
+    using namespace shared::voxel;
+    
+    auto key = std::make_pair(chunkX, chunkZ);
+    auto it = chunks_.find(key);
+    if (it == chunks_.end()) return;
+    
+    Chunk* chunk = it->second.get();
+    const int baseX = chunkX * CHUNK_WIDTH;
+    const int baseZ = chunkZ * CHUNK_DEPTH;
+    
+    for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+        for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
+            for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
+                Block block = chunk->get_block(lx, y, lz);
+                auto blockType = static_cast<BlockType>(block);
+                
+                if (!uses_connections(blockType)) continue;
+                
+                BlockRuntimeState state{};
+                int wx = baseX + lx;
+                int wz = baseZ + lz;
+                
+                auto northType = static_cast<BlockType>(get_block(wx, y, wz - 1));
+                state.north = can_fence_connect_to(northType);
+                
+                auto southType = static_cast<BlockType>(get_block(wx, y, wz + 1));
+                state.south = can_fence_connect_to(southType);
+                
+                auto eastType = static_cast<BlockType>(get_block(wx + 1, y, wz));
+                state.east = can_fence_connect_to(eastType);
+                
+                auto westType = static_cast<BlockType>(get_block(wx - 1, y, wz));
+                state.west = can_fence_connect_to(westType);
+                
+                chunk->set_block_state(lx, y, lz, state);
+            }
+        }
+    }
+    
+    chunk->mark_dirty();
 }
 
 void World::generate_chunk_terrain(Chunk& chunk) {
@@ -322,7 +435,6 @@ void World::generate_chunk_terrain(Chunk& chunk) {
             return;
         }
 
-        // Outside template bounds: leave as Air (void).
         for (int y = 0; y < CHUNK_HEIGHT; y++) {
             for (int z = 0; z < CHUNK_DEPTH; z++) {
                 for (int x = 0; x < CHUNK_WIDTH; x++) {
@@ -338,11 +450,9 @@ void World::generate_chunk_terrain(Chunk& chunk) {
             float world_x = static_cast<float>(chunk_x * CHUNK_WIDTH + x);
             float world_z = static_cast<float>(chunk_z * CHUNK_DEPTH + z);
             
-            // Generate height using Perlin noise
             float noise = octave_perlin(world_x * 0.02f, world_z * 0.02f, 4, 0.5f);
             int height = static_cast<int>(60 + noise * 20);
             
-            // Fill terrain
             for (int y = 0; y < CHUNK_HEIGHT; y++) {
                 Block block_type;
                 
@@ -368,7 +478,6 @@ void World::update(const Vector3& player_position) {
     load_chunks_around_player(player_position);
     unload_distant_chunks(player_position);
     
-    // Update meshes for dirty chunks
     {
         // IMPORTANT: generating many chunk meshes in a single frame can stall for seconds.
         // Keep mesh rebuild work budgeted per-frame so lighting/chunk streaming stays responsive.
@@ -439,7 +548,6 @@ void World::render(const Camera3D& camera) const {
 void World::load_voxel_shader() {
     if (voxel_shader_loaded_) return;
 
-    // Look for shaders in the build directory (copied by CMake or packed in .pak)
     const char* vs_path = "shaders/voxel.vs";
     const char* fs_path = "shaders/voxel.fs";
 

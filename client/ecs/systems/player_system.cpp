@@ -25,37 +25,30 @@ void PlayerSystem::update(entt::registry& registry, float delta_time) {
 entt::entity PlayerSystem::create_player(entt::registry& registry, const Vector3& spawn_position) {
     auto entity = registry.create();
     
-    // Core components
     registry.emplace<PlayerTag>(entity);
     registry.emplace<NameTag>(entity, "Player");
     
-    // Transform
     auto& transform = registry.emplace<Transform>(entity);
     transform.position = spawn_position;
     
-    // Physics
     registry.emplace<Velocity>(entity);
     registry.emplace<GravityAffected>(entity);
     
     auto& collider = registry.emplace<BoxCollider>(entity);
     collider.size = {shared::kPlayerWidth, shared::kPlayerHeight, shared::kPlayerWidth};
     
-    // Player controller
     auto& controller = registry.emplace<PlayerController>(entity);
     controller.move_speed = 5.0f;
     controller.sprint_speed = 8.0f;
     controller.jump_velocity = 8.0f;
     controller.camera_sensitivity = 0.1f;
     
-    // Camera
     auto& camera = registry.emplace<FirstPersonCamera>(entity);
     camera.eye_height = shared::kPlayerEyeHeight;
     camera.fov = 60.0f;
     
-    // Input
     registry.emplace<InputState>(entity);
     
-    // Tool
     registry.emplace<ToolHolder>(entity);
     registry.emplace<BlockBreaker>(entity);
     
@@ -73,7 +66,6 @@ Camera3D PlayerSystem::get_camera(entt::registry& registry, entt::entity player)
         transform.position.z
     };
     
-    // Calculate camera target based on yaw and pitch
     float yaw_rad = fps_camera.yaw * DEG_TO_RAD;
     float pitch_rad = fps_camera.pitch * DEG_TO_RAD;
     
@@ -106,24 +98,20 @@ void PlayerSystem::handle_movement(entt::registry& registry, float delta_time) {
         auto& player = view.get<PlayerController>(entity);
         auto& camera = view.get<FirstPersonCamera>(entity);
         
-        // Update sprint state
         player.is_sprinting = input.sprint_pressed && input.move_input.y > 0;
         float speed = player.is_sprinting ? player.sprint_speed : player.move_speed;
         
-        // Calculate movement direction based on camera yaw
         float yaw_rad = camera.yaw * DEG_TO_RAD;
         
         Vector3 forward = {std::sin(yaw_rad), 0.0f, std::cos(yaw_rad)};
         Vector3 right = {std::cos(yaw_rad), 0.0f, -std::sin(yaw_rad)};
         
-        // Apply horizontal movement
         float move_x = input.move_input.x * speed;
         float move_z = input.move_input.y * speed;
         
         velocity.linear.x = right.x * move_x + forward.x * move_z;
         velocity.linear.z = right.z * move_x + forward.z * move_z;
         
-        // Creative mode vertical movement
         if (player.in_creative_mode) {
             velocity.linear.y = 0.0f;
             if (input.jump_pressed) {
@@ -144,7 +132,6 @@ void PlayerSystem::handle_jumping(entt::registry& registry) {
         auto& input = view.get<InputState>(entity);
         auto& player = view.get<PlayerController>(entity);
         
-        // Only jump in normal mode when on ground
         if (!player.in_creative_mode && player.on_ground && input.jump_pressed) {
             velocity.linear.y = player.jump_velocity;
             player.on_ground = false;

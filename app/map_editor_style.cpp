@@ -1,8 +1,3 @@
-/**
- * @file map_editor_style.cpp
- * @brief Implementation of custom raygui styling for the Map Editor.
- */
-
 #include "map_editor_style.hpp"
 #include "../ui/raygui.h"
 #include "../client/core/resources.hpp"
@@ -13,25 +8,15 @@
 
 namespace editor_ui {
 
-// ============================================================================
-// Static state
-// ============================================================================
-
 static EditorFonts s_fonts = {};
-
-// ============================================================================
-// Font management
-// ============================================================================
 
 void InitEditorFonts() {
     if (s_fonts.loaded) return;
 
-    // Load fonts via VFS-aware resource system.
     s_fonts.regular = resources::load_font("fonts/Inter_18pt-Regular.ttf", 18);
     s_fonts.semiBold = resources::load_font("fonts/Inter_18pt-SemiBold.ttf", 18);
     s_fonts.bold = resources::load_font("fonts/Inter_18pt-Bold.ttf", 22);
 
-    // Check if fonts loaded successfully
     if (s_fonts.regular.texture.id == 0) {
         TraceLog(LOG_WARNING, "[EditorUI] Failed to load regular font, using default");
         s_fonts.regular = GetFontDefault();
@@ -43,7 +28,6 @@ void InitEditorFonts() {
         s_fonts.bold = s_fonts.regular;
     }
 
-    // Set texture filter for better rendering
     if (s_fonts.regular.texture.id != GetFontDefault().texture.id) {
         SetTextureFilter(s_fonts.regular.texture, TEXTURE_FILTER_BILINEAR);
     }
@@ -60,7 +44,6 @@ void InitEditorFonts() {
 void ShutdownEditorFonts() {
     if (!s_fonts.loaded) return;
 
-    // Only unload if not the default font
     Font defaultFont = GetFontDefault();
     if (s_fonts.regular.texture.id != defaultFont.texture.id) {
         UnloadFont(s_fonts.regular);
@@ -81,29 +64,23 @@ const EditorFonts& GetFonts() {
     return s_fonts;
 }
 
-// ============================================================================
-// Style setup
-// ============================================================================
 
 static int ColorToStyleInt(Color c) {
     return ((int)c.r << 24) | ((int)c.g << 16) | ((int)c.b << 8) | (int)c.a;
 }
 
 void ApplyEditorStyle() {
-    // Set custom font for raygui
     if (s_fonts.loaded && s_fonts.regular.texture.id != 0) {
         GuiSetFont(s_fonts.regular);
     }
 
-    // Global defaults
     GuiSetStyle(DEFAULT, TEXT_SIZE, 16);
     GuiSetStyle(DEFAULT, TEXT_SPACING, 1);
     GuiSetStyle(DEFAULT, TEXT_LINE_SPACING, 20);
     GuiSetStyle(DEFAULT, TEXT_ALIGNMENT_VERTICAL, TEXT_ALIGN_MIDDLE);
-    GuiSetStyle(DEFAULT, BACKGROUND_COLOR, ColorToStyleInt(kBgDark));  // Used by Panel, ListView background
-    GuiSetStyle(DEFAULT, LINE_COLOR, ColorToStyleInt(kSeparator));     // Used for panel borders
+    GuiSetStyle(DEFAULT, BACKGROUND_COLOR, ColorToStyleInt(kBgDark));
+    GuiSetStyle(DEFAULT, LINE_COLOR, ColorToStyleInt(kSeparator));
 
-    // DEFAULT control (base for all)
     GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(DEFAULT, BASE_COLOR_NORMAL, ColorToStyleInt(kBgPanelLight));
     GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
@@ -123,7 +100,6 @@ void ApplyEditorStyle() {
     GuiSetStyle(DEFAULT, BORDER_WIDTH, kBorderWidth);
     GuiSetStyle(DEFAULT, TEXT_PADDING, 8);
 
-    // BUTTON
     GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, ColorToStyleInt(kAccentMuted));
     GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToStyleInt(kBgPanelLight));
     GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
@@ -136,7 +112,6 @@ void ApplyEditorStyle() {
     GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, ColorToStyleInt(kAccentPrimary));
     GuiSetStyle(BUTTON, TEXT_COLOR_PRESSED, ColorToStyleInt(kTextOnAccent));
 
-    // TEXTBOX
     GuiSetStyle(TEXTBOX, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(TEXTBOX, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(TEXTBOX, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
@@ -149,12 +124,10 @@ void ApplyEditorStyle() {
     GuiSetStyle(TEXTBOX, BASE_COLOR_PRESSED, ColorToStyleInt(kBgDark));
     GuiSetStyle(TEXTBOX, TEXT_COLOR_PRESSED, ColorToStyleInt(kTextPrimary));
 
-    // VALUEBOX
     GuiSetStyle(VALUEBOX, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(VALUEBOX, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(VALUEBOX, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
 
-    // SLIDER
     GuiSetStyle(SLIDER, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(SLIDER, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(SLIDER, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextSecondary));
@@ -165,7 +138,6 @@ void ApplyEditorStyle() {
     GuiSetStyle(SLIDER, SLIDER_WIDTH, 12);
     GuiSetStyle(SLIDER, SLIDER_PADDING, 2);
 
-    // CHECKBOX
     GuiSetStyle(CHECKBOX, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(CHECKBOX, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(CHECKBOX, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
@@ -175,7 +147,6 @@ void ApplyEditorStyle() {
 
     GuiSetStyle(CHECKBOX, CHECK_PADDING, 4);
 
-    // DROPDOWNBOX
     GuiSetStyle(DROPDOWNBOX, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(DROPDOWNBOX, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(DROPDOWNBOX, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
@@ -188,7 +159,6 @@ void ApplyEditorStyle() {
     GuiSetStyle(DROPDOWNBOX, BASE_COLOR_PRESSED, ColorToStyleInt(kBgHover));
     GuiSetStyle(DROPDOWNBOX, TEXT_COLOR_PRESSED, ColorToStyleInt(kTextPrimary));
 
-    // LISTVIEW
     GuiSetStyle(LISTVIEW, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(LISTVIEW, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(LISTVIEW, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextPrimary));
@@ -205,17 +175,14 @@ void ApplyEditorStyle() {
     GuiSetStyle(LISTVIEW, LIST_ITEMS_SPACING, 2);
     GuiSetStyle(LISTVIEW, SCROLLBAR_WIDTH, 10);
 
-    // SCROLLBAR
     GuiSetStyle(SCROLLBAR, BORDER_COLOR_NORMAL, ColorToStyleInt(kBgPanel));
     GuiSetStyle(SCROLLBAR, BASE_COLOR_NORMAL, ColorToStyleInt(kBgPanelLight));
     GuiSetStyle(SCROLLBAR, BORDER_COLOR_FOCUSED, ColorToStyleInt(kAccentMuted));
     GuiSetStyle(SCROLLBAR, BASE_COLOR_FOCUSED, ColorToStyleInt(kBgHover));
     GuiSetStyle(SCROLLBAR, ARROWS_VISIBLE, 0);
 
-    // LABEL
     GuiSetStyle(LABEL, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextSecondary));
 
-    // PROGRESSBAR
     GuiSetStyle(PROGRESSBAR, BORDER_COLOR_NORMAL, ColorToStyleInt(kBorderNormal));
     GuiSetStyle(PROGRESSBAR, BASE_COLOR_NORMAL, ColorToStyleInt(kBgDark));
     GuiSetStyle(PROGRESSBAR, BASE_COLOR_PRESSED, ColorToStyleInt(kAccentPrimary));
@@ -225,16 +192,10 @@ void ResetToDefaultStyle() {
     GuiLoadStyleDefault();
 }
 
-// ============================================================================
-// Drawing helpers
-// ============================================================================
-
 void DrawStyledPanel(Rectangle bounds, const char* title) {
-    // Panel background with slight rounded appearance
     DrawRectangleRec(bounds, kBgPanel);
     DrawRectangleLinesEx(bounds, 1.0f, kBorderNormal);
 
-    // Title bar if title provided
     if (title != nullptr && title[0] != '\0') {
         Rectangle titleBar = {bounds.x, bounds.y, bounds.width, 32.0f};
         DrawRectangleRec(titleBar, kBgPanelLight);
@@ -244,7 +205,6 @@ void DrawStyledPanel(Rectangle bounds, const char* title) {
             1.0f, kSeparator
         );
 
-        // Draw title text
         Vector2 textPos = {
             bounds.x + kPanelPadding,
             bounds.y + (32.0f - 16.0f) / 2.0f
@@ -260,13 +220,11 @@ void DrawStyledPanel(Rectangle bounds, const char* title) {
 void DrawSectionHeader(Rectangle bounds, const char* text, int iconId) {
     float textX = bounds.x;
 
-    // Draw icon if provided
     if (iconId >= 0) {
         GuiDrawIcon(iconId, (int)bounds.x, (int)(bounds.y + (bounds.height - 16) / 2), 1, kAccentPrimary);
         textX += 20.0f;
     }
 
-    // Draw text
     Vector2 textPos = {textX, bounds.y + (bounds.height - 14.0f) / 2.0f};
     if (s_fonts.loaded) {
         DrawTextEx(s_fonts.semiBold, text, textPos, 14, 1, kTextSecondary);
@@ -274,7 +232,6 @@ void DrawSectionHeader(Rectangle bounds, const char* text, int iconId) {
         DrawText(text, (int)textPos.x, (int)textPos.y, 14, kTextSecondary);
     }
 
-    // Draw underline
     DrawLineEx(
         {bounds.x, bounds.y + bounds.height - 1},
         {bounds.x + bounds.width, bounds.y + bounds.height - 1},
@@ -291,7 +248,6 @@ void DrawModalOverlay(int screenWidth, int screenHeight) {
 }
 
 void DrawModalWindow(Rectangle bounds, const char* title) {
-    // Shadow effect (offset rectangle)
     DrawRectangle(
         (int)(bounds.x + 4),
         (int)(bounds.y + 4),
@@ -300,11 +256,9 @@ void DrawModalWindow(Rectangle bounds, const char* title) {
         Fade(BLACK, 0.3f)
     );
 
-    // Main window background
     DrawRectangleRec(bounds, kBgPanel);
     DrawRectangleLinesEx(bounds, 1.0f, kBorderNormal);
 
-    // Title bar
     if (title != nullptr && title[0] != '\0') {
         Rectangle titleBar = {bounds.x, bounds.y, bounds.width, 40.0f};
         DrawRectangleRec(titleBar, kBgPanelLight);
@@ -314,7 +268,6 @@ void DrawModalWindow(Rectangle bounds, const char* title) {
             1.0f, kSeparator
         );
 
-        // Title text centered
         Vector2 textSize = {0, 0};
         if (s_fonts.loaded) {
             textSize = MeasureTextEx(s_fonts.bold, title, 18, 1);
@@ -360,7 +313,6 @@ void DrawTooltipBox(Rectangle controlBounds, const char* text) {
         textSize.y + padding * 2
     };
 
-    // Ensure tooltip is visible on screen
     if (tipBounds.y < 0) {
         tipBounds.y = controlBounds.y + controlBounds.height + 4;
     }
@@ -370,12 +322,7 @@ void DrawTooltipBox(Rectangle controlBounds, const char* text) {
     DrawText(text, (int)(tipBounds.x + padding), (int)(tipBounds.y + padding), 14, kTextPrimary);
 }
 
-// ============================================================================
-// Custom controls
-// ============================================================================
-
 bool StyledButton(Rectangle bounds, const char* text, int iconId, bool primary) {
-    // For primary buttons, temporarily override colors
     if (primary) {
         GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToStyleInt(kAccentPrimary));
         GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, ColorToStyleInt(kTextOnAccent));
@@ -386,7 +333,6 @@ bool StyledButton(Rectangle bounds, const char* text, int iconId, bool primary) 
         GuiSetStyle(BUTTON, BORDER_COLOR_FOCUSED, ColorToStyleInt(kAccentPrimary));
     }
 
-    // Add icon to text if provided
     const char* displayText = text;
     if (iconId >= 0) {
         displayText = GuiIconText(iconId, text);
@@ -394,7 +340,6 @@ bool StyledButton(Rectangle bounds, const char* text, int iconId, bool primary) 
 
     bool result = GuiButton(bounds, displayText);
 
-    // Reset to normal button style
     if (primary) {
         GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, ColorToStyleInt(kAccentMuted));
         GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToStyleInt(kBgPanelLight));
@@ -411,12 +356,10 @@ bool StyledButton(Rectangle bounds, const char* text, int iconId, bool primary) 
 bool StyledTextBox(Rectangle bounds, const char* label, char* text, int textSize, bool* editMode) {
     float labelWidth = 80.0f;
     
-    // Draw label
     if (label != nullptr && label[0] != '\0') {
         DrawStyledLabel({bounds.x, bounds.y, labelWidth, bounds.height}, label);
     }
 
-    // Adjust text box bounds
     Rectangle textBounds = {
         bounds.x + labelWidth,
         bounds.y,
@@ -434,12 +377,10 @@ bool StyledTextBox(Rectangle bounds, const char* label, char* text, int textSize
 bool StyledValueBox(Rectangle bounds, const char* label, int* value, int minValue, int maxValue, bool* editMode) {
     float labelWidth = 80.0f;
 
-    // Draw label
     if (label != nullptr && label[0] != '\0') {
         DrawStyledLabel({bounds.x, bounds.y, labelWidth, bounds.height}, label);
     }
 
-    // Adjust value box bounds
     Rectangle valueBounds = {
         bounds.x + labelWidth,
         bounds.y,
@@ -458,12 +399,10 @@ bool StyledSlider(Rectangle bounds, const char* label, float* value, float minVa
     float labelWidth = 60.0f;
     float valueWidth = 50.0f;
 
-    // Draw label on left
     if (label != nullptr && label[0] != '\0') {
         DrawStyledLabel({bounds.x, bounds.y, labelWidth, bounds.height}, label);
     }
 
-    // Draw value on right
     char valueStr[32];
     snprintf(valueStr, sizeof(valueStr), format, *value);
     
@@ -474,7 +413,6 @@ bool StyledSlider(Rectangle bounds, const char* label, float* value, float minVa
     };
     DrawText(valueStr, (int)valuePos.x, (int)valuePos.y, 14, kTextSecondary);
 
-    // Slider bounds
     Rectangle sliderBounds = {
         bounds.x + labelWidth,
         bounds.y,
@@ -496,12 +434,10 @@ bool StyledCheckBox(Rectangle bounds, const char* label, bool* checked) {
 bool StyledDropdownBox(Rectangle bounds, const char* label, const char* items, int* active, bool* editMode) {
     float labelWidth = 80.0f;
 
-    // Draw label
     if (label != nullptr && label[0] != '\0') {
         DrawStyledLabel({bounds.x, bounds.y, labelWidth, bounds.height}, label);
     }
 
-    // Dropdown bounds
     Rectangle dropBounds = {
         bounds.x + labelWidth,
         bounds.y,
@@ -522,10 +458,6 @@ bool StyledListView(Rectangle bounds, const char* items, int* scrollIndex, int* 
     return *active != oldActive;
 }
 
-// ============================================================================
-// Layout helpers
-// ============================================================================
-
 Rectangle VerticalLayout::NextRow(float height) {
     Rectangle r = {x, currentY, width, height};
     currentY += height + gap;
@@ -536,20 +468,14 @@ void VerticalLayout::AddSpace(float space) {
     currentY += space;
 }
 
-// ============================================================================
-// Block palette (placeholder)
-// ============================================================================
-
 void DrawBlockPreview(Rectangle bounds, int blockType) {
-    // Simple colored rectangle as block preview (can be extended with actual textures)
     Color colors[] = {
-        {128, 128, 128, 255},  // Air
-        {100, 200, 100, 255},  // Grass
-        {139, 90, 43, 255},    // Dirt
-        {128, 128, 128, 255},  // Stone
-        {50, 50, 50, 255},     // Bedrock
-        {200, 180, 150, 255},  // Sand
-        // ... more colors for other block types
+        {128, 128, 128, 255},
+        {100, 200, 100, 255},
+        {139, 90, 43, 255},
+        {128, 128, 128, 255},
+        {50, 50, 50, 255},
+        {200, 180, 150, 255},
     };
 
     int colorIndex = blockType % (sizeof(colors) / sizeof(colors[0]));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../shared/voxel/block.hpp"
+#include "../../shared/voxel/block_state.hpp"
 
 #include "../../shared/maps/rfmap_io.hpp"
 
@@ -39,8 +40,20 @@ public:
     struct BlockModification {
         int x, y, z;
         shared::voxel::BlockType type;
+        shared::voxel::BlockRuntimeState state;
     };
     std::vector<BlockModification> get_all_modifications() const;
+
+    // Block state management
+    shared::voxel::BlockRuntimeState get_block_state(int x, int y, int z) const;
+    void set_block_state(int x, int y, int z, shared::voxel::BlockRuntimeState state);
+    
+    // Compute connections for a block based on neighbors
+    shared::voxel::BlockRuntimeState compute_block_state(int x, int y, int z, shared::voxel::BlockType type) const;
+    
+    // Update neighbor connections when a block changes
+    // Returns list of positions that were updated (for broadcasting)
+    std::vector<BlockModification> update_neighbor_states(int x, int y, int z);
 
     // Get full chunk data for replication (16x256x16 = 65536 blocks)
     // Returns block types in Y-major order: index = y * 256 + z * 16 + x (local coords)
@@ -93,6 +106,9 @@ private:
 
     // Sparse runtime modifications (placed/broken blocks) on top of procedural base terrain.
     std::unordered_map<BlockKey, shared::voxel::BlockType, BlockKeyHash> overrides_{};
+    
+    // Block states for blocks that have non-default state (connections, slab type)
+    std::unordered_map<BlockKey, shared::voxel::BlockRuntimeState, BlockKeyHash> block_states_{};
 
     // Positions whose current block was placed by a player during the match.
     // Only these are breakable by default in a templated match.

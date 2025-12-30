@@ -8,6 +8,7 @@
 #include "../client/net/client_session.hpp"
 #include "../client/renderer/skybox.hpp"
 #include "../client/voxel/block_interaction.hpp"
+#include "../client/voxel/block_model_loader.hpp"
 #include "../client/voxel/block_registry.hpp"
 #include "../client/voxel/world.hpp"
 
@@ -15,6 +16,7 @@
 #include "../shared/maps/runtime_paths.hpp"
 #include "../shared/transport/local_transport.hpp"
 #include "../shared/vfs/vfs.hpp"
+#include "../shared/voxel/block_state.hpp"
 #include "../server/core/server.hpp"
 
 #include "../ui/raygui.h"
@@ -83,8 +85,43 @@ struct SkyboxParams {
     int active = -1;
 };
 
-// Skybox and maps are now loaded via VFS (list_dir) and user_maps_dir().
-// No need for choose_maps_dir() or choose_skybox_panorama_dir().
+struct BlockPickerParams {
+    bool open = false;
+    bool needsRefresh = true;
+    std::vector<voxel::BlockType> types;
+    std::string listText;
+    int scrollIndex = 0;
+    int active = -1;
+};
+
+static void refresh_block_picker_params(BlockPickerParams& p, voxel::BlockType currentType) {
+    p.types.clear();
+    p.listText.clear();
+    p.scrollIndex = 0;
+    p.active = -1;
+
+    for (std::size_t i = 0; i < static_cast<std::size_t>(voxel::BlockType::Count); i++) {
+        const auto t = static_cast<voxel::BlockType>(i);
+        
+        if (t == voxel::BlockType::StoneSlabTop || t == voxel::BlockType::WoodSlabTop) {
+            continue;
+        }
+        
+        p.types.push_back(t);
+
+        const auto& info = voxel::BlockRegistry::instance().get_block_info(t);
+        if (!p.listText.empty()) p.listText.push_back(';');
+        p.listText += info.name ? info.name : "(unnamed)";
+    }
+
+    for (int i = 0; i < static_cast<int>(p.types.size()); i++) {
+        if (p.types[static_cast<std::size_t>(i)] == currentType) {
+            p.active = i;
+            break;
+        }
+    }
+}
+
 
 static bool try_parse_panorama_sky_id(const std::string& filename, std::uint8_t& outId) {
     // Expected pattern: Panorama_Sky_01-512x512.png
@@ -108,7 +145,6 @@ static void refresh_skybox_params(SkyboxParams& p, std::uint8_t currentId) {
     p.scrollIndex = 0;
     p.active = -1;
 
-    // Index 0 is always "None".
     p.ids.push_back(0);
     p.listText = "None";
 
@@ -140,7 +176,6 @@ static void refresh_skybox_params(SkyboxParams& p, std::uint8_t currentId) {
         p.listText += e.name;
     }
 
-    // Restore selection to current id if present.
     for (int i = 0; i < static_cast<int>(p.ids.size()); i++) {
         if (p.ids[static_cast<std::size_t>(i)] == currentId) {
             p.active = i;
@@ -265,6 +300,11 @@ static std::string build_block_dropdown_items(std::vector<voxel::BlockType>& out
     std::string items;
     for (std::size_t i = 0; i < static_cast<std::size_t>(voxel::BlockType::Count); i++) {
         const auto t = static_cast<voxel::BlockType>(i);
+        
+        if (t == voxel::BlockType::StoneSlabTop || t == voxel::BlockType::WoodSlabTop) {
+            continue;
+        }
+        
         outTypes.push_back(t);
 
         const auto& info = voxel::BlockRegistry::instance().get_block_info(t);
@@ -321,7 +361,6 @@ static void enqueue_template_floating_island(const shared::maps::MapTemplate& te
     const int boundsMinZ = std::max(minZ, centerZ - radiusXZ);
     const int boundsMaxZ = std::min(maxZ, centerZ + radiusXZ);
 
-    // First pass: fill island volume with Dirt.
     for (int z = boundsMinZ; z <= boundsMaxZ; z++) {
         for (int x = boundsMinX; x <= boundsMaxX; x++) {
             const float dx = static_cast<float>(x - centerX) / static_cast<float>(radiusXZ);
@@ -339,8 +378,6 @@ static void enqueue_template_floating_island(const shared::maps::MapTemplate& te
         }
     }
 
-    // Second pass: set the top-most filled block at each (x,z) to Grass.
-    // This is O(N) over the filled ops, but keeps UX simple.
     struct XZKey {
         int x;
         int z;
@@ -431,10 +468,8 @@ int main() {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
 
-    // Initialize resource system (VFS) - must be after InitWindow.
     resources::init();
 
-    // Initialize custom UI styling
     editor_ui::InitEditorFonts();
     editor_ui::ApplyEditorStyle();
 
@@ -447,11 +482,16 @@ int main() {
         CloseWindow();
         return -1;
     }
+    
+    if (!voxel::BlockModelLoader::instance().init()) {
+        TraceLog(LOG_WARNING, "[editor] Failed to initialize block model loader (non-full blocks may render incorrectly)");
+    }
 
     std::vector<voxel::BlockType> paletteTypes;
-    std::string dropdownItems = build_block_dropdown_items(paletteTypes);
+    build_block_dropdown_items(paletteTypes);
     int activeBlockIndex = static_cast<int>(voxel::BlockType::Dirt);
-    bool dropdownEditMode = false;
+
+    BlockPickerParams blockPickerParams;
 
     const std::string newTemplateItems = build_new_template_dropdown_items();
     bool newTemplateDropdownEdit = false;
@@ -464,13 +504,11 @@ int main() {
 
     std::optional<shared::maps::MapTemplate> pendingLoadedMap;
 
-    // MV-1: editor-managed render-only settings (exported by the server).
     shared::maps::MapTemplate::VisualSettings visualSettings = shared::maps::default_visual_settings();
 
     std::vector<SetOp> pendingUploadOps;
     std::size_t uploadCursor = 0;
 
-    // Editor runtime (created only after init screen)
     std::optional<shared::transport::LocalTransport::Pair> transportPair;
     std::unique_ptr<server::core::Server> server;
     std::unique_ptr<client::net::ClientSession> session;
@@ -511,7 +549,6 @@ int main() {
         session = std::make_unique<client::net::ClientSession>(transportPair->client);
         session->start_handshake();
 
-        // Start with an empty-bounds template world so the editor doesn't show procedural terrain.
         unsigned int seed = static_cast<unsigned int>(std::time(nullptr));
         world = std::make_unique<voxel::World>(seed);
 
@@ -526,17 +563,16 @@ int main() {
 
         skyboxParams.needsRefresh = true;
 
-        // Apply MV-1 settings in-editor.
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
-        // Apply MV-2/MV-3 temperature/humidity recolor in-editor (render-only).
         world->set_temperature_override(visualSettings.temperature);
         world->set_humidity_override(visualSettings.humidity);
         world->mark_all_chunks_dirty();
 
         session->set_on_block_placed([&](const shared::proto::BlockPlaced& ev) {
             if (!world) return;
-            world->set_block(ev.x, ev.y, ev.z, static_cast<voxel::Block>(ev.blockType));
+            auto state = shared::voxel::BlockRuntimeState::from_byte(ev.stateByte);
+            world->set_block_with_state(ev.x, ev.y, ev.z, static_cast<voxel::Block>(ev.blockType), state);
         });
         session->set_on_block_broken([&](const shared::proto::BlockBroken& ev) {
             if (!world) return;
@@ -560,7 +596,6 @@ int main() {
         const Vector3 spawnPos{50.0f, 80.0f, 50.0f};
         player = ecs::PlayerSystem::create_player(registry, spawnPos);
 
-        // Enter editor with cursor enabled so the user can interact with UI.
         cursorEnabled = true;
         EnableCursor();
 
@@ -570,7 +605,6 @@ int main() {
     while (!WindowShouldClose()) {
         const float dt = GetFrameTime();
 
-        // Global toggle for cursor only inside the editor.
         if (mode == AppMode::Editor && IsKeyPressed(KEY_TAB)) {
             cursorEnabled = !cursorEnabled;
             if (cursorEnabled) {
@@ -581,12 +615,10 @@ int main() {
             }
         }
 
-        // --- INIT/CREATE/OPEN SCREENS ---
         if (mode == AppMode::Init || mode == AppMode::CreateModal || mode == AppMode::OpenModal) {
             BeginDrawing();
             ClearBackground(editor_ui::kBgDark);
 
-            // Draw background pattern/decoration
             for (int i = 0; i < 20; i++) {
                 float alpha = 0.03f + (float)i * 0.002f;
                 DrawCircle(
@@ -597,7 +629,6 @@ int main() {
                 );
             }
 
-            // Title section
             const char* titleText = "RAYFLOW MAP EDITOR";
             const auto& fonts = editor_ui::GetFonts();
             Vector2 titleSize = fonts.loaded ? MeasureTextEx(fonts.bold, titleText, 32, 2) : Vector2{(float)MeasureText(titleText, 32), 32};
@@ -609,7 +640,6 @@ int main() {
                 DrawText(titleText, (int)titleX, 60, 32, editor_ui::kTextPrimary);
             }
 
-            // Subtitle
             const char* subtitleText = "Create and edit voxel maps for BedWars";
             Vector2 subSize = fonts.loaded ? MeasureTextEx(fonts.regular, subtitleText, 16, 1) : Vector2{(float)MeasureText(subtitleText, 16), 16};
             float subX = (screenWidth - subSize.x) / 2.0f;
@@ -620,33 +650,28 @@ int main() {
             }
 
             if (mode == AppMode::Init) {
-                // Main action buttons centered
                 const float btnWidth = 320.0f;
                 const float btnHeight = 50.0f;
                 const float btnGap = 16.0f;
                 const float btnX = (screenWidth - btnWidth) / 2.0f;
                 float btnY = screenHeight / 2.0f - 40.0f;
 
-                // Create new map button (primary)
                 if (editor_ui::StyledButton({btnX, btnY, btnWidth, btnHeight}, "Create New Map", ICON_FILE_NEW, true)) {
                     mode = AppMode::CreateModal;
                 }
 
                 btnY += btnHeight + btnGap;
 
-                // Open existing button (secondary)
                 if (editor_ui::StyledButton({btnX, btnY, btnWidth, btnHeight}, "Open Existing Map", ICON_FOLDER_OPEN, false)) {
                     openParams.needsRefresh = true;
                     mode = AppMode::OpenModal;
                 }
 
-                // Footer with version/info
                 const char* footerText = "v1.0  |  Press F1 for help";
                 Vector2 footerSize = {(float)MeasureText(footerText, 12), 12.0f};
                 DrawText(footerText, (int)((screenWidth - footerSize.x) / 2), screenHeight - 40, 12, editor_ui::kTextMuted);
             }
 
-            // Create modal
             if (mode == AppMode::CreateModal) {
                 editor_ui::DrawModalOverlay(screenWidth, screenHeight);
 
@@ -660,10 +685,8 @@ int main() {
                 };
                 editor_ui::DrawModalWindow(win, "Create New Map");
 
-                // Content area starts after title bar
                 editor_ui::VerticalLayout layout(win.x + 24, win.y + 56, win.width - 48, 10);
 
-                // Map ID section
                 editor_ui::DrawSectionHeader(layout.NextRow(24), "Map Identity", ICON_INFO);
                 layout.AddSpace(4);
 
@@ -672,7 +695,6 @@ int main() {
 
                 layout.AddSpace(8);
 
-                // Dimensions section
                 editor_ui::DrawSectionHeader(layout.NextRow(24), "Dimensions", ICON_BOX_GRID);
                 layout.AddSpace(4);
 
@@ -683,15 +705,12 @@ int main() {
 
                 layout.AddSpace(8);
 
-                // Template section
                 editor_ui::DrawSectionHeader(layout.NextRow(24), "Starting Template", ICON_LAYERS);
                 layout.AddSpace(4);
 
-                // Reserve space for dropdown (drawn last for z-order)
                 Rectangle templateDropdownBounds = layout.NextRow(32);
                 editor_ui::DrawStyledLabel({templateDropdownBounds.x, templateDropdownBounds.y, 80, templateDropdownBounds.height}, "Template");
 
-                // Buttons at bottom
                 layout.AddSpace(24);
                 const float buttonWidth = (win.width - 48 - 16) / 2.0f;
                 const float buttonY = win.y + win.height - 60;
@@ -724,7 +743,6 @@ int main() {
                 }
                 GuiSetState(STATE_NORMAL);
 
-                // Deferred dropdown for correct z-order
                 {
                     Rectangle dropBounds = {
                         templateDropdownBounds.x + 80,
@@ -738,7 +756,6 @@ int main() {
                 }
             }
 
-            // Open modal
             if (mode == AppMode::OpenModal) {
                 editor_ui::DrawModalOverlay(screenWidth, screenHeight);
 
@@ -757,22 +774,18 @@ int main() {
                     openParams.needsRefresh = false;
                 }
 
-                // Content area
                 editor_ui::VerticalLayout layout(win.x + 24, win.y + 56, win.width - 48, 8);
 
-                // Directory info
                 std::string dirLabel = "Directory: " + shared::maps::runtime_maps_dir().string();
                 editor_ui::DrawStyledLabel(layout.NextRow(20), dirLabel.c_str(), true);
 
                 layout.AddSpace(8);
 
-                // File list
                 Rectangle listBounds = layout.NextRow(200);
                 editor_ui::StyledListView(listBounds, openParams.listText.c_str(), &openParams.scrollIndex, &openParams.active);
 
                 layout.AddSpace(8);
 
-                // Selection info
                 const bool hasSelection = (openParams.active >= 0) && (openParams.active < static_cast<int>(openParams.entries.size()));
                 if (hasSelection) {
                     const auto& entry = openParams.entries[static_cast<std::size_t>(openParams.active)];
@@ -782,7 +795,6 @@ int main() {
                     editor_ui::DrawStyledLabel(layout.NextRow(20), "No file selected", true);
                 }
 
-                // Buttons
                 const float buttonWidth = (win.width - 48 - 32) / 3.0f;
                 const float buttonY = win.y + win.height - 60;
 
@@ -802,7 +814,6 @@ int main() {
                         const auto& entry = openParams.entries[static_cast<std::size_t>(openParams.active)];
                         const std::string pathStr = entry.path.string();
                         
-                        // Maps are always loose files - read directly from filesystem.
                         if (shared::maps::read_rfmap(pathStr.c_str(), &map, &err)) {
                             pendingLoadedMap = map;
                             visualSettings = map.visualSettings;
@@ -833,16 +844,13 @@ int main() {
             continue;
         }
 
-        // --- EDITOR MODE ---
         if (!session || !world || !inputSystem || !playerSystem || !renderSystem || player == entt::null) {
-            // Should not happen; fall back to init.
             mode = AppMode::Init;
             continue;
         }
 
         session->poll();
 
-        // Align the render-world seed with server seed.
         if (const auto& helloOpt = session->server_hello(); helloOpt.has_value()) {
             const unsigned int desiredSeed = static_cast<unsigned int>(helloOpt->worldSeed);
             if (world->get_seed() != desiredSeed) {
@@ -856,7 +864,6 @@ int main() {
             }
         }
 
-        // Upload initial template blocks to server (throttled), after join.
         if (session->join_ack().has_value() && uploadCursor < pendingUploadOps.size()) {
             constexpr std::size_t kOpsPerFrame = 600;
             const std::size_t end = std::min(pendingUploadOps.size(), uploadCursor + kOpsPerFrame);
@@ -960,18 +967,13 @@ int main() {
         }
         EndMode3D();
 
-        // =====================================================================
-        // Editor Side Panel (new styled UI)
-        // =====================================================================
         const float panelWidth = 340.0f;
         const float panelHeight = static_cast<float>(screenHeight) - 20.0f;
         const Rectangle panel{10, 10, panelWidth, panelHeight};
 
-        // Panel background with transparency
         DrawRectangleRec(panel, Fade(editor_ui::kBgPanel, 0.95f));
         DrawRectangleLinesEx(panel, 1.0f, editor_ui::kBorderNormal);
 
-        // Panel header
         {
             Rectangle headerRect = {panel.x, panel.y, panel.width, 44.0f};
             DrawRectangleRec(headerRect, editor_ui::kBgPanelLight);
@@ -985,7 +987,6 @@ int main() {
                 DrawText(headerText, (int)(panel.x + 16), (int)(panel.y + 12), 18, editor_ui::kTextPrimary);
             }
 
-            // Mode indicator (editing/flying)
             const char* modeText = cursorEnabled ? "UI MODE" : "EDIT MODE";
             Color modeColor = cursorEnabled ? editor_ui::kWarning : editor_ui::kSuccess;
             float modeX = panel.x + panel.width - 16 - MeasureText(modeText, 12);
@@ -994,17 +995,28 @@ int main() {
 
         editor_ui::VerticalLayout layout(panel.x + 16, panel.y + 60, panel.width - 32, 6);
 
-        // ---- BLOCK PALETTE SECTION ----
         editor_ui::DrawSectionHeader(layout.NextRow(24), "Block Palette", ICON_BOX);
         layout.AddSpace(4);
 
-        // Reserve space for dropdown (drawn later for correct z-order)
-        Rectangle blockDropdownBounds = layout.NextRow(32);
-        editor_ui::DrawStyledLabel({blockDropdownBounds.x, blockDropdownBounds.y, 80, blockDropdownBounds.height}, "Block");
+        {
+            Rectangle blockRow = layout.NextRow(32);
+            editor_ui::DrawStyledLabel({blockRow.x, blockRow.y, 70, blockRow.height}, "Block");
+
+            const char* blockLabel = "(none)";
+            if (activeBlockIndex >= 0 && activeBlockIndex < static_cast<int>(paletteTypes.size())) {
+                const auto& info = voxel::BlockRegistry::instance().get_block_info(paletteTypes[static_cast<std::size_t>(activeBlockIndex)]);
+                blockLabel = info.name ? info.name : "(unnamed)";
+            }
+            DrawText(blockLabel, (int)(blockRow.x + 75), (int)(blockRow.y + 8), 14, editor_ui::kTextPrimary);
+
+            if (editor_ui::StyledButton({blockRow.x + blockRow.width - 80, blockRow.y, 80, blockRow.height}, "Choose", ICON_BOX, false)) {
+                blockPickerParams.needsRefresh = true;
+                blockPickerParams.open = true;
+            }
+        }
 
         layout.AddSpace(12);
 
-        // ---- MAP INFO SECTION ----
         editor_ui::DrawSectionHeader(layout.NextRow(24), "Map Properties", ICON_INFO);
         layout.AddSpace(4);
 
@@ -1013,7 +1025,6 @@ int main() {
 
         layout.AddSpace(12);
 
-        // ---- BOUNDS SECTION ----
         editor_ui::DrawSectionHeader(layout.NextRow(24), "Export Bounds (Chunks)", ICON_BOX_GRID);
         layout.AddSpace(4);
 
@@ -1028,11 +1039,9 @@ int main() {
 
         layout.AddSpace(12);
 
-        // ---- VISUAL SETTINGS SECTION ----
         editor_ui::DrawSectionHeader(layout.NextRow(24), "Visual Settings", ICON_COLOR_PICKER);
         layout.AddSpace(4);
 
-        // Skybox selector
         {
             Rectangle skyboxRow = layout.NextRow(32);
             editor_ui::DrawStyledLabel({skyboxRow.x, skyboxRow.y, 70, skyboxRow.height}, "Skybox");
@@ -1050,7 +1059,6 @@ int main() {
         editor_ui::StyledSlider(layout.NextRow(28), "Temp", &visualSettings.temperature, 0.0f, 1.0f, "%.2f");
         editor_ui::StyledSlider(layout.NextRow(28), "Humidity", &visualSettings.humidity, 0.0f, 1.0f, "%.2f");
 
-        // Apply settings live
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
         {
@@ -1069,7 +1077,6 @@ int main() {
 
         layout.AddSpace(16);
 
-        // ---- EXPORT SECTION ----
         editor_ui::DrawSeparator(panel.x + 16, layout.GetY(), panel.width - 32);
         layout.AddSpace(12);
 
@@ -1087,7 +1094,6 @@ int main() {
                 visualSettings.humidity);
         }
 
-        // Status message
         layout.AddSpace(4);
         if (lastExport.has_value()) {
             const char* statusText = lastExport->ok ? "Export successful!" : "Export failed";
@@ -1099,7 +1105,6 @@ int main() {
             DrawText(buf, (int)(panel.x + 16), (int)layout.GetY(), 14, editor_ui::kWarning);
         }
 
-        // ---- BOTTOM HELP TEXT ----
         {
             const char* helpText = "TAB: Toggle cursor | LMB: Place | RMB: Remove";
             float helpY = panel.y + panel.height - 28;
@@ -1107,22 +1112,64 @@ int main() {
             DrawText(helpText, (int)(panel.x + 12), (int)helpY, 11, editor_ui::kTextMuted);
         }
 
-        // ---- DEFERRED DROPDOWN (drawn last for correct z-order) ----
-        {
-            Rectangle dropBounds = {
-                blockDropdownBounds.x + 80,
-                blockDropdownBounds.y,
-                blockDropdownBounds.width - 80,
-                blockDropdownBounds.height
+        if (blockPickerParams.open) {
+            editor_ui::DrawModalOverlay(screenWidth, screenHeight);
+
+            const float modalWidth = 420.0f;
+            const float modalHeight = 480.0f;
+            const Rectangle win{
+                (screenWidth - modalWidth) / 2.0f,
+                (screenHeight - modalHeight) / 2.0f,
+                modalWidth,
+                modalHeight
             };
-            if (GuiDropdownBox(dropBounds, dropdownItems.c_str(), &activeBlockIndex, dropdownEditMode)) {
-                dropdownEditMode = !dropdownEditMode;
+            editor_ui::DrawModalWindow(win, "Select Block");
+
+            voxel::BlockType currentType = voxel::BlockType::Dirt;
+            if (activeBlockIndex >= 0 && activeBlockIndex < static_cast<int>(paletteTypes.size())) {
+                currentType = paletteTypes[static_cast<std::size_t>(activeBlockIndex)];
             }
+
+            if (blockPickerParams.needsRefresh) {
+                refresh_block_picker_params(blockPickerParams, currentType);
+                blockPickerParams.needsRefresh = false;
+            }
+
+            editor_ui::VerticalLayout modalLayout(win.x + 24, win.y + 56, win.width - 48, 8);
+
+            editor_ui::DrawStyledLabel(modalLayout.NextRow(20), "Choose a block type:", true);
+
+            modalLayout.AddSpace(4);
+            editor_ui::StyledListView(modalLayout.NextRow(280), blockPickerParams.listText.c_str(), &blockPickerParams.scrollIndex, &blockPickerParams.active);
+
+            modalLayout.AddSpace(4);
+            const bool hasSelection = (blockPickerParams.active >= 0) && (blockPickerParams.active < static_cast<int>(blockPickerParams.types.size()));
+            if (hasSelection) {
+                const auto& info = voxel::BlockRegistry::instance().get_block_info(blockPickerParams.types[static_cast<std::size_t>(blockPickerParams.active)]);
+                const char* sel = info.name ? info.name : "(unnamed)";
+                std::string selectedLabel = std::string("Selected: ") + sel;
+                editor_ui::DrawStyledLabel(modalLayout.NextRow(20), selectedLabel.c_str(), false);
+            } else {
+                editor_ui::DrawStyledLabel(modalLayout.NextRow(20), "No selection", true);
+            }
+
+            const float buttonWidth = (win.width - 48 - 16) / 2.0f;
+            const float buttonY = win.y + win.height - 60;
+
+            if (editor_ui::StyledButton({win.x + 24, buttonY, buttonWidth, 40}, "Cancel", ICON_CROSS, false)) {
+                blockPickerParams.open = false;
+            }
+
+            GuiSetState(hasSelection ? STATE_NORMAL : STATE_DISABLED);
+            if (editor_ui::StyledButton({win.x + 24 + buttonWidth + 16, buttonY, buttonWidth, 40}, "Select", ICON_OK_TICK, true)) {
+                if (hasSelection) {
+                    activeBlockIndex = blockPickerParams.active;
+                    blockPickerParams.open = false;
+                }
+            }
+            GuiSetState(STATE_NORMAL);
         }
 
-        // =====================================================================
-        // Skybox selection modal
-        // =====================================================================
         if (skyboxParams.open) {
             editor_ui::DrawModalOverlay(screenWidth, screenHeight);
 
@@ -1181,9 +1228,6 @@ int main() {
             GuiSetState(STATE_NORMAL);
         }
 
-        // =====================================================================
-        // Crosshair (when in edit mode)
-        // =====================================================================
         if (!cursorEnabled) {
             voxel::BlockInteraction::render_crosshair(screenWidth, screenHeight);
         }

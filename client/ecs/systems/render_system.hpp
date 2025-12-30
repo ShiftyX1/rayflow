@@ -4,7 +4,6 @@
 #include "../components.hpp"
 #include <raylib.h>
 
-// Forward declarations
 namespace voxel {
     class World;
 }

@@ -7,7 +7,6 @@
 
 namespace voxel {
 
-// Block properties
 struct BlockInfo {
     const char* name;
     bool is_solid;
@@ -15,8 +14,6 @@ struct BlockInfo {
     float hardness;
     int required_tool_level;
     
-    // Texture atlas coordinates (tile indices for each face)
-    // Order: +X, -X, +Y (top), -Y (bottom), +Z, -Z
     std::array<int, 6> texture_indices;
 };
 
@@ -31,9 +28,6 @@ public:
     Rectangle get_texture_rect(BlockType type, int face) const;
     Texture2D get_atlas_texture() const { return atlas_texture_; }
 
-    // MV-2/MV-3: temperature/humidity-driven recolor for foliage/grass.
-    // Returns an sRGB tint color sampled from textures/grasscolor.png and textures/foliagecolor.png.
-    // If colormaps are missing, returns a reasonable fallback.
     Color sample_grass_color(float temperature, float humidity) const;
     Color sample_foliage_color(float temperature, float humidity) const;
     

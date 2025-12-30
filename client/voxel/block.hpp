@@ -6,7 +6,6 @@
 
 namespace voxel {
 
-// Re-export shared voxel block definitions under the existing client namespace.
 using BlockType = shared::voxel::BlockType;
 
 constexpr int CHUNK_WIDTH = shared::voxel::CHUNK_WIDTH;

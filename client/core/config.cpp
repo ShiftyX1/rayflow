@@ -24,7 +24,7 @@ namespace {
 
 std::filesystem::path get_executable_dir() {
 #if defined(_WIN32)
-    constexpr unsigned long kMaxPath = 260;  // MAX_PATH
+    constexpr unsigned long kMaxPath = 260;
     char buffer[kMaxPath] = {0};
     GetModuleFileNameA(nullptr, buffer, kMaxPath);
     return std::filesystem::path(buffer).parent_path();
@@ -51,13 +51,11 @@ std::filesystem::path get_executable_dir() {
 }  // namespace
 
 std::string key_name(int key) {
-    // Letters
     if (key >= KEY_A && key <= KEY_Z) {
         char c = static_cast<char>('A' + (key - KEY_A));
         return std::string(1, c);
     }
 
-    // Digits
     if (key >= KEY_ZERO && key <= KEY_NINE) {
         char c = static_cast<char>('0' + (key - KEY_ZERO));
         return std::string(1, c);
@@ -82,7 +80,6 @@ std::string key_name(int key) {
         default: break;
     }
 
-    // Fallback to numeric.
     return std::to_string(key);
 }
 
@@ -103,7 +100,6 @@ Config& Config::instance() {
 }
 
 Config::Config() {
-    // Defaults (match current hardcoded controls)
     config_.controls.move_forward = KEY_W;
     config_.controls.move_backward = KEY_S;
     config_.controls.move_left = KEY_A;
@@ -125,7 +121,6 @@ Config::Config() {
     config_.controls.tool_4 = KEY_FOUR;
     config_.controls.tool_5 = KEY_FIVE;
 
-    // Logging defaults
     config_.logging.enabled = true;
     config_.logging.level = LOG_INFO;
     config_.logging.file = "";
@@ -200,15 +195,12 @@ static std::string strip_quotes(std::string s) {
 int Config::key_from_string(const std::string& v, int default_value) {
     std::string s = to_lower(strip_quotes(v));
 
-    // Allow raw ASCII letters/digits like "w".
     if (s.size() == 1) {
         const char c = s[0];
         if (c >= 'a' && c <= 'z') {
-            // raylib key codes for letters are KEY_A..KEY_Z.
             return KEY_A + (c - 'a');
         }
         if (c >= '0' && c <= '9') {
-            // Prefer explicit names for digits; but support '1'..'9'.
             if (c == '0') return KEY_ZERO;
             return KEY_ONE + (c - '1');
         }
@@ -270,7 +262,6 @@ int Config::log_level_from_string(const std::string& v, int default_value) {
     auto it = map.find(s);
     if (it != map.end()) return it->second;
 
-    // Allow numeric.
     return parse_int(s, default_value);
 }
 
@@ -350,8 +341,6 @@ void Config::apply_kv(const std::string& section, const std::string& key, const 
 bool Config::load_from_file(const std::string& path) {
     loaded_from_path_.clear();
 
-    // Resolve relative paths against the executable directory.
-    // This ensures config is found when double-clicking the app (where cwd is ~/).
     std::filesystem::path configPath = path;
     if (configPath.is_relative()) {
         configPath = get_executable_dir() / configPath;
@@ -369,7 +358,6 @@ bool Config::load_from_file(const std::string& path) {
     std::string line;
 
     while (std::getline(in, line)) {
-        // Strip comments (# or ;) - simplest approach: cut at first occurrence.
         auto hash = line.find('#');
         auto semi = line.find(';');
         size_t cut = std::string::npos;

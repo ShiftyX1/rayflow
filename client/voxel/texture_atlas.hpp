@@ -15,7 +15,6 @@ public:
     
     Rectangle get_tile_rect(int tile_index) const;
     
-    // Get UV coordinates for a tile (normalized 0-1)
     void get_tile_uvs(int tile_index, float* u0, float* v0, float* u1, float* v1) const;
     
 private:

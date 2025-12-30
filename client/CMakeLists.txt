@@ -18,6 +18,7 @@ add_library(client_lib STATIC
     voxel/chunk.cpp
     voxel/block_registry.cpp
     voxel/block_interaction.cpp
+    voxel/block_model_loader.cpp
     voxel/texture_atlas.cpp
     renderer/mesh.cpp
     renderer/skybox.cpp

@@ -32,7 +32,15 @@ TEST_CASE("BlockType enum values are stable", "[voxel][enum]") {
     REQUIRE(static_cast<int>(BlockType::Gold) == 12);
     REQUIRE(static_cast<int>(BlockType::Diamond) == 13);
     REQUIRE(static_cast<int>(BlockType::Light) == 14);
-    REQUIRE(static_cast<int>(BlockType::Count) == 15);
+    
+    // Non-full blocks (slabs, fences)
+    REQUIRE(static_cast<int>(BlockType::StoneSlab) == 15);
+    REQUIRE(static_cast<int>(BlockType::StoneSlabTop) == 16);
+    REQUIRE(static_cast<int>(BlockType::WoodSlab) == 17);
+    REQUIRE(static_cast<int>(BlockType::WoodSlabTop) == 18);
+    REQUIRE(static_cast<int>(BlockType::OakFence) == 19);
+    
+    REQUIRE(static_cast<int>(BlockType::Count) == 20);
 }
 
 // =============================================================================
@@ -179,4 +187,81 @@ TEST_CASE("Solid and transparent are not mutually exclusive", "[voxel][util]") {
 TEST_CASE("Air is neither solid nor opaque", "[voxel][util]") {
     REQUIRE_FALSE(util::is_solid(BlockType::Air));
     REQUIRE(util::is_transparent(BlockType::Air));
+}
+
+// =============================================================================
+// Block shape and collision tests
+// =============================================================================
+
+TEST_CASE("get_collision_info returns correct info for full blocks", "[voxel][collision]") {
+    auto stone = get_collision_info(BlockType::Stone);
+    REQUIRE(stone.hasCollision);
+    REQUIRE(stone.minY == 0.0f);
+    REQUIRE(stone.maxY == 1.0f);
+}
+
+TEST_CASE("get_collision_info returns no collision for air", "[voxel][collision]") {
+    auto air = get_collision_info(BlockType::Air);
+    REQUIRE_FALSE(air.hasCollision);
+}
+
+TEST_CASE("get_collision_info returns half height for bottom slabs", "[voxel][collision]") {
+    auto stone_slab = get_collision_info(BlockType::StoneSlab);
+    REQUIRE(stone_slab.hasCollision);
+    REQUIRE(stone_slab.minY == 0.0f);
+    REQUIRE(stone_slab.maxY == 0.5f);
+    
+    auto wood_slab = get_collision_info(BlockType::WoodSlab);
+    REQUIRE(wood_slab.hasCollision);
+    REQUIRE(wood_slab.minY == 0.0f);
+    REQUIRE(wood_slab.maxY == 0.5f);
+}
+
+TEST_CASE("get_collision_info returns correct bounds for top slabs", "[voxel][collision]") {
+    auto stone_slab_top = get_collision_info(BlockType::StoneSlabTop);
+    REQUIRE(stone_slab_top.hasCollision);
+    REQUIRE(stone_slab_top.minY == 0.5f);
+    REQUIRE(stone_slab_top.maxY == 1.0f);
+    
+    auto wood_slab_top = get_collision_info(BlockType::WoodSlabTop);
+    REQUIRE(wood_slab_top.hasCollision);
+    REQUIRE(wood_slab_top.minY == 0.5f);
+    REQUIRE(wood_slab_top.maxY == 1.0f);
+}
+
+TEST_CASE("is_slab correctly identifies slab blocks", "[voxel][util]") {
+    REQUIRE(is_slab(BlockType::StoneSlab));
+    REQUIRE(is_slab(BlockType::StoneSlabTop));
+    REQUIRE(is_slab(BlockType::WoodSlab));
+    REQUIRE(is_slab(BlockType::WoodSlabTop));
+    
+    REQUIRE_FALSE(is_slab(BlockType::Stone));
+    REQUIRE_FALSE(is_slab(BlockType::Air));
+    REQUIRE_FALSE(is_slab(BlockType::OakFence));
+}
+
+TEST_CASE("is_bottom_slab correctly identifies bottom slabs", "[voxel][util]") {
+    REQUIRE(is_bottom_slab(BlockType::StoneSlab));
+    REQUIRE(is_bottom_slab(BlockType::WoodSlab));
+    
+    REQUIRE_FALSE(is_bottom_slab(BlockType::StoneSlabTop));
+    REQUIRE_FALSE(is_bottom_slab(BlockType::WoodSlabTop));
+    REQUIRE_FALSE(is_bottom_slab(BlockType::Stone));
+}
+
+TEST_CASE("is_top_slab correctly identifies top slabs", "[voxel][util]") {
+    REQUIRE(is_top_slab(BlockType::StoneSlabTop));
+    REQUIRE(is_top_slab(BlockType::WoodSlabTop));
+    
+    REQUIRE_FALSE(is_top_slab(BlockType::StoneSlab));
+    REQUIRE_FALSE(is_top_slab(BlockType::WoodSlab));
+    REQUIRE_FALSE(is_top_slab(BlockType::Stone));
+}
+
+TEST_CASE("Slabs are transparent for rendering", "[voxel][util]") {
+    // Slabs should allow adjacent faces to be visible
+    REQUIRE(util::is_transparent(BlockType::StoneSlab));
+    REQUIRE(util::is_transparent(BlockType::StoneSlabTop));
+    REQUIRE(util::is_transparent(BlockType::WoodSlab));
+    REQUIRE(util::is_transparent(BlockType::WoodSlabTop));
 }

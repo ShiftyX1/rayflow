@@ -112,6 +112,8 @@ When making changes, follow the detailed rules in `.cursor/rules/`:
 - `.cursor/rules/resources/RULE.md` — VFS and asset packaging
 - `.cursor/rules/build-system/RULE.md` — CMake, dependencies, CI/CD
 - `.cursor/rules/config/RULE.md` — configuration file format
+- `.cursor/rules/block-collision/RULE.md` — block collision system (slabs, fences, step-up)
+- `.cursor/rules/block-models/RULE.md` — block model system (JSON format, BlockModelLoader, adding new blocks)
 
 Legacy instructions in `.github/instructions/` are kept for reference but superseded by `.cursor/rules/`.
 

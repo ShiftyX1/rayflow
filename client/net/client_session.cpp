@@ -49,13 +49,15 @@ void ClientSession::send_try_break_block(int x, int y, int z) {
     endpoint_->send(std::move(req));
 }
 
-void ClientSession::send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType) {
+void ClientSession::send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType, float hitY, std::uint8_t face) {
     shared::proto::TryPlaceBlock req;
     req.seq = ++actionSeq_;
     req.x = x;
     req.y = y;
     req.z = z;
     req.blockType = blockType;
+    req.hitY = hitY;
+    req.face = face;
     endpoint_->send(std::move(req));
 }
 
@@ -118,17 +120,14 @@ void ClientSession::poll() {
             latestSnapshot_ = std::get<shared::proto::StateSnapshot>(msg);
         } else if (std::holds_alternative<shared::proto::BlockPlaced>(msg)) {
             const auto& ev = std::get<shared::proto::BlockPlaced>(msg);
-            // Always buffer - Game will apply after world is ready
             pendingBlockPlaced_.push_back(ev);
             if (onBlockPlaced_) onBlockPlaced_(ev);
         } else if (std::holds_alternative<shared::proto::BlockBroken>(msg)) {
             const auto& ev = std::get<shared::proto::BlockBroken>(msg);
-            // Always buffer - Game will apply after world is ready
             pendingBlockBroken_.push_back(ev);
             if (onBlockBroken_) onBlockBroken_(ev);
         } else if (std::holds_alternative<shared::proto::ChunkData>(msg)) {
             const auto& cd = std::get<shared::proto::ChunkData>(msg);
-            // Always buffer - Game will apply chunks after world is ready
             pendingChunkData_.push_back(cd);
             if (onChunkData_) onChunkData_(cd);
         } else if (std::holds_alternative<shared::proto::ActionRejected>(msg)) {

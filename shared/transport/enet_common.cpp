@@ -231,6 +231,8 @@ std::vector<std::uint8_t> serialize_message(const shared::proto::Message& msg) {
             w.write_i32(m.y);
             w.write_i32(m.z);
             w.write_u8(static_cast<std::uint8_t>(m.blockType));
+            w.write_f32(m.hitY);
+            w.write_u8(m.face);
         }
         else if constexpr (std::is_same_v<T, shared::proto::TryBreakBlock>) {
             w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::TryBreakBlock));
@@ -264,6 +266,7 @@ std::vector<std::uint8_t> serialize_message(const shared::proto::Message& msg) {
             w.write_i32(m.y);
             w.write_i32(m.z);
             w.write_u8(static_cast<std::uint8_t>(m.blockType));
+            w.write_u8(m.stateByte);
         }
         else if constexpr (std::is_same_v<T, shared::proto::BlockBroken>) {
             w.write_u8(static_cast<std::uint8_t>(MessageTypeIndex::BlockBroken));
@@ -376,6 +379,8 @@ bool deserialize_message(const std::uint8_t* data, std::size_t size,
             std::uint8_t bt;
             if (!r.read_u8(bt)) return false;
             m.blockType = static_cast<shared::voxel::BlockType>(bt);
+            if (!r.read_f32(m.hitY)) return false;
+            if (!r.read_u8(m.face)) return false;
             outMsg = m;
             return true;
         }
@@ -421,6 +426,7 @@ bool deserialize_message(const std::uint8_t* data, std::size_t size,
             std::uint8_t bt;
             if (!r.read_u8(bt)) return false;
             m.blockType = static_cast<shared::voxel::BlockType>(bt);
+            if (!r.read_u8(m.stateByte)) return false;
             outMsg = m;
             return true;
         }

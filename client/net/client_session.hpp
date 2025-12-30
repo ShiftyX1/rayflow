@@ -21,7 +21,7 @@ public:
     void send_input(float moveX, float moveY, float yaw, float pitch, bool jump, bool sprint, bool camUp = false, bool camDown = false);
 
     void send_try_break_block(int x, int y, int z);
-    void send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType);
+    void send_try_place_block(int x, int y, int z, shared::voxel::BlockType blockType, float hitY = 0.5f, std::uint8_t face = 0);
     void send_try_set_block(int x, int y, int z, shared::voxel::BlockType blockType);
     void send_try_export_map(const std::string& mapId,
                              std::uint32_t version,
@@ -47,8 +47,6 @@ public:
     const std::optional<shared::proto::JoinAck>& join_ack() const { return joinAck_; }
     const std::optional<shared::proto::StateSnapshot>& latest_snapshot() const { return latestSnapshot_; }
 
-    // Get pending block changes that arrived before world was ready.
-    // Clears the buffer after returning.
     std::vector<shared::proto::BlockPlaced> take_pending_block_placed();
     std::vector<shared::proto::BlockBroken> take_pending_block_broken();
     std::vector<shared::proto::ChunkData> take_pending_chunk_data();
@@ -69,7 +67,6 @@ private:
     std::function<void(const shared::proto::ExportResult&)> onExportResult_;
     std::function<void(const shared::proto::ChunkData&)> onChunkData_;
 
-    // Buffer for block changes that arrive before callbacks are set or world is ready
     std::vector<shared::proto::BlockPlaced> pendingBlockPlaced_;
     std::vector<shared::proto::BlockBroken> pendingBlockBroken_;
     std::vector<shared::proto::ChunkData> pendingChunkData_;

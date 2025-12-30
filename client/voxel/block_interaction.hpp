@@ -10,14 +10,14 @@
 
 namespace voxel {
 
-// Result of a block raycast
 struct BlockRaycastResult {
     bool hit{false};
     int block_x{0};
     int block_y{0};
     int block_z{0};
-    int face{0};  // Which face was hit (0-5)
+    int face{0};
     float distance{0.0f};
+    float hitY{0.5f};
     BlockType block_type{BlockType::Air};
 };
 
@@ -37,6 +37,8 @@ public:
         int y{0};
         int z{0};
         BlockType block_type{BlockType::Air};
+        float hitY{0.5f};
+        std::uint8_t face{0};
     };
 
     bool init();
@@ -74,7 +76,6 @@ private:
     std::optional<BreakRequest> outgoing_break_;
     std::optional<PlaceRequest> outgoing_place_;
 
-    // Destroy stage textures
     std::array<Texture2D, DESTROY_STAGE_COUNT> destroy_textures_{};
     bool textures_loaded_{false};
 };

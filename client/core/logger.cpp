@@ -45,12 +45,10 @@ void Logger::shutdown() {
         file_ = nullptr;
     }
 
-    // Keep raylib default logging behavior if we didn't install a callback.
     callback_installed_ = false;
 }
 
 void Logger::trace_callback(int logLevel, const char* text, va_list args) {
-    // raylib already filters by SetTraceLogLevel before invoking callback.
 
     const char* level_str = "INFO";
     switch (logLevel) {
@@ -84,7 +82,6 @@ void Logger::trace_callback(int logLevel, const char* text, va_list args) {
         std::fputc('\n', sink);
         std::fflush(sink);
 
-        // Also mirror to stderr for visibility.
         std::fprintf(stderr, "[%.3f][%s] ", t, level_str);
         std::vfprintf(stderr, text, args_copy);
         std::fputc('\n', stderr);

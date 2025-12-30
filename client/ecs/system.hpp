@@ -4,7 +4,6 @@
 
 namespace ecs {
 
-// Base system interface
 class System {
 public:
     virtual ~System() = default;

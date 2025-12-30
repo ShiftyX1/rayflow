@@ -21,7 +21,6 @@ Args parse_args(int argc, char* argv[]) {
             args.connect = true;
             std::string addr = argv[++i];
             
-            // Parse host:port
             auto colon = addr.find(':');
             if (colon != std::string::npos) {
                 args.host = addr.substr(0, colon);

@@ -13,7 +13,6 @@ bool should_log_collision_debug() {
 
     static double last = 0.0;
     const double now = GetTime();
-    // Rough rate limit: max ~5 logs/sec.
     if (now - last < 0.20) return false;
     last = now;
     return true;
@@ -34,7 +33,6 @@ void PhysicsSystem::apply_gravity(entt::registry& registry, float delta_time) {
         auto& gravity = view.get<GravityAffected>(entity);
         auto& player = view.get<PlayerController>(entity);
         
-        // Don't apply gravity in creative mode or when on ground
         if (!player.in_creative_mode && !player.on_ground) {
             velocity.linear.y -= GRAVITY * gravity.gravity_scale * delta_time;
         }
@@ -42,10 +40,8 @@ void PhysicsSystem::apply_gravity(entt::registry& registry, float delta_time) {
 }
 
 void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
-    // Entities with player-style voxel collisions
     auto player_view = registry.view<Transform, Velocity, BoxCollider, PlayerController>();
 
-    // Entities without collision (or not voxel-colliding) still integrate normally
     auto free_view = registry.view<Transform, Velocity>(entt::exclude<PlayerController>);
 
     for (auto entity : free_view) {
@@ -57,7 +53,6 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
         transform.position.z += velocity.linear.z * delta_time;
     }
 
-    // If we don't have a world, just integrate players too.
     if (!world_) {
         for (auto entity : player_view) {
             auto& transform = player_view.get<Transform>(entity);
@@ -184,7 +179,6 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
             float feet_y = pos.y;
             float head_y = pos.y + height;
 
-            // Ground check
             if (dy <= 0.0f) {
                 int check_y = static_cast<int>(std::floor(feet_y - EPS));
                 bool hit = false;
@@ -209,7 +203,6 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
                 }
             }
 
-            // Ceiling check
             if (dy > 0.0f) {
                 int check_y = static_cast<int>(std::floor(head_y - EPS));
                 for (int bx = static_cast<int>(std::floor(pos.x - half_w + EPS));
@@ -231,7 +224,6 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
             }
         };
 
-        // Per-axis integration: only resolve the axes that actually moved.
         const float dx = velocity.linear.x * delta_time;
         if (dx != 0.0f) {
             pos.x += dx;
@@ -250,7 +242,6 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
 
         transform.position = pos;
 
-        // Optional log when we just transitioned to ground.
         if (player.on_ground && !was_on_ground && should_log_collision_debug()) {
             TraceLog(LOG_DEBUG, "[phys] on_ground entity=%u pos=(%.4f, %.4f, %.4f)",
                      static_cast<unsigned>(static_cast<entt::id_type>(entity)),

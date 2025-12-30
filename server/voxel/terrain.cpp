@@ -292,9 +292,113 @@ std::vector<Terrain::BlockModification> Terrain::get_all_modifications() const {
     std::vector<BlockModification> result;
     result.reserve(overrides_.size());
     for (const auto& [key, type] : overrides_) {
-        result.push_back({key.x, key.y, key.z, type});
+        auto stateIt = block_states_.find(key);
+        shared::voxel::BlockRuntimeState state = (stateIt != block_states_.end()) 
+            ? stateIt->second 
+            : shared::voxel::BlockRuntimeState::defaults();
+        result.push_back({key.x, key.y, key.z, type, state});
     }
     return result;
+}
+
+// ============================================================================
+// BlockRuntimeState Management
+// ============================================================================
+
+shared::voxel::BlockRuntimeState Terrain::get_block_state(int x, int y, int z) const {
+    const BlockKey key{x, y, z};
+    auto it = block_states_.find(key);
+    if (it != block_states_.end()) {
+        return it->second;
+    }
+    // Return default state based on block type
+    auto type = get_block(x, y, z);
+    if (shared::voxel::is_slab(type)) {
+        shared::voxel::BlockRuntimeState state{};
+        state.slabType = shared::voxel::get_default_slab_type(type);
+        return state;
+    }
+    return shared::voxel::BlockRuntimeState::defaults();
+}
+
+void Terrain::set_block_state(int x, int y, int z, shared::voxel::BlockRuntimeState state) {
+    const BlockKey key{x, y, z};
+    if (state == shared::voxel::BlockRuntimeState::defaults()) {
+        block_states_.erase(key);
+    } else {
+        block_states_[key] = state;
+    }
+}
+
+shared::voxel::BlockRuntimeState Terrain::compute_block_state(int x, int y, int z, 
+                                                        shared::voxel::BlockType type) const {
+    using namespace shared::voxel;
+    
+    BlockRuntimeState state{};
+    
+    // Handle slabs
+    if (is_slab(type)) {
+        state.slabType = get_default_slab_type(type);
+        return state;
+    }
+    
+    // Handle fences/walls - check neighbors for connections
+    if (uses_connections(type)) {
+        // North (-Z)
+        auto northType = get_block(x, y, z - 1);
+        state.north = can_fence_connect_to(northType);
+        
+        // South (+Z)
+        auto southType = get_block(x, y, z + 1);
+        state.south = can_fence_connect_to(southType);
+        
+        // East (+X)
+        auto eastType = get_block(x + 1, y, z);
+        state.east = can_fence_connect_to(eastType);
+        
+        // West (-X)
+        auto westType = get_block(x - 1, y, z);
+        state.west = can_fence_connect_to(westType);
+        
+        return state;
+    }
+    
+    return state;
+}
+
+std::vector<Terrain::BlockModification> Terrain::update_neighbor_states(int x, int y, int z) {
+    using namespace shared::voxel;
+    
+    std::vector<BlockModification> updates;
+    
+    // Check each horizontal neighbor
+    constexpr std::array<std::tuple<int, int>, 4> neighbors = {{
+        {0, -1},  // North
+        {0, +1},  // South
+        {+1, 0},  // East
+        {-1, 0}   // West
+    }};
+    
+    for (const auto& [dx, dz] : neighbors) {
+        int nx = x + dx;
+        int nz = z + dz;
+        
+        auto neighborType = get_block(nx, y, nz);
+        
+        // Only update blocks that use connections
+        if (!uses_connections(neighborType)) continue;
+        
+        // Compute new state for neighbor
+        auto oldState = get_block_state(nx, y, nz);
+        auto newState = compute_block_state(nx, y, nz, neighborType);
+        
+        if (oldState != newState) {
+            set_block_state(nx, y, nz, newState);
+            updates.push_back({nx, y, nz, neighborType, newState});
+        }
+    }
+    
+    return updates;
 }
 
 std::vector<std::uint8_t> Terrain::get_chunk_data(int chunkX, int chunkZ) const {

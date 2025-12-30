@@ -1,6 +1,7 @@
 #include "block_interaction.hpp"
 #include "block_registry.hpp"
 #include "../core/resources.hpp"
+#include "../../shared/voxel/block_state.hpp"
 #include <cmath>
 #include <rlgl.h>
 #include <cstdio>
@@ -39,12 +40,12 @@ static void face_to_offset(int face, int& ox, int& oy, int& oz) {
     oy = 0;
     oz = 0;
     switch (face) {
-        case 0: ox = 1; break;  // +X
-        case 1: ox = -1; break; // -X
-        case 2: oy = 1; break;  // +Y
-        case 3: oy = -1; break; // -Y
-        case 4: oz = 1; break;  // +Z
-        case 5: oz = -1; break; // -Z
+        case 0: ox = 1; break;
+        case 1: ox = -1; break;
+        case 2: oy = 1; break;
+        case 3: oy = -1; break;
+        case 4: oz = 1; break;
+        case 5: oz = -1; break;
         default: break;
     }
 }
@@ -71,7 +72,6 @@ void BlockInteraction::on_action_rejected() {
 
 void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vector3& camera_dir,
                                const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time) {
-    // Perform raycast
     target_ = raycast(world, camera_pos, camera_dir, MAX_REACH_DISTANCE);
 
     // Clear pending requests if the world already reflects the server result.
@@ -111,7 +111,6 @@ void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vec
             break_progress_ += delta_time / break_time;
             
             if (break_progress_ >= 1.0f) {
-                // Request break on the server (client must not mutate world).
                 BreakRequest req;
                 req.x = target_.block_x;
                 req.y = target_.block_y;
@@ -129,22 +128,38 @@ void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vec
         was_breaking_ = false;
     }
 
-    // Place is edge-triggered to avoid spamming while holding RMB.
     if (is_placing && !was_placing_) {
         int ox = 0, oy = 0, oz = 0;
         face_to_offset(target_.face, ox, oy, oz);
-        const int px = target_.block_x + ox;
-        const int py = target_.block_y + oy;
-        const int pz = target_.block_z + oz;
+        int px = target_.block_x + ox;
+        int py = target_.block_y + oy;
+        int pz = target_.block_z + oz;
+        
+        bool targetSameBlock = false;
+        if (shared::voxel::is_slab(target_.block_type)) {
+            auto clickedState = world.get_block_state(target_.block_x, target_.block_y, target_.block_z);
+            if (clickedState.slabType != shared::voxel::SlabType::Double) {
+                auto wouldPlace = shared::voxel::determine_slab_type_from_hit(target_.hitY, static_cast<std::uint8_t>(target_.face));
+                if ((clickedState.slabType == shared::voxel::SlabType::Bottom && wouldPlace == shared::voxel::SlabType::Top) ||
+                    (clickedState.slabType == shared::voxel::SlabType::Top && wouldPlace == shared::voxel::SlabType::Bottom)) {
+                    px = target_.block_x;
+                    py = target_.block_y;
+                    pz = target_.block_z;
+                    targetSameBlock = true;
+                }
+            }
+        }
 
         if (!pending_place_.has_value() || pending_place_->x != px || pending_place_->y != py || pending_place_->z != pz) {
             const auto existing = world.get_block(px, py, pz);
-            if (existing == static_cast<Block>(BlockType::Air)) {
+            if (existing == static_cast<Block>(BlockType::Air) || targetSameBlock) {
                 PlaceRequest req;
                 req.x = px;
                 req.y = py;
                 req.z = pz;
                 req.block_type = BlockType::Dirt;
+                req.hitY = target_.hitY;
+                req.face = static_cast<std::uint8_t>(target_.face);
                 outgoing_place_ = req;
                 pending_place_ = req;
             }
@@ -157,13 +172,11 @@ BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& 
                                               const Vector3& direction, float max_distance) const {
     BlockRaycastResult result;
     
-    // Normalize direction
     float len = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
     if (len < 0.0001f) return result;
     
     Vector3 dir = {direction.x / len, direction.y / len, direction.z / len};
     
-    // DDA algorithm for voxel traversal
     int x = static_cast<int>(std::floor(origin.x));
     int y = static_cast<int>(std::floor(origin.y));
     int z = static_cast<int>(std::floor(origin.z));
@@ -194,25 +207,34 @@ BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& 
             result.face = face;
             result.distance = distance;
             result.block_type = static_cast<BlockType>(block);
+            
+            Vector3 hitPos = {
+                origin.x + dir.x * distance,
+                origin.y + dir.y * distance,
+                origin.z + dir.z * distance
+            };
+            result.hitY = hitPos.y - static_cast<float>(y);
+            if (result.hitY < 0.0f) result.hitY = 0.0f;
+            if (result.hitY > 1.0f) result.hitY = 1.0f;
+            
             return result;
         }
         
-        // Step to next voxel
         if (t_max_x < t_max_y && t_max_x < t_max_z) {
             distance = t_max_x;
             t_max_x += t_delta_x;
             x += step_x;
-            face = (step_x > 0) ? 1 : 0;  // -X or +X face
+            face = (step_x > 0) ? 1 : 0;
         } else if (t_max_y < t_max_z) {
             distance = t_max_y;
             t_max_y += t_delta_y;
             y += step_y;
-            face = (step_y > 0) ? 3 : 2;  // -Y or +Y face
+            face = (step_y > 0) ? 3 : 2;
         } else {
             distance = t_max_z;
             t_max_z += t_delta_z;
             z += step_z;
-            face = (step_z > 0) ? 5 : 4;  // -Z or +Z face
+            face = (step_z > 0) ? 5 : 4;
         }
     }
     
@@ -223,15 +245,14 @@ float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::To
     const auto& info = BlockRegistry::instance().get_block_info(block_type);
     
     if (info.hardness < 0) {
-        return -1.0f;  // Unbreakable (bedrock)
+        return -1.0f;
     }
     
     float base_time = info.hardness;
     float mining_speed = tool.get_mining_speed();
     
-    // Check if tool meets required level
     if (tool.get_harvest_level() < info.required_tool_level) {
-        mining_speed = 1.0f;  // Use base speed if wrong tool
+        mining_speed = 1.0f;
     }
     
     return base_time / mining_speed;
@@ -255,7 +276,6 @@ void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
 
     (void)camera;
 
-    // Calculate stage (0-9)
     int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
     if (stage < 0) stage = 0;
     if (stage > 9) stage = 9;
@@ -268,7 +288,6 @@ void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
         static_cast<float>(target_.block_z) + 0.5f
     };
 
-    // Use raylib's DrawCubeTexture - slightly larger than block to avoid z-fighting
     constexpr float size = 1.002f;
     
     float x = pos.x;
@@ -286,42 +305,36 @@ void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
     rlBegin(RL_QUADS);
     rlColor4ub(255, 255, 255, 255);
     
-    // Front Face
     rlNormal3f(0.0f, 0.0f, 1.0f);
     rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
     rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
     rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
     rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
     
-    // Back Face
     rlNormal3f(0.0f, 0.0f, -1.0f);
     rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
     rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
     rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
     rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
     
-    // Top Face
     rlNormal3f(0.0f, 1.0f, 0.0f);
     rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
     rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
     rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
     rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
     
-    // Bottom Face
     rlNormal3f(0.0f, -1.0f, 0.0f);
     rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
     rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
     rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
     rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
     
-    // Right Face
     rlNormal3f(1.0f, 0.0f, 0.0f);
     rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
     rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
     rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
     rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
     
-    // Left Face
     rlNormal3f(-1.0f, 0.0f, 0.0f);
     rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
     rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);

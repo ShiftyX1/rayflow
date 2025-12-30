@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../voxel/block.hpp"
+#include "../voxel/block_state.hpp"
 
 namespace shared::proto {
 
@@ -71,6 +72,8 @@ struct TryPlaceBlock {
     int y{0};
     int z{0};
     shared::voxel::BlockType blockType{shared::voxel::BlockType::Air};
+    float hitY{0.5f};       // Y position within the clicked block (0-1) for slab placement
+    std::uint8_t face{0};   // Clicked face (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z)
 };
 
 struct TryBreakBlock {
@@ -107,6 +110,7 @@ struct BlockPlaced {
     int y{0};
     int z{0};
     shared::voxel::BlockType blockType{shared::voxel::BlockType::Air};
+    std::uint8_t stateByte{0};  // BlockState::to_byte() for connections/slab type
 };
 
 struct BlockBroken {

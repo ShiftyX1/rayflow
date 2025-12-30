@@ -18,14 +18,12 @@ void InputSystem::update_player_input(entt::registry& registry) {
     for (auto entity : view) {
         auto& input = view.get<InputState>(entity);
         
-        // Movement input (WASD)
         input.move_input = {0.0f, 0.0f};
         if (IsKeyDown(controls.move_forward)) input.move_input.y += 1.0f;
         if (IsKeyDown(controls.move_backward)) input.move_input.y -= 1.0f;
         if (IsKeyDown(controls.move_left)) input.move_input.x += 1.0f;
         if (IsKeyDown(controls.move_right)) input.move_input.x -= 1.0f;
         
-        // Normalize movement input
         float length = std::sqrt(input.move_input.x * input.move_input.x + 
                                   input.move_input.y * input.move_input.y);
         if (length > 0.0f) {
@@ -33,11 +31,9 @@ void InputSystem::update_player_input(entt::registry& registry) {
             input.move_input.y /= length;
         }
         
-        // Look input (mouse delta)
         Vector2 mouse_delta = GetMouseDelta();
         input.look_input = {mouse_delta.x, mouse_delta.y};
         
-        // Action buttons
         input.jump_pressed = IsKeyDown(controls.jump);
         input.sprint_pressed = IsKeyDown(controls.sprint);
         input.primary_action = IsMouseButtonDown(controls.primary_mouse);
@@ -53,11 +49,9 @@ void InputSystem::update_camera_look(entt::registry& registry, float delta_time)
         auto& input = view.get<InputState>(entity);
         auto& player = view.get<PlayerController>(entity);
         
-        // Apply mouse movement to camera rotation
         camera.yaw -= input.look_input.x * player.camera_sensitivity;
         camera.pitch -= input.look_input.y * player.camera_sensitivity;
         
-        // Clamp pitch to prevent camera flip
         if (camera.pitch > 89.0f) camera.pitch = 89.0f;
         if (camera.pitch < -89.0f) camera.pitch = -89.0f;
     }

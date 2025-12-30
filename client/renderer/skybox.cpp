@@ -21,11 +21,9 @@ bool Skybox::init() {
         return false;
     }
 
-    // Hook into raylib's standard shader locations so DrawModel can bind the cubemap correctly.
     shader_.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader_, "mvp");
     shader_.locs[SHADER_LOC_MAP_CUBEMAP] = GetShaderLocation(shader_, "environmentMap");
 
-    // Simple cube mesh.
     Mesh cube = GenMeshCube(1.0f, 1.0f, 1.0f);
     model_ = LoadModelFromMesh(cube);
     model_.materials[0].shader = shader_;
@@ -100,7 +98,6 @@ void Skybox::ensure_cubemap_loaded_() {
 
     loaded_kind_ = kind_;
 
-    // 1) Preferred path: panorama -> cubemap (only if supported by raylib).
     const char* pano_path = panorama_path_for_kind_(kind_);
 #ifdef CUBEMAP_LAYOUT_PANORAMA
     if (pano_path) {
@@ -122,7 +119,6 @@ void Skybox::ensure_cubemap_loaded_() {
     }
 #endif
 
-    // 2) Fallback: load pre-baked cubemap cross image (4x3). This works on older raylib versions.
     const char* cube_path = cubemap_path_for_kind_(kind_);
     if (!cube_path) {
         loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
@@ -163,7 +159,6 @@ void Skybox::draw(const Camera3D& camera) {
     rlDisableBackfaceCulling();
     rlDisableDepthMask();
 
-    // Center the skybox on camera so it doesn't appear to move.
     DrawModel(model_, camera.position, 50.0f, WHITE);
 
     rlEnableDepthMask();

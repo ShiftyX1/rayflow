@@ -10,7 +10,6 @@ namespace resources {
 
 namespace {
 
-// Detect file extension from path.
 const char* get_extension(const std::string& path) {
     auto dot = path.rfind('.');
     if (dot == std::string::npos) return "";
@@ -20,23 +19,17 @@ const char* get_extension(const std::string& path) {
 } // namespace
 
 void init() {
-    // Get executable directory as game root.
-    // Use GetApplicationDirectory() instead of current_path() so resources are found
-    // even when the app is launched by double-clicking (where cwd is user's home).
     std::filesystem::path gameDir = GetApplicationDirectory();
 
 #if RAYFLOW_USE_PAK
-    // Release mode: use .pak archives.
     shared::vfs::init(gameDir, shared::vfs::InitFlags::None);
 
-    // Mount the main assets archive.
     if (!shared::vfs::mount("assets.pak", "/")) {
         TraceLog(LOG_WARNING, "[resources] assets.pak not found, falling back to loose files");
     } else {
         TraceLog(LOG_INFO, "[resources] Mounted assets.pak (Release mode)");
     }
 #else
-    // Debug mode: loose files only.
     shared::vfs::init(gameDir, shared::vfs::InitFlags::LooseOnly);
     TraceLog(LOG_INFO, "[resources] Using loose files (Debug mode)");
 #endif
@@ -56,7 +49,6 @@ bool is_pak_mode() {
 
 Texture2D load_texture(const std::string& path) {
 #if RAYFLOW_USE_PAK
-    // Try to load from VFS (pak or loose).
     auto data = shared::vfs::read_file(path);
     if (data) {
         const char* ext = get_extension(path);
@@ -72,7 +64,6 @@ Texture2D load_texture(const std::string& path) {
     }
     return Texture2D{0};
 #else
-    // Debug mode: direct raylib load.
     return LoadTexture(path.c_str());
 #endif
 }
@@ -93,7 +84,6 @@ Image load_image(const std::string& path) {
 
 Shader load_shader(const char* vsPath, const char* fsPath) {
 #if RAYFLOW_USE_PAK
-    // Load shader source from VFS.
     std::string vsCode, fsCode;
 
     if (vsPath) {

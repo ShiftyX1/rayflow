@@ -19,7 +19,6 @@ public:
     void set_kind(shared::maps::MapTemplate::SkyboxKind kind);
     shared::maps::MapTemplate::SkyboxKind kind() const { return kind_; }
 
-    // Draw inside an active BeginMode3D/EndMode3D block.
     void draw(const Camera3D& camera);
 
     bool ready() const { return ready_; }
@@ -44,7 +43,7 @@ private:
     Model model_{};
     bool has_model_{false};
 
-    Texture2D cubemap_{}; // raylib uses Texture2D for cubemaps too
+    Texture2D cubemap_{};
 };
 
 } // namespace renderer

@@ -8,7 +8,6 @@ class Logger {
 public:
     static Logger& instance();
 
-    // Applies logging settings (level, optional file sink).
     void init(const LoggingConfig& cfg);
     void shutdown();
 

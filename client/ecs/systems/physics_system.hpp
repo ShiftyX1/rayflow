@@ -3,7 +3,6 @@
 #include "../system.hpp"
 #include "../components.hpp"
 
-// Forward declaration
 namespace voxel {
     class World;
 }

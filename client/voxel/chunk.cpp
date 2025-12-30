@@ -1,7 +1,9 @@
 #include "chunk.hpp"
 #include "block_registry.hpp"
+#include "block_model_loader.hpp"
 #include "world.hpp"
 #include "../core/config.hpp"
+#include "../../shared/voxel/block_shape.hpp"
 #include <raylib.h>
 #include <cstring>
 #include <chrono>
@@ -28,6 +30,7 @@ Chunk::~Chunk() {
 
 Chunk::Chunk(Chunk&& other) noexcept 
     : blocks_(std::move(other.blocks_))
+    , block_states_(std::move(other.block_states_))
     , world_position_(other.world_position_)
     , chunk_x_(other.chunk_x_)
     , chunk_z_(other.chunk_z_)
@@ -46,6 +49,7 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         cleanup_mesh();
         
         blocks_ = std::move(other.blocks_);
+        block_states_ = std::move(other.block_states_);
         world_position_ = other.world_position_;
         chunk_x_ = other.chunk_x_;
         chunk_z_ = other.chunk_z_;
@@ -92,11 +96,44 @@ void Chunk::set_block(int x, int y, int z, Block type) {
     needs_mesh_update_ = true;
 }
 
+shared::voxel::BlockRuntimeState Chunk::get_block_state(int x, int y, int z) const {
+    if (!is_valid_position(x, y, z)) {
+        return shared::voxel::BlockRuntimeState::defaults();
+    }
+    int idx = get_index(x, y, z);
+    auto it = block_states_.find(idx);
+    if (it != block_states_.end()) {
+        return it->second;
+    }
+    return shared::voxel::BlockRuntimeState::defaults();
+}
+
+void Chunk::set_block_state(int x, int y, int z, shared::voxel::BlockRuntimeState state) {
+    if (!is_valid_position(x, y, z)) return;
+    int idx = get_index(x, y, z);
+    if (state == shared::voxel::BlockRuntimeState::defaults()) {
+        block_states_.erase(idx);
+    } else {
+        block_states_[idx] = state;
+    }
+    needs_mesh_update_ = true;
+}
+
+void Chunk::set_block_with_state(int x, int y, int z, Block type, shared::voxel::BlockRuntimeState state) {
+    if (!is_valid_position(x, y, z)) return;
+    int idx = get_index(x, y, z);
+    blocks_[idx] = type;
+    if (state == shared::voxel::BlockRuntimeState::defaults()) {
+        block_states_.erase(idx);
+    } else {
+        block_states_[idx] = state;
+    }
+    needs_mesh_update_ = true;
+}
+
 void Chunk::generate_mesh(const World& world) {
     const auto t_total0 = std::chrono::steady_clock::now();
 
-    // MV-2/MV-3: foliage/grass recolor is temperature/humidity-driven (render-only).
-    // We use vertexColor as a tint (raylib default shader behavior), so apply the tint here.
     const float temperature = std::clamp(world.temperature(), 0.0f, 1.0f);
     const float humidity = std::clamp(world.humidity(), 0.0f, 1.0f);
     const Color grass_tint = BlockRegistry::instance().sample_grass_color(temperature, humidity);
@@ -117,8 +154,6 @@ void Chunk::generate_mesh(const World& world) {
     float tile_size = 16.0f;
     float uv_size = tile_size / atlas_size;
     
-    // Face vertex offsets (2 triangles = 6 vertices per face)
-    // Each face has 4 corners, we make 2 triangles (clockwise winding)
     static const float face_vertices[6][6][3] = {
         // +X face
         {{1,0,0}, {1,1,0}, {1,1,1}, {1,0,0}, {1,1,1}, {1,0,1}},
@@ -134,7 +169,6 @@ void Chunk::generate_mesh(const World& world) {
         {{0,0,0}, {0,1,0}, {1,1,0}, {0,0,0}, {1,1,0}, {1,0,0}}
     };
     
-    // UV coordinates for each vertex of each face (6 vertices per face)
     static const float face_uvs[6][6][2] = {
         // +X face
         {{1,1}, {1,0}, {0,0}, {1,1}, {0,0}, {0,1}},
@@ -160,8 +194,6 @@ void Chunk::generate_mesh(const World& world) {
         { 0, 0, 1}, { 0, 0,-1}
     };
 
-    // Face-local axes used for Minecraft-style smooth lighting/AO per corner.
-    // Corner order matches face_vertices quad corners (0..3) used by tri_corner_idx.
     static const int face_u[6][3] = {
         { 0, 0, 1}, { 0, 0,-1},
         { 1, 0, 0}, { 1, 0, 0},
@@ -175,16 +207,11 @@ void Chunk::generate_mesh(const World& world) {
 
     static const int tri_corner_idx[6] = {0, 1, 2, 0, 2, 3};
 
-    // Minecraft-style per-vertex AO calculation.
-    // For each corner of a face, sample 3 neighbors: side1, side2, corner.
-    // AO level = 0 (darkest) to 3 (brightest).
-    // Returns float in [0,1] range for shader use.
     auto calc_corner_ao = [&world](int wx, int wy, int wz,
                                     const int* dir,
                                     const int* u_axis,
                                     const int* v_axis,
                                     int u_sign, int v_sign) -> float {
-        // Position of the 3 neighbor blocks that affect this corner
         const int side1_x = wx + dir[0] + u_axis[0] * u_sign;
         const int side1_y = wy + dir[1] + u_axis[1] * u_sign;
         const int side1_z = wz + dir[2] + u_axis[2] * u_sign;
@@ -201,8 +228,6 @@ void Chunk::generate_mesh(const World& world) {
         const bool s2 = is_solid(static_cast<BlockType>(world.get_block(side2_x, side2_y, side2_z)));
         const bool c  = is_solid(static_cast<BlockType>(world.get_block(corner_x, corner_y, corner_z)));
 
-        // Minecraft AO formula:
-        // If both sides are solid, corner doesn't matter (fully occluded)
         int ao_level;
         if (s1 && s2) {
             ao_level = 0;
@@ -210,16 +235,172 @@ void Chunk::generate_mesh(const World& world) {
             ao_level = 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
         }
 
-        // Convert to [0,1] range with a minimum brightness
-        // ao_level 0 -> 0.2, ao_level 3 -> 1.0
         static const float ao_values[4] = { 0.2f, 0.5f, 0.75f, 1.0f };
         return ao_values[ao_level];
     };
 
-    // Corner u/v signs for each of the 4 corners of a quad
-    // Corners: 0=(-u,-v), 1=(-u,+v), 2=(+u,+v), 3=(+u,-v)
     static const int corner_u_sign[4] = { -1, -1, +1, +1 };
     static const int corner_v_sign[4] = { -1, +1, +1, -1 };
+
+    auto should_cull_model_face = [&world](int wx, int wy, int wz, int face_idx) -> bool {
+        Block neighbor = world.get_block(wx, wy, wz);
+        auto neighbor_type = static_cast<BlockType>(neighbor);
+        
+        if (is_transparent(neighbor_type)) return false;
+        
+        const auto* neighbor_model = BlockModelLoader::instance().get_model(neighbor_type);
+        if (!neighbor_model) {
+            return true;
+        }
+        
+        return neighbor_model->shape == shared::voxel::BlockShape::Full;
+    };
+
+    auto add_element_face = [&](
+        float bx, float by, float bz,
+        const shared::voxel::ModelElement& elem,
+        int face_idx,
+        BlockType block_type,
+        int wx, int wy, int wz,
+        float foliageMask,
+        Color tint
+    ) {
+        float x0 = elem.from[0] / 16.0f;
+        float y0 = elem.from[1] / 16.0f;
+        float z0 = elem.from[2] / 16.0f;
+        float x1 = elem.to[0] / 16.0f;
+        float y1 = elem.to[1] / 16.0f;
+        float z1 = elem.to[2] / 16.0f;
+
+        float fv[6][3];
+        switch (face_idx) {
+            case 0: // +X (East)
+                fv[0][0] = x1; fv[0][1] = y0; fv[0][2] = z0;
+                fv[1][0] = x1; fv[1][1] = y1; fv[1][2] = z0;
+                fv[2][0] = x1; fv[2][1] = y1; fv[2][2] = z1;
+                fv[3][0] = x1; fv[3][1] = y0; fv[3][2] = z0;
+                fv[4][0] = x1; fv[4][1] = y1; fv[4][2] = z1;
+                fv[5][0] = x1; fv[5][1] = y0; fv[5][2] = z1;
+                break;
+            case 1: // -X (West)
+                fv[0][0] = x0; fv[0][1] = y0; fv[0][2] = z1;
+                fv[1][0] = x0; fv[1][1] = y1; fv[1][2] = z1;
+                fv[2][0] = x0; fv[2][1] = y1; fv[2][2] = z0;
+                fv[3][0] = x0; fv[3][1] = y0; fv[3][2] = z1;
+                fv[4][0] = x0; fv[4][1] = y1; fv[4][2] = z0;
+                fv[5][0] = x0; fv[5][1] = y0; fv[5][2] = z0;
+                break;
+            case 2: // +Y (Up)
+                fv[0][0] = x0; fv[0][1] = y1; fv[0][2] = z0;
+                fv[1][0] = x0; fv[1][1] = y1; fv[1][2] = z1;
+                fv[2][0] = x1; fv[2][1] = y1; fv[2][2] = z1;
+                fv[3][0] = x0; fv[3][1] = y1; fv[3][2] = z0;
+                fv[4][0] = x1; fv[4][1] = y1; fv[4][2] = z1;
+                fv[5][0] = x1; fv[5][1] = y1; fv[5][2] = z0;
+                break;
+            case 3: // -Y (Down)
+                fv[0][0] = x0; fv[0][1] = y0; fv[0][2] = z1;
+                fv[1][0] = x0; fv[1][1] = y0; fv[1][2] = z0;
+                fv[2][0] = x1; fv[2][1] = y0; fv[2][2] = z0;
+                fv[3][0] = x0; fv[3][1] = y0; fv[3][2] = z1;
+                fv[4][0] = x1; fv[4][1] = y0; fv[4][2] = z0;
+                fv[5][0] = x1; fv[5][1] = y0; fv[5][2] = z1;
+                break;
+            case 4: // +Z (South)
+                fv[0][0] = x1; fv[0][1] = y0; fv[0][2] = z1;
+                fv[1][0] = x1; fv[1][1] = y1; fv[1][2] = z1;
+                fv[2][0] = x0; fv[2][1] = y1; fv[2][2] = z1;
+                fv[3][0] = x1; fv[3][1] = y0; fv[3][2] = z1;
+                fv[4][0] = x0; fv[4][1] = y1; fv[4][2] = z1;
+                fv[5][0] = x0; fv[5][1] = y0; fv[5][2] = z1;
+                break;
+            case 5: // -Z (North)
+                fv[0][0] = x0; fv[0][1] = y0; fv[0][2] = z0;
+                fv[1][0] = x0; fv[1][1] = y1; fv[1][2] = z0;
+                fv[2][0] = x1; fv[2][1] = y1; fv[2][2] = z0;
+                fv[3][0] = x0; fv[3][1] = y0; fv[3][2] = z0;
+                fv[4][0] = x1; fv[4][1] = y1; fv[4][2] = z0;
+                fv[5][0] = x1; fv[5][1] = y0; fv[5][2] = z0;
+                break;
+        }
+
+        const auto& face_data = elem.faces[face_idx];
+        float u0_norm = face_data.uv[0] / 16.0f;
+        float v0_norm = face_data.uv[1] / 16.0f;
+        float u1_norm = face_data.uv[2] / 16.0f;
+        float v1_norm = face_data.uv[3] / 16.0f;
+
+        Rectangle tex_rect = registry.get_texture_rect(block_type, face_idx);
+        float u_base = tex_rect.x / atlas_size;
+        float v_base = tex_rect.y / atlas_size;
+        
+        float u_scale = uv_size;
+        float v_scale = uv_size;
+
+        float fuv[6][2];
+        switch (face_idx) {
+            case 0: case 1: case 4: case 5: // Side faces
+                fuv[0][0] = u_base + u1_norm * u_scale; fuv[0][1] = v_base + v1_norm * v_scale;
+                fuv[1][0] = u_base + u1_norm * u_scale; fuv[1][1] = v_base + v0_norm * v_scale;
+                fuv[2][0] = u_base + u0_norm * u_scale; fuv[2][1] = v_base + v0_norm * v_scale;
+                fuv[3][0] = u_base + u1_norm * u_scale; fuv[3][1] = v_base + v1_norm * v_scale;
+                fuv[4][0] = u_base + u0_norm * u_scale; fuv[4][1] = v_base + v0_norm * v_scale;
+                fuv[5][0] = u_base + u0_norm * u_scale; fuv[5][1] = v_base + v1_norm * v_scale;
+                break;
+            case 2: // +Y (top)
+                fuv[0][0] = u_base + u0_norm * u_scale; fuv[0][1] = v_base + v0_norm * v_scale;
+                fuv[1][0] = u_base + u0_norm * u_scale; fuv[1][1] = v_base + v1_norm * v_scale;
+                fuv[2][0] = u_base + u1_norm * u_scale; fuv[2][1] = v_base + v1_norm * v_scale;
+                fuv[3][0] = u_base + u0_norm * u_scale; fuv[3][1] = v_base + v0_norm * v_scale;
+                fuv[4][0] = u_base + u1_norm * u_scale; fuv[4][1] = v_base + v1_norm * v_scale;
+                fuv[5][0] = u_base + u1_norm * u_scale; fuv[5][1] = v_base + v0_norm * v_scale;
+                break;
+            case 3: // -Y (bottom)
+                fuv[0][0] = u_base + u0_norm * u_scale; fuv[0][1] = v_base + v1_norm * v_scale;
+                fuv[1][0] = u_base + u0_norm * u_scale; fuv[1][1] = v_base + v0_norm * v_scale;
+                fuv[2][0] = u_base + u1_norm * u_scale; fuv[2][1] = v_base + v0_norm * v_scale;
+                fuv[3][0] = u_base + u0_norm * u_scale; fuv[3][1] = v_base + v1_norm * v_scale;
+                fuv[4][0] = u_base + u1_norm * u_scale; fuv[4][1] = v_base + v0_norm * v_scale;
+                fuv[5][0] = u_base + u1_norm * u_scale; fuv[5][1] = v_base + v1_norm * v_scale;
+                break;
+        }
+
+        float corner_ao[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        for (int corner = 0; corner < 4; corner++) {
+            corner_ao[corner] = calc_corner_ao(
+                wx, wy, wz,
+                face_dir[face_idx],
+                face_u[face_idx],
+                face_v[face_idx],
+                corner_u_sign[corner],
+                corner_v_sign[corner]
+            );
+        }
+
+        for (int v = 0; v < 6; v++) {
+            vertices.push_back(bx + fv[v][0]);
+            vertices.push_back(by + fv[v][1]);
+            vertices.push_back(bz + fv[v][2]);
+            
+            texcoords.push_back(fuv[v][0]);
+            texcoords.push_back(fuv[v][1]);
+
+            const int c = tri_corner_idx[v];
+            const float ao = corner_ao[c];
+
+            texcoords2.push_back(foliageMask);
+            texcoords2.push_back(ao);
+            
+            normals.push_back(face_normals[face_idx][0]);
+            normals.push_back(face_normals[face_idx][1]);
+            normals.push_back(face_normals[face_idx][2]);
+
+            colors.push_back(tint.r);
+            colors.push_back(tint.g);
+            colors.push_back(tint.b);
+            colors.push_back(255);
+        }
+    };
     
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
@@ -229,7 +410,6 @@ void Chunk::generate_mesh(const World& world) {
                 
                 auto block_type = static_cast<BlockType>(block);
 
-                // LS-1: Light is a marker-only block (no cube mesh).
                 if (block_type == BlockType::Light) {
                     light_markers_ws_.push_back(Vector3{
                         world_position_.x + static_cast<float>(x) + 0.5f,
@@ -239,87 +419,156 @@ void Chunk::generate_mesh(const World& world) {
                     continue;
                 }
                 
-                // Check each face
                 const int wx = chunk_x_ * CHUNK_WIDTH + x;
                 const int wy = y;
                 const int wz = chunk_z_ * CHUNK_DEPTH + z;
                 
-                for (int face = 0; face < 6; face++) {
-                    const int nwx = wx + face_dir[face][0];
-                    const int nwy = wy + face_dir[face][1];
-                    const int nwz = wz + face_dir[face][2];
-
-                    Block neighbor = world.get_block(nwx, nwy, nwz);
-                    if (!is_transparent(static_cast<BlockType>(neighbor))) continue;
+                float bx = world_position_.x + x;
+                float by = static_cast<float>(y);
+                float bz = world_position_.z + z;
+                
+                const auto* block_model = BlockModelLoader::instance().get_model(block_type);
+                
+                auto block_state = get_block_state(x, y, z);
+                
+                const float baseFoliageMask =
+                    (block_type == BlockType::Leaves) ? 1.0f : 0.0f;
+                const Color baseTint = (baseFoliageMask > 0.5f) ? foliage_tint : WHITE;
+                
+                if (shared::voxel::is_fence(block_type)) {
+                    auto fence_elements = shared::voxel::models::make_fence_elements(
+                        block_state.north, block_state.south, 
+                        block_state.east, block_state.west);
                     
-                    // World position of this block
-                    float bx = world_position_.x + x;
-                    float by = static_cast<float>(y);
-                    float bz = world_position_.z + z;
-                    
-                    // Get texture UV from registry
-                    Rectangle tex_rect = registry.get_texture_rect(block_type, face);
-                    float u0 = tex_rect.x / atlas_size;
-                    float v0 = tex_rect.y / atlas_size;
-
-                    // MV-2: foliage/grass recolor mask.
-                    // - Leaves: all faces
-                    // - Grass: top face only (+Y)
-                    const float foliageMask =
-                        (block_type == BlockType::Leaves) ? 1.0f :
-                        (block_type == BlockType::Grass && face == 2) ? 1.0f :
-                        0.0f;
-
-                    // Pre-compute AO for all 4 corners of this face
-                    float corner_ao[4];
-                    for (int corner = 0; corner < 4; corner++) {
-                        corner_ao[corner] = calc_corner_ao(
-                            wx, wy, wz,
-                            face_dir[face],
-                            face_u[face],
-                            face_v[face],
-                            corner_u_sign[corner],
-                            corner_v_sign[corner]
-                        );
-                    }
-                    
-                    // Add 6 vertices for this face (2 triangles)
-                    for (int v = 0; v < 6; v++) {
-                        vertices.push_back(bx + face_vertices[face][v][0]);
-                        vertices.push_back(by + face_vertices[face][v][1]);
-                        vertices.push_back(bz + face_vertices[face][v][2]);
-                        
-                        texcoords.push_back(u0 + face_uvs[face][v][0] * uv_size);
-                        texcoords.push_back(v0 + face_uvs[face][v][1] * uv_size);
-
-                        // Get AO for this vertex's corner
-                        const int c = tri_corner_idx[v];
-                        const float ao = corner_ao[c];
-
-                        texcoords2.push_back(foliageMask);
-                        texcoords2.push_back(ao);
-                        
-                        normals.push_back(face_normals[face][0]);
-                        normals.push_back(face_normals[face][1]);
-                        normals.push_back(face_normals[face][2]);
-
-                        // Use vertex color for tint (foliage/grass)
-                        unsigned char r = 255;
-                        unsigned char g = 255;
-                        unsigned char b = 255;
-
-                        // MV-2: apply temperature tint only to foliage/grass faces.
-                        if (foliageMask > 0.5f) {
-                            const Color tint = (block_type == BlockType::Grass) ? grass_tint : foliage_tint;
-                            r = tint.r;
-                            g = tint.g;
-                            b = tint.b;
+                    for (const auto& elem : fence_elements) {
+                        for (int face = 0; face < 6; face++) {
+                            if (!elem.faceEnabled[face]) continue;
+                            
+                            const int nwx = wx + face_dir[face][0];
+                            const int nwy = wy + face_dir[face][1];
+                            const int nwz = wz + face_dir[face][2];
+                            
+                            if (elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz, face)) {
+                                continue;
+                            }
+                            
+                            add_element_face(bx, by, bz, elem, face, block_type, wx, wy, wz, 0.0f, WHITE);
                         }
+                    }
+                    continue;
+                }
+                
+                if (shared::voxel::is_slab(block_type)) {
+                    auto slab_elem = shared::voxel::models::make_slab_element(block_state.slabType);
+                    
+                    for (int face = 0; face < 6; face++) {
+                        if (!slab_elem.faceEnabled[face]) continue;
+                        
+                        const int nwx = wx + face_dir[face][0];
+                        const int nwy = wy + face_dir[face][1];
+                        const int nwz = wz + face_dir[face][2];
+                        
+                        if (slab_elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz, face)) {
+                            continue;
+                        }
+                        
+                        add_element_face(bx, by, bz, slab_elem, face, block_type, wx, wy, wz, 0.0f, WHITE);
+                    }
+                    continue;
+                }
+                
+                if (block_model && block_model->has_elements() && 
+                    block_model->shape != shared::voxel::BlockShape::Full) {
+                    
+                    for (const auto& elem : block_model->elements) {
+                        for (int face = 0; face < 6; face++) {
+                            if (!elem.faceEnabled[face]) continue;
+                            
+                            const int nwx = wx + face_dir[face][0];
+                            const int nwy = wy + face_dir[face][1];
+                            const int nwz = wz + face_dir[face][2];
+                            
+                            if (elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz, face)) {
+                                continue;
+                            }
+                            
+                            float foliageMask = baseFoliageMask;
+                            if (block_type == BlockType::Grass && face == 2) {
+                                foliageMask = 1.0f;
+                            }
+                            
+                            Color tint = WHITE;
+                            if (foliageMask > 0.5f) {
+                                tint = (block_type == BlockType::Grass) ? grass_tint : foliage_tint;
+                            }
+                            
+                            add_element_face(bx, by, bz, elem, face, block_type, wx, wy, wz, foliageMask, tint);
+                        }
+                    }
+                } else {
+                    for (int face = 0; face < 6; face++) {
+                        const int nwx = wx + face_dir[face][0];
+                        const int nwy = wy + face_dir[face][1];
+                        const int nwz = wz + face_dir[face][2];
 
-                        colors.push_back(r);
-                        colors.push_back(g);
-                        colors.push_back(b);
-                        colors.push_back(255);
+                        Block neighbor = world.get_block(nwx, nwy, nwz);
+                        if (!is_transparent(static_cast<BlockType>(neighbor))) continue;
+                        
+                        Rectangle tex_rect = registry.get_texture_rect(block_type, face);
+                        float u0 = tex_rect.x / atlas_size;
+                        float v0 = tex_rect.y / atlas_size;
+
+                        const float foliageMask =
+                            (block_type == BlockType::Leaves) ? 1.0f :
+                            (block_type == BlockType::Grass && face == 2) ? 1.0f :
+                            0.0f;
+
+                        float corner_ao[4];
+                        for (int corner = 0; corner < 4; corner++) {
+                            corner_ao[corner] = calc_corner_ao(
+                                wx, wy, wz,
+                                face_dir[face],
+                                face_u[face],
+                                face_v[face],
+                                corner_u_sign[corner],
+                                corner_v_sign[corner]
+                            );
+                        }
+                        
+                        for (int v = 0; v < 6; v++) {
+                            vertices.push_back(bx + face_vertices[face][v][0]);
+                            vertices.push_back(by + face_vertices[face][v][1]);
+                            vertices.push_back(bz + face_vertices[face][v][2]);
+                            
+                            texcoords.push_back(u0 + face_uvs[face][v][0] * uv_size);
+                            texcoords.push_back(v0 + face_uvs[face][v][1] * uv_size);
+
+                            const int c = tri_corner_idx[v];
+                            const float ao = corner_ao[c];
+
+                            texcoords2.push_back(foliageMask);
+                            texcoords2.push_back(ao);
+                            
+                            normals.push_back(face_normals[face][0]);
+                            normals.push_back(face_normals[face][1]);
+                            normals.push_back(face_normals[face][2]);
+
+                            unsigned char r = 255;
+                            unsigned char g = 255;
+                            unsigned char b = 255;
+
+                            if (foliageMask > 0.5f) {
+                                const Color tint = (block_type == BlockType::Grass) ? grass_tint : foliage_tint;
+                                r = tint.r;
+                                g = tint.g;
+                                b = tint.b;
+                            }
+
+                            colors.push_back(r);
+                            colors.push_back(g);
+                            colors.push_back(b);
+                            colors.push_back(255);
+                        }
                     }
                 }
             }
@@ -347,7 +596,6 @@ void Chunk::generate_mesh(const World& world) {
     
     TraceLog(LOG_DEBUG, "Chunk (%d, %d) mesh: %zu vertices", chunk_x_, chunk_z_, vertices.size() / 3);
     
-    // Build mesh from collected data
     mesh_ = {0};
     mesh_.vertexCount = static_cast<int>(vertices.size() / 3);
     mesh_.triangleCount = mesh_.vertexCount / 3;
@@ -418,7 +666,6 @@ void Chunk::render() const {
 
 void Chunk::render(Shader shader) const {
     if (has_mesh_) {
-        // Temporarily set shader on model's material
         Model model_copy = model_;
         model_copy.materials[0].shader = shader;
         DrawModel(model_copy, {0, 0, 0}, 1.0f, WHITE);
