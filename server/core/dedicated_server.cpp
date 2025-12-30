@@ -24,7 +24,6 @@ constexpr float kGravity = 20.0f;
 constexpr float kJumpVelocity = 8.0f;
 constexpr float kEps = 1e-4f;
 constexpr float kSkin = 1e-3f;
-// Maximum height that can be auto-stepped up without jumping (like Minecraft's 0.5 block step-up)
 constexpr float kMaxStepUpHeight = 0.5f + kEps;
 
 struct SvLogCfg {
@@ -71,7 +70,6 @@ static bool check_aabb_collision(
 ) {
     if (!coll.hasCollision) return false;
     
-    // Block collision bounds in world coordinates
     float block_min_x = static_cast<float>(bx) + coll.minX;
     float block_max_x = static_cast<float>(bx) + coll.maxX;
     float block_min_y = static_cast<float>(by) + coll.minY;
@@ -79,7 +77,6 @@ static bool check_aabb_collision(
     float block_min_z = static_cast<float>(bz) + coll.minZ;
     float block_max_z = static_cast<float>(bz) + coll.maxZ;
     
-    // Player bounds
     float player_min_x = player_x - player_half_w;
     float player_max_x = player_x + player_half_w;
     float player_min_y = player_y;
@@ -87,7 +84,6 @@ static bool check_aabb_collision(
     float player_min_z = player_z - player_half_d;
     float player_max_z = player_z + player_half_d;
     
-    // Check AABB overlap in all 3 axes
     return player_min_x < block_max_x && player_max_x > block_min_x &&
            player_min_y < block_max_y && player_max_y > block_min_y &&
            player_min_z < block_max_z && player_max_z > block_min_z;
@@ -125,37 +121,29 @@ static bool check_block_collision_3d_with_state(
     return false;
 }
 
-// Check if player AABB at given Y overlaps with block's collision shape (Y-only check for full blocks)
 static bool check_block_collision_y(shared::voxel::BlockType block_type, int by, float player_y, float player_height) {
     auto coll = shared::voxel::get_collision_info(block_type);
     if (!coll.hasCollision) return false;
     
-    // For non-full XZ blocks (like fences), this simple Y check doesn't apply
     if (!shared::voxel::is_full_collision_block(block_type)) {
-        return false; // Handled by 3D check
+        return false;
     }
     
-    // Block collision bounds in world coordinates
     float block_min_y = static_cast<float>(by) + coll.minY;
     float block_max_y = static_cast<float>(by) + coll.maxY;
     
-    // Player bounds
     float player_min_y = player_y;
     float player_max_y = player_y + player_height;
     
-    // Check AABB overlap in Y
     return player_min_y < block_max_y && player_max_y > block_min_y;
 }
 
-// Get the effective ground height at a block position (top of collision shape)
 static float get_block_ground_height(shared::voxel::BlockType block_type, int by) {
     auto coll = shared::voxel::get_collision_info(block_type);
     if (!coll.hasCollision) return static_cast<float>(by);
     return static_cast<float>(by) + coll.maxY;
 }
 
-// Find the maximum obstacle height in front of the player at feet level.
-// Returns the height above player's feet (0 = no obstacle, 0.5 = half slab, 1.0+ = full block or fence).
 static float get_obstacle_step_height(
     const server::voxel::Terrain& terrain,
     float px, float py, float pz,
@@ -164,14 +152,12 @@ static float get_obstacle_step_height(
     int feet_y = fast_floor(py);
     float max_step_height = 0.0f;
     
-    // Check blocks at feet level in the player's footprint
     for (int bx = fast_floor(px - half_w + kEps); bx <= fast_floor(px + half_w - kEps); bx++) {
         for (int bz = fast_floor(pz - half_d + kEps); bz <= fast_floor(pz + half_d - kEps); bz++) {
             auto block_type = terrain.get_block(bx, feet_y, bz);
             auto coll = shared::voxel::get_collision_info(block_type);
             if (!coll.hasCollision) continue;
             
-            // Check if player overlaps with this block in XZ
             float block_min_x = static_cast<float>(bx) + coll.minX;
             float block_max_x = static_cast<float>(bx) + coll.maxX;
             float block_min_z = static_cast<float>(bz) + coll.minZ;
@@ -191,8 +177,6 @@ static float get_obstacle_step_height(
     return max_step_height;
 }
 
-// Try to step up onto blocks when moving horizontally.
-// Returns true if step-up was applied.
 static bool try_step_up(
     const server::voxel::Terrain& terrain,
     float px, float& py, float pz,
@@ -201,12 +185,10 @@ static bool try_step_up(
 ) {
     float step_height = get_obstacle_step_height(terrain, px, py, pz, half_w, half_d);
     
-    // Only step up if obstacle is low enough
     if (step_height <= 0.0f || step_height > kMaxStepUpHeight) {
         return false;
     }
     
-    // Check if there's headroom after stepping up
     float new_y = py + step_height + kSkin;
     int head_y = fast_floor(new_y + height - kEps);
     
@@ -216,25 +198,21 @@ static bool try_step_up(
             auto coll = shared::voxel::get_collision_info(block_type);
             if (!coll.hasCollision) continue;
             
-            // Check if would collide after step-up
             if (check_block_collision_3d(block_type, bx, head_y, bz, px, new_y, pz, half_w, height, half_d)) {
-                return false; // No headroom
+                return false;
             }
         }
     }
     
-    // Apply step-up
     py = new_y;
     logf(serverTick, "coll", "step-up height=%.3f new_y=%.3f", step_height, py);
     return true;
 }
 
-// Collision helpers (same logic as server.cpp, updated for non-full blocks)
 static void resolve_x(const server::voxel::Terrain& terrain, float& px, float py, float pz, 
                       float& vx, float dx) {
     if (dx == 0.0f) return;
     const float hw = kPlayerWidth * 0.5f;
-    // Check from one block below (for tall collision like fences with 1.5 height)
     int minY = fast_floor(py + kEps) - 1;
     if (minY < 0) minY = 0;
     int maxY = fast_floor(py + kPlayerHeight - kEps);
@@ -250,7 +228,7 @@ static void resolve_x(const server::voxel::Terrain& terrain, float& px, float py
                 if (check_block_collision_3d_with_state(block_type, block_state, checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
                     shared::voxel::BlockCollisionInfo boxes[5];
                     int count = shared::voxel::get_collision_boxes(block_type, block_state, boxes, 5);
-                    float block_edge = static_cast<float>(checkX) + 1.0f; // Default to full block
+                    float block_edge = static_cast<float>(checkX) + 1.0f;
                     for (int i = 0; i < count; ++i) {
                         if (check_aabb_collision(boxes[i], checkX, by, bz, px, py, pz, hw, kPlayerHeight, hw)) {
                             float edge = static_cast<float>(checkX) + boxes[i].minX;
@@ -292,7 +270,6 @@ static void resolve_z(const server::voxel::Terrain& terrain, float px, float py,
                       float& vz, float dz) {
     if (dz == 0.0f) return;
     const float hw = kPlayerWidth * 0.5f;
-    // Check from one block below (for tall collision like fences with 1.5 height)
     int minY = fast_floor(py + kEps) - 1;
     if (minY < 0) minY = 0;
     int maxY = fast_floor(py + kPlayerHeight - kEps);
@@ -351,7 +328,6 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
     const float hw = kPlayerWidth * 0.5f;
     
     if (dy <= 0.0f) {
-        // Check both the block at player's feet and one below
         for (int checkY = fast_floor(py - kEps); checkY >= fast_floor(py - 1.0f); checkY--) {
             for (int bx = fast_floor(px - hw + kEps); bx <= fast_floor(px + hw - kEps); bx++) {
                 for (int bz = fast_floor(pz - hw + kEps); bz <= fast_floor(pz + hw - kEps); bz++) {
@@ -372,7 +348,7 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
                         
                         if (!(px - hw < block_max_x && px + hw > block_min_x &&
                               pz - hw < block_max_z && pz + hw > block_min_z)) {
-                            continue; // No XZ overlap
+                            continue;
                         }
                         
                         float ground_height = static_cast<float>(checkY) + coll.maxY;
@@ -410,7 +386,7 @@ static void resolve_y(const server::voxel::Terrain& terrain, float px, float& py
                     
                     if (!(px - hw < block_max_x && px + hw > block_min_x &&
                           pz - hw < block_max_z && pz + hw > block_min_z)) {
-                        continue; // No XZ overlap
+                        continue;
                     }
                     
                     float block_bottom = static_cast<float>(checkY) + coll.minY;
@@ -461,33 +437,27 @@ static bool load_latest_rfmap(shared::maps::MapTemplate* outMap, std::filesystem
     return true;
 }
 
-// Raycast from eye position to target block.
-// Returns true if the target block is reachable (no solid blocks in the way).
 static bool raycast_hit_block(const server::voxel::Terrain& terrain,
                               float eyeX, float eyeY, float eyeZ,
                               int targetX, int targetY, int targetZ,
                               float maxDist) {
-    // Target block center
     const float tx = targetX + 0.5f;
     const float ty = targetY + 0.5f;
     const float tz = targetZ + 0.5f;
 
-    // Direction
     float dx = tx - eyeX;
     float dy = ty - eyeY;
     float dz = tz - eyeZ;
     const float dist = std::sqrt(dx*dx + dy*dy + dz*dz);
     
-    if (dist < kEps) return true;  // Already at target
-    if (dist > maxDist) return false;  // Too far
+    if (dist < kEps) return true;
+    if (dist > maxDist) return false;
 
-    // Normalize
     dx /= dist;
     dy /= dist;
     dz /= dist;
 
-    // Step through blocks using DDA-like algorithm
-    const float stepSize = 0.25f;  // Step in world units
+    const float stepSize = 0.25f;
     float t = 0.0f;
 
     while (t < dist) {
@@ -499,12 +469,10 @@ static bool raycast_hit_block(const server::voxel::Terrain& terrain,
         const int by = fast_floor(py);
         const int bz = fast_floor(pz);
 
-        // If we reached the target block, success
         if (bx == targetX && by == targetY && bz == targetZ) {
             return true;
         }
 
-        // If we hit a solid block that's not our target, fail
         if (shared::voxel::util::is_solid(terrain.get_block(bx, by, bz))) {
             return false;
         }
@@ -512,15 +480,11 @@ static bool raycast_hit_block(const server::voxel::Terrain& terrain,
         t += stepSize;
     }
 
-    // Check final position (the target itself)
     return true;
 }
 
 } // namespace
 
-// =============================================================================
-// DedicatedServer implementation
-// =============================================================================
 
 DedicatedServer::DedicatedServer(const Config& config)
     : config_(config), tickRate_(config.tickRate) {
@@ -539,7 +503,6 @@ DedicatedServer::DedicatedServer(const Config& config)
     );
     terrain_ = std::make_unique<server::voxel::Terrain>(worldSeed_);
 
-    // Try to load map template
     shared::maps::MapTemplate map;
     std::filesystem::path path;
     if (load_latest_rfmap(&map, &path)) {
@@ -573,7 +536,6 @@ DedicatedServer::~DedicatedServer() {
 bool DedicatedServer::start() {
     if (running_.load()) return false;
 
-    // Setup connection callbacks
     netServer_.onConnect = [this](auto conn) {
         handle_client_connect_(conn);
     };
@@ -630,21 +592,17 @@ void DedicatedServer::run_loop_() {
 void DedicatedServer::tick_once_() {
     serverTick_++;
 
-    // Poll network events (handles connect/disconnect via callbacks)
     netServer_.poll(0);
 
-    // Process messages from all clients
     for (auto& [playerId, client] : clients_) {
         process_client_messages_(client);
     }
 
-    // Simulate physics for all in-game clients
     const float dt = 1.0f / static_cast<float>(tickRate_);
     for (auto& [playerId, client] : clients_) {
         if (client.phase == ClientState::Phase::InGame) {
             simulate_client_(client, dt);
 
-            // Send snapshot to this client
             shared::proto::StateSnapshot snap;
             snap.serverTick = serverTick_;
             snap.playerId = client.playerId;
@@ -658,7 +616,6 @@ void DedicatedServer::tick_once_() {
         }
     }
 
-    // Process script commands
     if (scriptEngine_ && scriptEngine_->has_scripts()) {
         scriptEngine_->update(dt);
         process_script_commands_();
@@ -710,7 +667,6 @@ void DedicatedServer::process_client_messages_(ClientState& client) {
 }
 
 void DedicatedServer::handle_message_(ClientState& client, shared::proto::Message& msg) {
-    // ClientHello
     if (std::holds_alternative<shared::proto::ClientHello>(msg)) {
         const auto& hello = std::get<shared::proto::ClientHello>(msg);
         logf(serverTick_, "rx", "ClientHello from player=%u version=%u name=%s",
@@ -732,7 +688,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         return;
     }
 
-    // JoinMatch
     if (std::holds_alternative<shared::proto::JoinMatch>(msg)) {
         logf(serverTick_, "rx", "JoinMatch from player=%u", client.playerId);
 
@@ -755,10 +710,7 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         client.connection->send(ack);
         logf(serverTick_, "tx", "JoinAck playerId=%u", client.playerId);
 
-        // Send chunk data for the initial view radius around spawn (0,0)
-        // For now send a fixed radius of chunks. In the future this should be dynamic
-        // based on player position and view distance settings.
-        constexpr int INITIAL_CHUNK_RADIUS = 4;  // Send 9x9 = 81 chunks initially
+        constexpr int INITIAL_CHUNK_RADIUS = 4;
         
         int chunksSent = 0;
         for (int cz = -INITIAL_CHUNK_RADIUS; cz <= INITIAL_CHUNK_RADIUS; ++cz) {
@@ -779,26 +731,22 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         return;
     }
 
-    // InputFrame
     if (std::holds_alternative<shared::proto::InputFrame>(msg)) {
         if (client.phase != ClientState::Phase::InGame) return;
         client.lastInput = std::get<shared::proto::InputFrame>(msg);
         return;
     }
 
-    // TryBreakBlock
     if (std::holds_alternative<shared::proto::TryBreakBlock>(msg)) {
         if (client.phase != ClientState::Phase::InGame) return;
         const auto& req = std::get<shared::proto::TryBreakBlock>(msg);
 
-        // Validate range
         if (req.y < 0 || req.y >= shared::voxel::CHUNK_HEIGHT) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::Invalid};
             client.connection->send(rej);
             return;
         }
 
-        // Check reach distance
         const float eyeX = client.px;
         const float eyeY = client.py + shared::kPlayerEyeHeight;
         const float eyeZ = client.pz;
@@ -812,7 +760,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
-        // Raycast line-of-sight check
         if (!raycast_hit_block(*terrain_, eyeX, eyeY, eyeZ, req.x, req.y, req.z, shared::kBlockReachDistance)) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::NoLineOfSight};
             client.connection->send(rej);
@@ -826,7 +773,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
-        // Check if block is protected (template blocks, bedrock, etc.)
         if (!terrain_->can_player_break(req.x, req.y, req.z, cur)) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::ProtectedBlock};
             client.connection->send(rej);
@@ -842,7 +788,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         broken.z = req.z;
         broadcast_(broken);
         
-        // Update neighbor connections (fences that were connected to this block)
         auto neighborUpdates = terrain_->update_neighbor_states(req.x, req.y, req.z);
         for (const auto& update : neighborUpdates) {
             shared::proto::BlockPlaced neighborPlaced;
@@ -856,7 +801,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         return;
     }
 
-    // TryPlaceBlock
     if (std::holds_alternative<shared::proto::TryPlaceBlock>(msg)) {
         if (client.phase != ClientState::Phase::InGame) return;
         const auto& req = std::get<shared::proto::TryPlaceBlock>(msg);
@@ -880,7 +824,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
-        // Raycast line-of-sight check (must be able to see the position to place)
         if (!raycast_hit_block(*terrain_, eyeX, eyeY, eyeZ, req.x, req.y, req.z, shared::kBlockReachDistance)) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::NoLineOfSight};
             client.connection->send(rej);
@@ -890,20 +833,16 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         auto cur = terrain_->get_block(req.x, req.y, req.z);
         auto curState = terrain_->get_block_state(req.x, req.y, req.z);
         
-        // Handle slab merging: placing slab on same-category slab
         using namespace shared::voxel;
         if (is_slab(req.blockType) && is_slab(cur)) {
             SlabCategory placingCat = get_slab_category(get_base_slab_type(req.blockType));
             SlabCategory existingCat = get_slab_category(get_base_slab_type(cur));
             
             if (placingCat == existingCat && curState.slabType != SlabType::Double) {
-                // Determine where the new slab would go
                 SlabType newSlabType = determine_slab_type_from_hit(req.hitY, req.face);
                 
-                // Can merge if existing is bottom and placing top, or vice versa
                 if ((curState.slabType == SlabType::Bottom && newSlabType == SlabType::Top) ||
                     (curState.slabType == SlabType::Top && newSlabType == SlabType::Bottom)) {
-                    // Merge into full block
                     BlockType fullBlock = get_double_slab_type(placingCat);
                     terrain_->set_block(req.x, req.y, req.z, fullBlock);
                     terrain_->set_block_state(req.x, req.y, req.z, BlockRuntimeState::defaults());
@@ -920,14 +859,12 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             }
         }
         
-        // Normal placement: position must be air
         if (cur != shared::voxel::BlockType::Air) {
             shared::proto::ActionRejected rej{req.seq, shared::proto::RejectReason::Invalid};
             client.connection->send(rej);
             return;
         }
 
-        // Check collision with all players
         const float blockMinX = static_cast<float>(req.x);
         const float blockMaxX = static_cast<float>(req.x + 1);
         const float blockMinY = static_cast<float>(req.y);
@@ -947,7 +884,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             const float playerMinZ = other.pz - hw;
             const float playerMaxZ = other.pz + hw;
 
-            // AABB intersection test
             if (blockMinX < playerMaxX && blockMaxX > playerMinX &&
                 blockMinY < playerMaxY && blockMaxY > playerMinY &&
                 blockMinZ < playerMaxZ && blockMaxZ > playerMinZ) {
@@ -962,14 +898,11 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
             return;
         }
 
-        // Normalize slab types (StoneSlabTop -> StoneSlab)
         BlockType finalBlockType = get_base_slab_type(req.blockType);
         terrain_->place_player_block(req.x, req.y, req.z, finalBlockType);
         
-        // Compute block state (connections for fences, slab type for slabs)
         auto state = terrain_->compute_block_state(req.x, req.y, req.z, finalBlockType);
         
-        // For slabs: override state with placement-based top/bottom
         if (is_slab(finalBlockType)) {
             state.slabType = determine_slab_type_from_hit(req.hitY, req.face);
         }
@@ -984,7 +917,6 @@ void DedicatedServer::handle_message_(ClientState& client, shared::proto::Messag
         placed.stateByte = state.to_byte();
         broadcast_(placed);
         
-        // Update neighbor connections (fences connecting to this block)
         auto neighborUpdates = terrain_->update_neighbor_states(req.x, req.y, req.z);
         for (const auto& update : neighborUpdates) {
             shared::proto::BlockPlaced neighborPlaced;
@@ -1015,7 +947,6 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
     client.vx = rightX * moveX + forwardX * moveZ;
     client.vz = rightZ * moveX + forwardZ * moveZ;
 
-    // Jump
     const bool jumpPressed = input.jump && !client.lastJumpHeld;
     client.lastJumpHeld = input.jump;
 
@@ -1024,14 +955,12 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
         client.onGround = false;
     }
 
-    // Gravity
     if (!client.onGround) {
         client.vy -= kGravity * dt;
     } else if (client.vy < 0.0f) {
         client.vy = 0.0f;
     }
 
-    // Integrate and collide with step-up support
     const float half_w = kPlayerWidth * 0.5f;
     
     float dx = client.vx * dt;
@@ -1040,13 +969,10 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
         client.px += dx;
         resolve_x(*terrain_, client.px, client.py, client.pz, client.vx, dx);
         
-        // If we got blocked and we're on ground, try step-up
         if (client.onGround && client.px == old_px && client.vx == 0.0f) {
-            // Temporarily move to where we wanted to go
             client.px = old_px + dx;
             float step_height = get_obstacle_step_height(*terrain_, client.px, client.py, client.pz, half_w, half_w);
             if (step_height > 0.0f && step_height <= kMaxStepUpHeight) {
-                // Check headroom
                 float new_y = client.py + step_height + kSkin;
                 int head_y = fast_floor(new_y + kPlayerHeight - kEps);
                 bool has_headroom = true;
@@ -1062,11 +988,11 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
                     client.py = new_y;
                     logf(serverTick_, "coll", "step-up X height=%.3f new_y=%.3f", step_height, client.py);
                 } else {
-                    client.px = old_px; // Revert
+                    client.px = old_px;
                     client.vx = 0.0f;
                 }
             } else {
-                client.px = old_px; // Revert
+                client.px = old_px;
                 client.vx = 0.0f;
             }
         }
@@ -1078,13 +1004,10 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
         client.pz += dz;
         resolve_z(*terrain_, client.px, client.py, client.pz, client.vz, dz);
         
-        // If we got blocked and we're on ground, try step-up
         if (client.onGround && client.pz == old_pz && client.vz == 0.0f) {
-            // Temporarily move to where we wanted to go
             client.pz = old_pz + dz;
             float step_height = get_obstacle_step_height(*terrain_, client.px, client.py, client.pz, half_w, half_w);
             if (step_height > 0.0f && step_height <= kMaxStepUpHeight) {
-                // Check headroom
                 float new_y = client.py + step_height + kSkin;
                 int head_y = fast_floor(new_y + kPlayerHeight - kEps);
                 bool has_headroom = true;
@@ -1100,11 +1023,11 @@ void DedicatedServer::simulate_client_(ClientState& client, float dt) {
                     client.py = new_y;
                     logf(serverTick_, "coll", "step-up Z height=%.3f new_y=%.3f", step_height, client.py);
                 } else {
-                    client.pz = old_pz; // Revert
+                    client.pz = old_pz;
                     client.vz = 0.0f;
                 }
             } else {
-                client.pz = old_pz; // Revert
+                client.pz = old_pz;
                 client.vz = 0.0f;
             }
         }

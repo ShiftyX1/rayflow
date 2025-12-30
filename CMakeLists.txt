@@ -71,6 +71,9 @@ else()
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${RAYFLOW_ASSETS_SRC}/ui
             ${CMAKE_BINARY_DIR}/ui
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${RAYFLOW_ASSETS_SRC}/models
+            ${CMAKE_BINARY_DIR}/models
         COMMENT "Copying loose assets to build directory"
         VERBATIM
     )

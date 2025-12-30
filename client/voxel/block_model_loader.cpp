@@ -1,9 +1,7 @@
 #include "block_model_loader.hpp"
 #include "../core/resources.hpp"
+#include "vfs/vfs.hpp"
 #include <cstdio>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
 #include <raylib.h>
 
 namespace voxel {
@@ -22,11 +20,17 @@ bool BlockModelLoader::init(const std::string& models_path) {
     
     register_builtin_models();
     
-    std::filesystem::path dir(models_path);
-    if (std::filesystem::exists(dir) && std::filesystem::is_directory(dir)) {
-        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".json") {
-                auto model = load_model_file(entry.path().string());
+    // Use VFS to list and load JSON model files
+    if (shared::vfs::exists(models_path)) {
+        auto files = shared::vfs::list_dir(models_path);
+        for (const auto& file : files) {
+            // Skip directories (they end with '/')
+            if (!file.empty() && file.back() == '/') continue;
+            
+            // Check for .json extension
+            if (file.size() > 5 && file.substr(file.size() - 5) == ".json") {
+                std::string path = models_path + "/" + file;
+                auto model = load_model_file(path);
                 if (model) {
                     id_models_[model->id] = std::move(*model);
                     TraceLog(LOG_DEBUG, "[BlockModelLoader] Loaded model: %s", model->id.c_str());
@@ -457,20 +461,23 @@ JsonValue parse(const std::string& json) {
 } // namespace json_parser
 
 std::optional<BlockModel> BlockModelLoader::load_model_file(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
+    auto json_opt = shared::vfs::read_text_file(path);
+    if (!json_opt) {
         TraceLog(LOG_WARNING, "[BlockModelLoader] Failed to open: %s", path.c_str());
         return std::nullopt;
     }
     
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string json = buffer.str();
+    // Extract model ID from path (filename without .json extension)
+    std::string id;
+    auto slash_pos = path.rfind('/');
+    std::string filename = (slash_pos != std::string::npos) ? path.substr(slash_pos + 1) : path;
+    if (filename.size() > 5 && filename.substr(filename.size() - 5) == ".json") {
+        id = filename.substr(0, filename.size() - 5);
+    } else {
+        id = filename;
+    }
     
-    std::filesystem::path p(path);
-    std::string id = p.stem().string();
-    
-    return parse_model_json(json, id);
+    return parse_model_json(*json_opt, id);
 }
 
 std::optional<BlockModel> BlockModelLoader::parse_model_json(const std::string& json, const std::string& id) {

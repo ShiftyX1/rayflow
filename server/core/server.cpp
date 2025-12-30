@@ -22,7 +22,6 @@ namespace {
 
 constexpr float kDegToRad = 0.017453292519943295f;
 
-// Keep these aligned with the old client-side defaults for now.
 constexpr float kPlayerWidth = shared::kPlayerWidth;
 constexpr float kPlayerHeight = shared::kPlayerHeight;
 constexpr float kGravity = 20.0f;

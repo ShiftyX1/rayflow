@@ -195,6 +195,7 @@ The following directories are packed into `assets.pak`:
 | `shaders/` | GLSL vertex/fragment shaders |
 | `fonts/` | TTF font files |
 | `ui/` | XML layouts and CSS stylesheets |
+| `models/` | Block model JSON definitions |
 
 ## Troubleshooting
 
