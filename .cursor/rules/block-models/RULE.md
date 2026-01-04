@@ -6,10 +6,10 @@ The block model system provides a Minecraft-compatible way to define block appea
 ## Architecture
 
 ```
-shared/voxel/block_shape.hpp    ← Data structures (AABB, BlockModel, ModelElement)
-shared/voxel/block.hpp          ← BlockType enum, collision info
-client/voxel/block_model_loader.hpp/cpp ← JSON parser and model registry
-client/static/models/block/*.json       ← Model definitions
+engine/modules/voxel/block_shape.hpp        ← Data structures (AABB, BlockModel, ModelElement)
+engine/modules/voxel/block.hpp              ← BlockType enum, collision info
+games/bedwars/client/voxel/block_model_loader.hpp/cpp ← JSON parser and model registry
+games/bedwars/resources/models/block/*.json ← Model definitions
 ```
 
 ## Key Types
@@ -100,7 +100,7 @@ struct BlockModel {
 ## JSON Model Format
 
 ### Location
-`client/static/models/block/<model_id>.json`
+`games/bedwars/resources/models/block/<model_id>.json`
 
 ### Basic Structure
 ```json
@@ -298,7 +298,7 @@ Inheritance rules:
 ## Adding New Block Types
 
 ### Step 1: Add BlockType Enum
-In `shared/voxel/block.hpp`:
+In `engine/modules/voxel/block.hpp`:
 ```cpp
 enum class BlockType : std::uint8_t {
     // ...existing types...
@@ -308,14 +308,14 @@ enum class BlockType : std::uint8_t {
 ```
 
 ### Step 2: Add Collision Info
-In `shared/voxel/block.hpp` `get_collision_info()`:
+In `engine/modules/voxel/block.hpp` `get_collision_info()`:
 ```cpp
 case BlockType::MyNewBlock:
     return {0.0f, 1.0f, 0.0f, 0.5f, 0.0f, 1.0f, true};  // Example: bottom slab
 ```
 
 ### Step 3: Create JSON Model
-Create `client/static/models/block/my_new_block.json`:
+Create `games/bedwars/resources/models/block/my_new_block.json`:
 ```json
 {
     "textures": { "all": "blocks/my_texture" },
@@ -364,7 +364,7 @@ BlockModel make_fence_post();    // 4x16x4 central post
 ## Hard Rules
 
 ### Server vs Client
-- **Server** uses `get_collision_info()` from `shared/voxel/block.hpp` (hardcoded)
+- **Server** uses `get_collision_info()` from `engine/modules/voxel/block.hpp` (hardcoded)
 - **Client** uses JSON models for rendering via `BlockModelLoader`
 - Both must stay in sync for correct gameplay
 
@@ -399,11 +399,11 @@ Some blocks have multiple visual/collision states based on context:
 Block states are property combinations that determine which model variant to use.
 
 **Two separate systems exist:**
-1. `BlockRuntimeState` (in `shared/voxel/block_state.hpp`) — compact runtime representation for networking/physics
-2. JSON blockstates (in `client/static/blockstates/*.json`) — maps properties to model variants for rendering
+1. `BlockRuntimeState` (in `engine/modules/voxel/block_state.hpp`) — compact runtime representation for networking/physics
+2. JSON blockstates (in `games/bedwars/resources/blockstates/*.json`) — maps properties to model variants for rendering
 
 ```cpp
-// Runtime state for physics/networking (shared/voxel/block_state.hpp)
+// Runtime state for physics/networking (engine/modules/voxel/block_state.hpp)
 struct BlockRuntimeState {
     bool north : 1;  // Connection flags for fences/walls
     bool south : 1;
@@ -416,7 +416,7 @@ struct BlockRuntimeState {
 
 ### JSON Block State Definitions
 
-Location: `client/static/blockstates/<block_id>.json`
+Location: `games/bedwars/resources/blockstates/<block_id>.json`
 
 #### Fence Example
 ```json

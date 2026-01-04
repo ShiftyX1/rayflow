@@ -13,6 +13,19 @@ and the workflow for adding new third-party libraries.
 
 ### Directory Structure
 ```
+engine/           # Game-agnostic engine
+├── core/         # ServerEngine, ClientEngine
+├── transport/    # Network transport (ENet, Local)
+├── maps/         # Map I/O (rfmap format)
+├── modules/voxel/# Voxel engine module
+└── tools/        # Utility tools
+
+games/bedwars/    # BedWars game
+├── shared/       # Protocol, serialization
+├── server/       # Server logic
+├── client/       # Client logic
+└── app/          # Entry points
+
 cmake/
 ├── RayflowDependencies.cmake   # All external dependencies
 ├── toolchains/
@@ -56,20 +69,23 @@ Available presets:
 ### Build Targets
 
 Main targets:
-- `rayflow` — Main game client
-- `rfds` — Dedicated server (headless)
+- `bedwars` — Main game client (games/bedwars)
+- `bedwars_server` — Dedicated server (headless)
 - `map_builder` — Map editor
 
-Test targets:
-- `rayflow_tests_shared` — Shared library tests
-- `rayflow_tests_server` — Server tests
-- `rayflow_tests_client` — Client tests
-- `rayflow_tests_integration` — Integration tests
+Library targets:
+- `engine_core` — Engine core library (transport, VFS, maps)
+- `engine_client` — Engine client library (renderer, UI)
+- `engine_voxel` — Voxel module (blocks, chunks, meshing)
+- `bedwars_shared` — BedWars protocol library
+- `bedwars_server_lib` — BedWars server library
+- `bedwars_client_lib` — BedWars client library
 
 Build specific target:
 ```bash
-cmake --build --preset debug --target rayflow
-cmake --build --preset debug --target rayflow_tests_server
+cmake --build --preset debug --target bedwars
+cmake --build --preset debug --target bedwars_server
+cmake --build --preset debug --target map_builder
 ```
 
 ## Dependency Management

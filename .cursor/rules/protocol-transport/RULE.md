@@ -14,15 +14,14 @@ Client and server communicate only via an abstract transport.
 1. `LocalTransport` (single process): in-memory queues.
 2. `ENetTransport` ✅ **IMPLEMENTED**: UDP-based reliable transport using ENet library.
 
-#### ENet Transport Files
+#### Transport Files
 ```
-shared/transport/
-├── endpoint.hpp           # IEndpoint interface
-├── local_transport.hpp    # In-memory (singleplayer)
-├── enet_common.hpp/cpp    # ENet init, serialization, channel config
-├── enet_connection.hpp/cpp # IEndpoint over ENetPeer
-├── enet_server.hpp/cpp    # Multi-client server listener
-└── enet_client.hpp/cpp    # Client connector
+engine/transport/
+├── client_transport.hpp       # IClientTransport interface
+├── server_transport.hpp       # IServerTransport interface
+├── local_transport.hpp/cpp    # In-memory (singleplayer)
+├── enet_server.hpp/cpp        # Multi-client server listener
+└── enet_client.hpp/cpp        # Client connector
 ```
 
 #### ENet Channels

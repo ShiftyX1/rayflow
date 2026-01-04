@@ -8,14 +8,14 @@ All UI below must live in `ui/` and be driven by game state. UI must never own g
 
 | Change Type | Recompile? | Files to Modify |
 |-------------|------------|-----------------|
-| Layout (add/move nodes) | No | `client/static/ui/*.xml` |
-| Styles (colors, sizes) | No | `client/static/ui/*.css` |
-| Textures | No | `client/static/textures/ui/` |
-| New node type | **Yes** | `ui/runtime/xmlui/ui_document.cpp` |
-| New CSS property | **Yes** | `ui/runtime/xmlui/css_lite.cpp` |
-| New action handler | **Yes** | `ui/runtime/ui_manager.cpp` |
+| Layout (add/move nodes) | No | `games/bedwars/resources/ui/*.xml` |
+| Styles (colors, sizes) | No | `games/bedwars/resources/ui/*.css` |
+| Textures | No | `games/bedwars/resources/textures/ui/` |
+| New node type | **Yes** | `engine/ui/` |
+| New CSS property | **Yes** | `engine/ui/` |
+| New action handler | **Yes** | `games/bedwars/client/` |
 | New game screen | **Yes** | Multiple files (see guide) |
-| New view model data | **Yes** | `ui/runtime/ui_view_model.hpp` |
+| New view model data | **Yes** | `engine/ui/ui_view_model.hpp` |
 
 ## Phases
 - Phase 1 (Debug UI): use raygui for developer-only panels.
@@ -58,8 +58,8 @@ Debug output must support **two mutually exclusive modes**:
 
 ## Player UI (custom XML UI)
 - UI definition
-  - Layout lives in `client/static/ui/*.xml` and is copied to `build/ui/*.xml` on build.
-  - Styles live in `client/static/ui/*.css` and are copied to `build/ui/*.css` on build.
+  - Layout lives in `games/bedwars/resources/ui/*.xml` and is copied to `build/ui/*.xml` on build.
+  - Styles live in `games/bedwars/resources/ui/*.css` and are copied to `build/ui/*.css` on build.
   - Optional scripts later (assets/ui/*.lua) but not required for MVP.
 - Retained tree
   - UI is a persistent tree of nodes (Panel, Text, Button, Image, Row, Column, Spacer…).
@@ -121,10 +121,10 @@ Debug output must support **two mutually exclusive modes**:
   - design coordinate space + scaling policy (e.g., reference resolution 1920×1080 + scale).
 
 ## Directory structure
-- ui/debug/ — raygui panels and debug overlays
-- ui/runtime/ — custom UI core (node tree, style, layout, events)
-- ui/screens/ — screen controllers (MainMenuUI, PauseUI, HUDUI, InventoryUI)
-- client/static/ui/ — XML layouts + CSS-lite styles (source, copied to build/ui/)
+- engine/ui/debug/ — raygui panels and debug overlays
+- engine/ui/runtime/ — custom UI core (node tree, style, layout, events)
+- games/bedwars/client/ui/ — screen controllers (MainMenuUI, PauseUI, HUDUI)
+- games/bedwars/resources/ui/ — XML layouts + CSS-lite styles
 
 ## Acceptance criteria
 - Debug UI can be toggled and removed from release.

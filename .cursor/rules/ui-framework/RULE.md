@@ -37,11 +37,11 @@ This document provides comprehensive instructions for AI agents working with the
 
 | Purpose | Source Location | Build Location | Recompile Required |
 |---------|-----------------|----------------|-------------------|
-| XML layouts | `client/static/ui/*.xml` | `build/ui/*.xml` | No (copy only) |
-| CSS styles | `client/static/ui/*.css` | `build/ui/*.css` | No (copy only) |
-| UI textures | `client/static/textures/ui/` | `build/textures/ui/` | No (copy only) |
-| UI C++ runtime | `ui/runtime/` | compiled into binary | Yes |
-| Screen logic | `client/core/game.cpp` | compiled into binary | Yes |
+| XML layouts | `games/bedwars/resources/ui/*.xml` | `build/ui/*.xml` | No (copy only) |
+| CSS styles | `games/bedwars/resources/ui/*.css` | `build/ui/*.css` | No (copy only) |
+| UI textures | `games/bedwars/resources/textures/ui/` | `build/textures/ui/` | No (copy only) |
+| UI C++ runtime | `engine/ui/` | compiled into binary | Yes |
+| Screen logic | `games/bedwars/client/` | compiled into binary | Yes |
 
 ## What Can Be Changed Without Recompiling
 
@@ -222,7 +222,7 @@ color: #ffffffcc;      /* RGBA with alpha */
 
 ### Step 1: Create XML Layout
 
-Create `client/static/ui/my_screen.xml`:
+Create `games/bedwars/resources/ui/my_screen.xml`:
 
 ```xml
 <UI>
@@ -240,7 +240,7 @@ Create `client/static/ui/my_screen.xml`:
 
 ### Step 2: Create CSS Styles
 
-Create `client/static/ui/my_screen.css`:
+Create `games/bedwars/resources/ui/my_screen.css`:
 
 ```css
 .fullscreen-panel {
@@ -513,8 +513,8 @@ To expose new data, modify `UIViewModel` struct and populate it in `Game::refres
 
 ### Checklist for New UI
 
-- [ ] XML file created in `client/static/ui/`
-- [ ] CSS file created in `client/static/ui/`
+- [ ] XML file created in `games/bedwars/resources/ui/`
+- [ ] CSS file created in `games/bedwars/resources/ui/`
 - [ ] Files use correct syntax (check parser logs)
 - [ ] Actions are registered in `handle_ui_click()`
 - [ ] Screen enum added to `GameScreen` (if new screen)

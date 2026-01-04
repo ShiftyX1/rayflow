@@ -1,14 +1,40 @@
 # Rayflow Project Rules
 
-This is a voxel-based BedWars-like game with authoritative server architecture.
+This is a voxel-based BedWars-like game built on a custom game engine with authoritative server architecture.
 
-## Current Project State (Dec 2025)
+## Project Structure (Jan 2026)
+
+```
+engine/           # Game-agnostic engine (reusable across games)
+├── core/         # ServerEngine, ClientEngine, base types
+├── transport/    # IClientTransport, IServerTransport, LocalTransport, ENet
+├── ecs/          # Entity Component System
+├── maps/         # Map I/O (rfmap format)
+├── renderer/     # Rendering abstractions
+├── ui/           # UI framework (XML + CSS)
+├── vfs/          # Virtual filesystem, PAK support
+├── modules/
+│   └── voxel/    # Voxel engine module
+│       ├── block.hpp          # Block type IDs (shared)
+│       ├── chunk.hpp          # Chunk data structures
+│       └── tools/map_editor/  # Map editor tool
+└── tools/        # Utility tools (pack_assets)
+
+games/bedwars/    # BedWars game implementation
+├── shared/       # Protocol, messages, serialization
+├── server/       # Game server logic (match, rules, validation)
+├── client/       # Game client (rendering, UI, input)
+├── app/          # Entry points (client_main, server_main)
+└── resources/    # Game-specific assets (textures, models, etc.)
+```
+
+## Current Project State (Jan 2026)
 
 - Input is **server-authoritative**: client captures input and sends intent frames
 - Movement/physics is **server-authoritative**: Server runs a fixed tick loop (default 30 TPS), simulates gravity + jump + basic AABB vs voxel blocks, sends `StateSnapshot` with authoritative player position
 - Rendering is **client-only**: Client interpolates to authoritative positions and renders, does **not** run local physics for the player
 - World generation is currently a **temporary seed-based terrain placeholder** for migration
-- Shared voxel block IDs/constants live in `shared/voxel/block.hpp` and must stay stable
+- Shared voxel block IDs/constants live in `engine/modules/voxel/block.hpp` and must stay stable
 
 ## Non-negotiable Architecture Rules
 
@@ -20,19 +46,21 @@ This is a voxel-based BedWars-like game with authoritative server architecture.
 
 ## Mandatory Code Layering
 
-The codebase must be physically separated into:
-- `shared/` — protocol/types/ids/enums/serialization
-- `server/` — match/world/rules/validators/replication
-- `client/` — render/ui/input/client replica
+The codebase is physically separated into:
+- `engine/` — game-agnostic core (transport, ECS, VFS, rendering, voxel module)
+- `games/bedwars/shared/` — protocol/types/ids/enums/serialization
+- `games/bedwars/server/` — match/world/rules/validators/replication
+- `games/bedwars/client/` — render/ui/input/client replica
 
-**Boundary**: `client/` must not depend on `server/` (directly or indirectly). Only `shared/`.
+**Boundary**: `games/*/client/` must not depend on `games/*/server/` (directly or indirectly). Only `shared/` and `engine/`.
 
 ### Layering Dependencies (Hard Rules)
 
-- `client/` must never include or link against anything in `server/`
-- `server/` must not depend on `raylib` (keep it headless). No `raylib.h` includes in `server/` or `shared/`
-- Any shared IDs/enums/constants used by both sides must live in `shared/`
-- Avoid "copying" shared concepts into both client and server (e.g., block IDs). Use one shared definition
+- `games/*/client/` must never include or link against anything in `games/*/server/`
+- `games/*/server/` must not depend on `raylib` (keep it headless). No `raylib.h` includes in server or shared
+- Engine-level types (block IDs, transport interfaces) live in `engine/`
+- Game-specific protocol lives in `games/*/shared/`
+- Avoid "copying" shared concepts into both client and server; use one shared definition
 
 ## BedWars Scope Constraints
 

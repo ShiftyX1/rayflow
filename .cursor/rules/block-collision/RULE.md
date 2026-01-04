@@ -4,12 +4,11 @@
 The block collision system handles physics interactions between players and voxel blocks with non-standard shapes (slabs, fences, etc.). This system is **server-authoritative** — all collision calculations happen on the server.
 
 ## Key Files
-- `shared/voxel/block.hpp` — `BlockCollisionInfo` struct and `get_collision_info()` function
-- `shared/voxel/block_shape.hpp` — `AABB`, `BlockModel`, `BlockShape` types
-- `server/core/server.cpp` — collision resolution functions (`resolve_voxel_x/y/z`)
-- `server/core/dedicated_server.cpp` — same collision logic for dedicated server
-- `client/voxel/block_model_loader.cpp` — JSON model parsing including collision boxes
-- `client/static/models/block/*.json` — block model definitions with collision data
+- `engine/modules/voxel/block.hpp` — `BlockCollisionInfo` struct and `get_collision_info()` function
+- `engine/modules/voxel/block_shape.hpp` — `AABB`, `BlockModel`, `BlockShape` types
+- `games/bedwars/server/` — collision resolution functions (server-side)
+- `games/bedwars/client/voxel/block_model_loader.cpp` — JSON model parsing including collision boxes
+- `games/bedwars/resources/models/block/*.json` — block model definitions with collision data
 
 ## Collision Info Structure
 
@@ -71,7 +70,7 @@ This ensures blocks with tall collision (maxY > 1.0) still block the player.
 ## JSON Model Collision Format
 
 ### Location
-`client/static/models/block/<block_id>.json`
+`games/bedwars/resources/models/block/<block_id>.json`
 
 ### Collision Array Format
 ```json
@@ -128,7 +127,7 @@ constexpr float kMaxStepUpHeight = 0.5f + kEps;
 - Client only renders authoritative positions from `StateSnapshot`
 
 ### Block Registration
-- New block types with custom collision MUST be added to `get_collision_info()` in `shared/voxel/block.hpp`
+- New block types with custom collision MUST be added to `get_collision_info()` in `engine/modules/voxel/block.hpp`
 - JSON collision is parsed on client for rendering but server uses hardcoded values
 
 ### Collision Bounds
@@ -143,9 +142,9 @@ constexpr float kMaxStepUpHeight = 0.5f + kEps;
 
 ## Adding New Block Types with Custom Collision
 
-1. Add `BlockType` enum value in `shared/voxel/block.hpp`
+1. Add `BlockType` enum value in `engine/modules/voxel/block.hpp`
 2. Add collision info to `get_collision_info()` switch statement
-3. Create JSON model file in `client/static/models/block/`
+3. Create JSON model file in `games/bedwars/resources/models/block/`
 4. Add `"collision"` array to JSON with bounds in 0-16 space
 5. Register model in `BlockModelLoader::register_builtin_models()` if needed
 

@@ -149,9 +149,9 @@ auto text = shared::vfs::read_text_file("ui/styles.css");
 If adding a new directory (e.g., `sounds/`):
 
 ```cmake
-# In the rayflow_copy_assets target:
+# In games/bedwars/CMakeLists.txt, resource copy section:
 COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/client/static/sounds
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/sounds
     ${CMAKE_BINARY_DIR}/sounds
 ```
 
@@ -160,7 +160,7 @@ COMMAND ${CMAKE_COMMAND} -E copy_directory
 The `rayflow_pack_assets` target already packs all directories. If you need to exclude files:
 
 ```cmake
-# In app/pack_assets.cpp, modify the extensions filter or add exclusions
+# In engine/tools/pack_assets.cpp, modify the extensions filter or add exclusions
 ```
 
 ### 3. Add Resource Loader (Optional)

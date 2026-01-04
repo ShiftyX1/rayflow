@@ -1,30 +1,30 @@
-# Dedicated Server (RFDS) Instructions
+# Dedicated Server (BedWars Server) Instructions
 
 ## Overview
 
-**RFDS** (RayFlow Dedicated Server) is a headless server executable for hosting multiplayer matches. It runs the same `Server` logic as singleplayer but uses network transport instead of `LocalTransport`.
+**bedwars_server** is a headless server executable for hosting multiplayer matches. It runs the same `Server` logic as singleplayer but uses network transport instead of `LocalTransport`.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        rayflow.exe (Client)                     │
+│                        bedwars (Client)                         │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  Renderer   │  │  UI/Input   │  │  ClientSession          │ │
+│  │  Renderer   │  │  UI/Input   │  │  BedwarsClient          │ │
 │  └─────────────┘  └─────────────┘  │  ┌───────────────────┐  │ │
-│                                     │  │ IEndpoint (Net)   │──┼─┼──► Network
+│                                     │  │ IClientTransport  │──┼─┼──► Network
 │                                     │  └───────────────────┘  │ │
 │                                     └─────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                        rfds.exe (Dedicated Server)              │
+│                        bedwars_server (Dedicated Server)        │
 │  ┌─────────────────┐  ┌───────────────────────────────────────┐ │
-│  │  Server         │  │  NetTransport                         │ │
+│  │  Server         │  │  IServerTransport                     │ │
 │  │  ┌───────────┐  │  │  ┌─────────────────────────────────┐  │ │
-│  │  │ Match     │  │  │  │ ConnectionManager               │  │ │
-│  │  │ Terrain   │  │  │  │ - accept_connections()          │  │ │
-│  │  │ Scripts   │  │  │  │ - per-client IEndpoint          │  │ │
+│  │  │ Match     │  │  │  │ ENetServer                      │  │ │
+│  │  │ Terrain   │  │  │  │ - per-client connections        │  │ │
+│  │  │ Scripts   │  │  │  │ - broadcast/send                │  │ │
 │  │  └───────────┘  │  │  └─────────────────────────────────┘  │ │
 │  └────────┬────────┘  └──────────────────┬────────────────────┘ │
 │           │                              │                      │
@@ -36,14 +36,12 @@
 ## Current State
 
 ### Implemented ✅
-- [x] `IEndpoint` interface (`shared/transport/endpoint.hpp`)
-- [x] `LocalTransport` for singleplayer (`shared/transport/local_transport.hpp`)
-- [x] `Server` class with tick loop (`server/core/server.hpp`)
-- [x] Protocol messages (`shared/protocol/messages.hpp`)
-- [x] `ScriptEngine` for map scripts (`server/scripting/`)
-- [x] **ENet Transport** (`shared/transport/enet_*.hpp/cpp`) — Phase 1 complete
-- [x] **DedicatedServer** (`server/core/dedicated_server.hpp/cpp`) — multi-client support
-- [x] **rfds executable** (`app/dedicated_server_main.cpp`) — headless server
+- [x] `IClientTransport` / `IServerTransport` interfaces (`engine/transport/`)
+- [x] `LocalTransport` for singleplayer (`engine/transport/local_transport.hpp`)
+- [x] `Server` class with tick loop (`games/bedwars/server/`)
+- [x] Protocol messages (`games/bedwars/shared/protocol/`)
+- [x] **ENet Transport** (`engine/transport/enet_*.hpp/cpp`) — native ENet integration
+- [x] **bedwars_server executable** (`games/bedwars/app/server_main.cpp`) — headless server
 - [x] **Client --connect** flag for network mode
 
 ### Not Implemented 🔴
@@ -57,22 +55,23 @@
 
 ### Phase 1: Network Transport ✅ COMPLETE
 
-**Goal**: Replace `LocalTransport` with network-capable transport.
+**Goal**: Engine-level transport abstraction with ENet implementation.
 
 #### File Structure
 ```
-shared/transport/
-├── endpoint.hpp              # IEndpoint interface (exists)
-├── local_transport.hpp/cpp   # In-memory queues (exists)
-├── enet_transport.hpp/cpp    # ENet-based transport [NEW]
-├── enet_server.hpp/cpp       # Server connection manager [NEW]
-├── enet_client.hpp/cpp       # Client connector [NEW]
-└── enet_common.hpp           # Shared ENet utilities [NEW]
+engine/transport/
+├── client_transport.hpp      # IClientTransport interface
+├── server_transport.hpp      # IServerTransport interface
+├── local_transport.hpp/cpp   # In-memory queues (singleplayer)
+├── enet_server.hpp/cpp       # ENet server implementation
+└── enet_client.hpp/cpp       # ENet client implementation
 
-app/
-├── main.cpp                  # Client entry (exists)
-├── dedicated_server_main.cpp # RFDS entry [NEW]
-└── ...
+games/bedwars/
+├── app/
+│   ├── client_main.cpp       # Client entry
+│   └── server_main.cpp       # Server entry
+├── server/                   # Server logic
+└── client/                   # Client logic
 ```
 
 #### Why ENet
@@ -105,13 +104,13 @@ enum class ENetChannel : uint8_t {
 #### ENet Transport Design
 
 ```cpp
-// shared/transport/enet_common.hpp
+// engine/transport/enet_server.hpp example
 
 #include <enet/enet.h>
 #include <memory>
 #include <string>
 
-namespace shared::transport {
+namespace engine::transport {
 
 // RAII wrapper for ENet initialization
 class ENetInitializer {
@@ -131,13 +130,13 @@ bool deserialize_message(const uint8_t* data, size_t size, proto::Message& outMs
 uint32_t get_packet_flags(proto::MessageType type);
 uint8_t get_channel(proto::MessageType type);
 
-} // namespace shared::transport
+} // namespace engine::transport
 ```
 
 ```cpp
-// shared/transport/enet_transport.hpp
+// engine/transport/ example
 
-namespace shared::transport {
+namespace engine::transport {
 
 // Single peer connection (implements IEndpoint)
 class ENetConnection : public IEndpoint {
@@ -173,13 +172,13 @@ private:
     uint64_t bytesRecv_{0};
 };
 
-} // namespace shared::transport
+} // namespace engine::transport
 ```
 
 ```cpp
 // shared/transport/enet_server.hpp
 
-namespace shared::transport {
+namespace engine::transport {
 
 class ENetServer {
 public:
@@ -215,13 +214,13 @@ private:
     bool running_{false};
 };
 
-} // namespace shared::transport
+} // namespace engine::transport
 ```
 
 ```cpp
 // shared/transport/enet_client.hpp
 
-namespace shared::transport {
+namespace engine::transport {
 
 class ENetClient {
 public:
@@ -249,7 +248,7 @@ private:
     bool connected_{false};
 };
 
-} // namespace shared::transport
+} // namespace engine::transport
 ```
 
 #### Implementation Details
@@ -324,11 +323,10 @@ void ENetServer::broadcast(const proto::Message& msg) {
 #### Entry Point
 
 ```cpp
-// app/dedicated_server_main.cpp
+// games/bedwars/app/server_main.cpp
 
-#include "server/core/server.hpp"
-#include "shared/transport/enet_server.hpp"
-#include "shared/transport/enet_common.hpp"
+#include "games/bedwars/server/server.hpp"
+#include "engine/transport/enet_server.hpp"
 
 #include <csignal>
 #include <iostream>
@@ -351,10 +349,10 @@ int main(int argc, char* argv[]) {
     RFDSConfig config = parse_args(argc, argv);
     
     // Initialize ENet (RAII)
-    shared::transport::ENetInitializer enetInit;
+    engine::transport::ENetInitializer enetInit;
     
     // Create network server
-    shared::transport::ENetServer netServer;
+    engine::transport::ENetServer netServer;
     if (!netServer.start(config.port, config.maxPlayers)) {
         std::cerr << "Failed to start on port " << config.port << std::endl;
         return 1;

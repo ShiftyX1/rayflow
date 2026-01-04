@@ -10,7 +10,7 @@ Provide a **separate tool** ("Map Editor") where a user can fly in Creative mode
   - The editor is not a special offline codepath that bypasses validation.
   - The editor still uses the same transport abstraction (LocalTransport offline; NetTransport later).
 - **No persistent worlds:** maps are templates, not saves. Match reset re-instantiates from the template.
-- **Server headless:** map compilation/export must not require raylib in `server/`.
+- **Server headless:** map compilation/export must not require raylib in `games/*/server/`.
 - **Client does not mutate authoritative world directly:** editor client sends intents; server applies changes.
 
 ## Map template definition
@@ -25,7 +25,7 @@ A map template is an asset that can be instantiated into an authoritative match.
   - The world is finite to this chunk AABB; outside it is treated as void/air (plus a kill/void rule handled by server).
 - Block data is **sparse** (do not store air):
   - Store only non-Air blocks.
-  - Block type IDs must be from `shared/voxel/block.hpp`.
+  - Block type IDs must be from `engine/modules/voxel/block.hpp`.
 - Protection metadata:
   - Which blocks are part of the template (protected)
   - Optional allow-list for breakable template blocks
@@ -89,9 +89,9 @@ Rules:
 - All commands are server-validated.
 - Server logs accept/reject with reasons.
 
-## Tooling layout (recommended)
-- Add a separate executable target (e.g., `rayflow_map_editor`) under `app/`.
-- It links client + server like the current main app does, but uses:
+## Tooling layout
+- Map editor executable (`map_builder`) is located at `engine/modules/voxel/tools/map_editor/`.
+- It links engine_client + bedwars_server and uses:
   - LocalTransport
   - Server "editor mode" configuration
   - Editor UI screens
@@ -141,7 +141,7 @@ Maps must carry **visual-only** environment settings that affect rendering in bo
 - The Map Editor must not directly write files as truth; settings are exported by the server as part of `.rfmap`.
 
 ### Data model (required)
-`shared::maps::MapTemplate` must include a `VisualSettings` struct with at minimum:
+`bedwars::maps::MapTemplate` must include a `VisualSettings` struct with at minimum:
 - `skyboxKind` enum (uint8)
   - `0 = None`, `1 = Day`, `2 = Night` (MV-1)
 - `timeOfDayHours` (float32, range [0, 24])
@@ -223,7 +223,7 @@ Runtime export location (MT-1):
 - Filename convention (required): `maps/<mapId>_v<version>.rfmap`.
 
 ## Non-acceptance
-- Any editor that directly mutates `server::World` from client code without transport.
-- Any editor that depends on raylib in `server/`.
+- Any editor that directly mutates `bedwars::server::World` from client code without transport.
+- Any editor that depends on raylib in `games/*/server/`.
 - Any design that turns templates into persistent world saves.
 

@@ -12,7 +12,7 @@ Each rule is in its own directory with a `RULE.md` file:
 ├── architecture/       # Authoritative server + thin client
 ├── protocol-transport/ # Transport and protocol specs
 ├── server-simulation/  # Server tick loop, validation, determinism
-├── dedicated-server/   # RFDS dedicated server implementation
+├── dedicated-server/   # bedwars_server dedicated server implementation
 ├── scripting/          # Lua scripting system (two-tier: user + engine)
 ├── comments/           # Commenting conventions
 ├── bedwars-gameplay/   # BedWars gameplay systems
@@ -20,6 +20,8 @@ Each rule is in its own directory with a `RULE.md` file:
 ├── lighting-minecraft/ # Minecraft-style 0..15 lighting
 ├── lighting-baked/     # Baked lighting (legacy spec)
 ├── map-editor/         # Map templates and editor tool
+├── block-collision/    # Block collision system (slabs, fences, step-up)
+├── block-models/       # Block model JSON format
 ├── testing/            # Testing guidelines
 ├── gui/                # GUI approach overview
 ├── ui-framework/       # UI framework details for AI agents

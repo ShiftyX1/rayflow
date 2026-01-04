@@ -15,9 +15,9 @@ Those documents may remain as optional/legacy renderer notes, but their *lightin
 
 ## Hard constraints (must not break)
 - **Layering:**
-  - `client/` may compute lighting for rendering, but it must be based only on replicated/authoritative block state.
+  - `games/*/client/` may compute lighting for rendering, but it must be based only on replicated/authoritative block state.
   - If lighting ever affects gameplay validation/rules, the **server** must compute it.
-- **Server headless:** no raylib in `server/` or `shared/`.
+- **Server headless:** no raylib in `games/*/server/` or `games/*/shared/`.
 - **Determinism:** given the same block grid + lighting parameters, lighting results must be identical.
 - **No allocations in hot server tick paths:** any server-side lighting updates must reuse buffers/queues.
 

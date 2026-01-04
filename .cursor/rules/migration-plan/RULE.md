@@ -1,11 +1,11 @@
 # Migration plan (mandatory stages)
 
-## Stage A — Boundary
-- Create `shared/` and move shared types/enums/protocol there.
+## Stage A — Boundary (✅ COMPLETE)
+- Create `engine/` + `games/bedwars/shared/` and move shared types/enums/protocol there.
 - Remove direct calls from client into game logic; replace with sending commands via transport.
 
 Done when:
-- Client builds without importing `server/`.
+- Client builds without importing `games/*/server/`.
 
 ## Stage B — Server match loop
 - Implement server loop: tick, command queue, snapshot/event output.
@@ -46,7 +46,7 @@ Done when:
 ## Acceptance checklist
 1. Offline match runs via `LocalTransport`.
 2. Any world change happens only after server confirmation.
-3. All game rules live in `server/` only.
+3. All game rules live in `games/*/server/` only.
 4. Protocol has versioning and clear rejection reasons.
 5. Logs exist on both sides (send/receive/apply).
 

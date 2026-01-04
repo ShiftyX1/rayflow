@@ -67,7 +67,13 @@
             "world.h": "c",
             "block_registry.h": "c",
             "math.h": "c",
-            "block_interaction.h": "c"
+            "block_interaction.h": "c",
+            "string": "cpp",
+            "span": "cpp",
+            "algorithm": "cpp",
+            "cstdint": "cpp",
+            "iostream": "cpp",
+            "vector": "cpp"
         }
     }
 }

@@ -1,35 +1,57 @@
 
 # Copilot system instructions for this project
 
-This repository is a voxel-based BedWars-like game.
+This repository is a voxel-based BedWars-like game built on a custom game engine.
 
-## Current project state (Dec 2025)
+## Project structure (Jan 2026)
+
+The codebase is organized into two main directories:
+
+```
+engine/           # Game-agnostic engine (reusable across games)
+├── core/         # ServerEngine, ClientEngine, base types
+├── transport/    # IClientTransport, IServerTransport, LocalTransport, ENet
+├── ecs/          # Entity Component System
+├── maps/         # Map I/O (rfmap format)
+├── renderer/     # Rendering abstractions
+├── ui/           # UI framework (XML + CSS)
+├── vfs/          # Virtual filesystem, PAK support
+├── modules/
+│   └── voxel/    # Voxel engine module
+│       ├── block.hpp          # Block type IDs (shared)
+│       ├── chunk.hpp          # Chunk data structures
+│       └── tools/map_editor/  # Map editor tool
+└── tools/        # Utility tools (pack_assets)
+
+games/bedwars/    # BedWars game implementation
+├── shared/       # Protocol, messages, serialization
+├── server/       # Game server logic (match, rules, validation)
+├── client/       # Game client (rendering, UI, input)
+├── app/          # Entry points (client_main, server_main)
+└── resources/    # Game-specific assets (textures, models, etc.)
+```
+
+## Current project state (Jan 2026)
 - Input is **server-authoritative**: client captures input and sends intent frames.
 - Movement/physics is **server-authoritative**:
 	- Server runs a fixed tick loop (default 30 TPS).
 	- Server simulates gravity + jump + basic AABB vs voxel blocks.
 	- Server sends `StateSnapshot` with authoritative player position.
 - **Multiplayer networking is implemented**:
-	- `rfds` (RayFlow Dedicated Server) — headless multi-client server using ENet.
+	- `bedwars_server` — headless multi-client server using ENet.
 	- Client connects via `--connect host:port` flag.
-	- ENet transport in `shared/transport/enet_*.hpp/cpp`.
-	- `DedicatedServer` class in `server/core/dedicated_server.hpp/cpp`.
-	- Singleplayer still uses `LocalTransport` (same protocol).
+	- ENet transport in `engine/transport/enet_*.hpp/cpp`.
+	- Singleplayer uses `LocalTransport` (same protocol).
 - Rendering is **client-only**:
 	- Client interpolates to authoritative positions and renders.
 	- Client does **not** run local physics for the player.
-	- Block break overlay uses separate textures (`textures/destroy_stages/destroy_stage_*.png`).
-	- `BlockInteraction` manages raycasting, break progress, and overlay rendering.
-	- Player HUD is a custom retained-mode UI (XML + CSS-lite) rendered via raylib:
-		- Runtime lives in `ui/runtime/xmlui/` and uses `tinyxml2`.
-		- HUD loads from `ui/hud.xml` + `ui/hud.css` (copied from `client/static/ui/` into `build/ui/`).
-		- HP bar is currently implemented as a `HealthBar` node using textures in `textures/ui/health_bar/`.
-		- `UIViewModel::player.health/max_health` exist for HUD; currently filled with a temporary placeholder.
+	- Block break overlay uses separate textures.
+	- Player HUD is a custom retained-mode UI (XML + CSS-lite) rendered via raylib.
 - World generation is currently a **temporary seed-based terrain placeholder** for migration:
 	- Server chooses a `worldSeed` and includes it in `ServerHello`.
 	- Client uses that seed to render the same terrain as the server collides against.
 	- This is *not* the final BedWars map system (see scope constraints below).
-- Shared voxel block IDs/constants live in `shared/voxel/block.hpp` and must stay stable.
+- Shared voxel block IDs/constants live in `engine/modules/voxel/block.hpp` and must stay stable.
 
 ## Non-negotiable architecture rules
 1. Authoritative server + thin client.
@@ -42,12 +64,13 @@ This repository is a voxel-based BedWars-like game.
 5. Do not add prediction/lag compensation until the refactor reaches Stage C.
 
 ## Mandatory code layering
-The codebase must be physically separated into:
-- shared/  (protocol/types/ids/enums/serialization)
-- server/  (match/world/rules/validators/replication)
-- client/  (render/ui/input/client replica)
+The codebase is physically separated into:
+- `engine/` — game-agnostic core (transport, ECS, VFS, rendering abstractions, voxel module)
+- `games/bedwars/shared/` — protocol/types/ids/enums/serialization for BedWars
+- `games/bedwars/server/` — match/world/rules/validators/replication
+- `games/bedwars/client/` — render/ui/input/client replica
 
-Boundary: client/ must not depend on server/ (directly or indirectly). Only shared/.
+Boundary: `games/*/client/` must not depend on `games/*/server/` (directly or indirectly). Only `shared/` and `engine/`.
 
 ## BedWars scope constraints
 - No infinite procedural world, no persistent world saves.
@@ -59,10 +82,11 @@ Note: seed-based procedural terrain is allowed only as a temporary migration aid
 ## Strict rules for future code (extensibility + performance)
 
 ### Layering + dependencies (hard)
-- `client/` must never include or link against anything in `server/`.
-- `server/` must not depend on `raylib` (keep it headless). No `raylib.h` includes in `server/` or `shared/`.
-- Any shared IDs/enums/constants used by both sides must live in `shared/`.
-- Avoid “copying” shared concepts into both client and server (e.g., block IDs). Use one shared definition.
+- `games/*/client/` must never include or link against anything in `games/*/server/`.
+- `games/*/server/` must not depend on `raylib` (keep it headless). No `raylib.h` includes in server or shared code.
+- Any shared IDs/enums/constants used by both sides must live in `games/*/shared/` or `engine/`.
+- Engine-level types (block IDs, transport interfaces) live in `engine/`.
+- Game-specific protocol lives in `games/*/shared/`.
 
 ### Server tick performance (hard)
 - No allocations in the hot tick path: avoid per-tick `new`, `std::vector` growth, `std::string` construction.

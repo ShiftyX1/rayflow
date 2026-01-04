@@ -30,6 +30,8 @@ CTestTestfile.cmake
 DartConfiguration.tcl
 Testing/
 
+rayflow-cli/
+
 # CMake Presets (user-specific overrides)
 CMakeUserPresets.json
 rfpak_explorer/

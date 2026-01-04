@@ -12,7 +12,7 @@ Static lighting is used to make maps look good with predictable performance, ind
 - **Server-authoritative world:** baked lighting must not affect gameplay rules, validation, hit checks, block protection, etc.
 - **Layering:**
   - Baking/offline tooling may live outside runtime layers (new tool target), but runtime simulation remains server-owned.
-  - `server/` must remain headless (no raylib).
+  - `games/*/server/` must remain headless (no raylib).
 - **No persistence creep:** baked lighting data is part of the map template, not a live world save.
 - **Deterministic:** given the same map template + bake settings, the output must be reproducible.
 
