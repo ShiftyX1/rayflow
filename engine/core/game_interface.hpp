@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// Game Interface - Engine <-> Game communication contracts
+// Defines IGameServer, IGameClient and engine service interfaces.
+// =============================================================================
+
 #include "types.hpp"
 
 #include <entt/entt.hpp>

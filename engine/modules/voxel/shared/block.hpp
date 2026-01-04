@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// Block Types and Properties - Shared voxel definitions
+// Block IDs and properties shared between client/server. Append-only enum.
+// =============================================================================
+
 #include <cstddef>
 #include <cstdint>
 
@@ -188,13 +193,13 @@ constexpr BlockType get_base_slab_type(BlockType type) {
 }
 
 // Check if a block is a bottom slab (occupies lower half)
-// DEPRECATED: Use BlockRuntimeState.slabType instead
+[[deprecated("Use BlockRuntimeState.slabType instead")]]
 constexpr bool is_bottom_slab(BlockType type) {
     return type == BlockType::StoneSlab || type == BlockType::WoodSlab;
 }
 
 // Check if a block is a top slab (occupies upper half)
-// DEPRECATED: Use BlockRuntimeState.slabType instead
+[[deprecated("Use BlockRuntimeState.slabType instead")]]
 constexpr bool is_top_slab(BlockType type) {
     return type == BlockType::StoneSlabTop || type == BlockType::WoodSlabTop;
 }

@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// ClientEngine - Full-featured voxel game client runner
+// Manages window, input, rendering, and runs IGameClient frame loop.
+// =============================================================================
+
 #include "game_interface.hpp"
 #include "../transport/transport.hpp"
 

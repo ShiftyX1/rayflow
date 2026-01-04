@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// Engine Transport - Raw byte transport interfaces
+// Provides IClientTransport and IServerTransport for network abstraction.
+// =============================================================================
+
 #include <cstdint>
 #include <functional>
 #include <span>
@@ -7,21 +12,14 @@
 
 namespace engine::transport {
 
-// ============================================================================
-// ITransport - Raw byte transport interface
-// ============================================================================
-
 /// Callback for received data.
-/// @param data Raw bytes received.
 using OnReceiveCallback = std::function<void(std::span<const std::uint8_t> data)>;
 
 /// Callback for connection events.
 using OnConnectCallback = std::function<void()>;
 using OnDisconnectCallback = std::function<void()>;
 
-// ============================================================================
-// IClientTransport - Client-side transport
-// ============================================================================
+// --- Client Transport ---
 
 class IClientTransport {
 public:
@@ -49,9 +47,7 @@ public:
     OnDisconnectCallback onDisconnect;
 };
 
-// ============================================================================
-// IServerTransport - Server-side transport
-// ============================================================================
+// --- Server Transport ---
 
 using ClientId = std::uint32_t;
 static constexpr ClientId kInvalidClientId = 0;

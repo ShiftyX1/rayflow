@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// Engine VFS - Virtual File System
+// Abstracts file access with support for loose files and PAK archives.
+// =============================================================================
+
 #include <cstdint>
 #include <filesystem>
 #include <optional>

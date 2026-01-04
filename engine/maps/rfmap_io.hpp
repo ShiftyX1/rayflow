@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// Map I/O - RFMAP format reader/writer
+// Load/save map templates in the engine's binary map format.
+// =============================================================================
+
 #include "engine/modules/voxel/shared/block.hpp"
 #include "engine/core/scripting/script_types.hpp"
 

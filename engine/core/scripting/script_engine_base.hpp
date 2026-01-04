@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// ScriptEngineBase - Sandboxed Lua scripting infrastructure
+// Games inherit and implement register_game_api() for their API.
+// =============================================================================
+
 #include "lua_state.hpp"
 #include "sandbox.hpp"
 #include "script_types.hpp"

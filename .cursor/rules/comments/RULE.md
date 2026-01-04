@@ -6,35 +6,67 @@
 - Document **intent, constraints, invariants, and non-obvious tradeoffs**.
 
 ## Language
-- Use **English** for code comments and docstrings (matches existing codebase + protocol/docs).
+- Use **English** for code comments and docstrings.
 
-## Where comments are allowed/required
+## Comment Styles
+
+### File Header (engine public API)
+For key engine headers that define public interfaces:
+```cpp
+// =============================================================================
+// ComponentName - Brief one-line description
+// Second line if needed for context.
+// =============================================================================
+```
+
+### Section Dividers (within files)
+For grouping related code within a file:
+```cpp
+// --- Section Name ---
+```
+
+### Doxygen (public API methods)
+```cpp
+/// Brief description of the method.
+/// @param name Description (only when non-obvious).
+/// @return Description (only when non-obvious).
+virtual void send(std::span<const std::uint8_t> data) = 0;
+```
+
+### Inline Comments
+```cpp
+// NOTE: Explanation of non-obvious behavior
+// TODO(area): Tracked follow-up task
+// HOTPATH: No allocations allowed here
+```
+
+## Where comments are required
 
 ### Required
-- Public APIs in `shared/` (protocol types, serialization, IDs/enums): brief Doxygen-style comments.
-- Server validators and rules where a check is non-obvious (e.g., anti-cheat constraints, bounds, template protection): short intent comments.
-- Any non-trivial algorithm (noise/shuffle, hashing, collision resolution): one short summary comment + key invariants.
+- Public API interfaces in `engine/` — file header + Doxygen on methods
+- Game protocol types in `games/*/shared/` — brief Doxygen
+- Server validators with non-obvious checks — short intent comment
+- Non-trivial algorithms — summary + key invariants
 
 ### Allowed
-- `// NOTE:` for subtle behavior or caveats.
-- `// TODO(owner|area): ...` for tracked follow-ups.
-- `// FIXME:` for known bugs with a clear symptom.
-- `// HOTPATH:` to mark tick-critical code where allocations/logging are prohibited.
+- `// NOTE:` for subtle behavior or caveats
+- `// TODO(area):` for tracked follow-ups (with owner/area)
+- `// FIXME:` for known bugs with clear symptom
+- `// HOTPATH:` for tick-critical code
 
 ### Avoid
-- Comments that restate the code ("increment i", "loop over blocks").
-- Large blocks of prose inside `.cpp`.
-- Commented-out code.
+- Comments that restate the code ("increment i", "loop over blocks")
+- Large prose blocks inside `.cpp`
+- Commented-out code
+- `// DEPRECATED:` comments — use `[[deprecated("reason")]]` attribute instead
 
-## Style
-- Prefer `//` for single-line comments.
-- Use Doxygen blocks only for public-facing declarations:
-  - `/** Brief summary. */`
-  - `@param`, `@return` only when it adds value.
-- Keep line length reasonable (~100).
-- Keep comments **close to the thing they describe**.
+## Style Rules
+- Prefer `//` for single-line, `///` for Doxygen
+- Keep line length ~100 chars
+- Keep comments close to the thing they describe
+- Remove comments when code becomes self-explanatory
 
-## Determinism & Simulation rules (comment policy)
-- If code touches determinism-sensitive behavior (RNG, time, ordering), add a short `// NOTE:` explaining the invariant.
-- Never introduce `std::rand`/`std::srand` in simulation; if changing RNG, comment that it must remain deterministic and locally seeded.
+## Determinism Notes
+- If code touches determinism (RNG, time, ordering), add `// NOTE:` explaining invariant
+- Never use `std::rand`/`std::srand` in simulation
 

@@ -1,5 +1,10 @@
 #pragma once
 
+// =============================================================================
+// ServerEngine - Fixed tick-rate game server runner
+// Runs IGameServer with deterministic tick loop and transport integration.
+// =============================================================================
+
 #include "game_interface.hpp"
 #include "../transport/transport.hpp"
 

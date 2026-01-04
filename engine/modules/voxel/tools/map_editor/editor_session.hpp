@@ -1,7 +1,8 @@
 #pragma once
 
-// EditorSession - Direct engine transport client for map editor
-// Replaces legacy ClientSession by using bedwars protocol directly.
+// =============================================================================
+// EditorSession - Map editor client using engine transport directly
+// =============================================================================
 
 #include <engine/transport/transport.hpp>
 #include <games/bedwars/shared/protocol/messages.hpp>
@@ -20,7 +21,6 @@ class EditorSession {
 public:
     explicit EditorSession(std::shared_ptr<engine::transport::IClientTransport> transport);
 
-    /// Start handshake with server.
     void start_handshake(const std::string& clientName = "MapEditor");
     
     /// Poll for incoming messages. Call every frame.
