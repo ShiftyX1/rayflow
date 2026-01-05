@@ -29,7 +29,7 @@ target_link_libraries(bedwars_shared PUBLIC engine_core)
 # =============================================================================
 # BedWars Server Library
 # =============================================================================
-add_library(bedwars_server STATIC
+add_library(bedwars_server_lib STATIC
     server/bedwars_server.hpp
     server/bedwars_server.cpp
     
@@ -58,55 +58,53 @@ add_library(bedwars_server STATIC
     server/game/game_state.cpp
 )
 
-target_include_directories(bedwars_server PUBLIC
+target_include_directories(bedwars_server_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}
 )
 
 # Link with engine_core (no more server_lib dependency)
-target_link_libraries(bedwars_server PUBLIC bedwars_shared engine_core)
+target_link_libraries(bedwars_server_lib PUBLIC bedwars_shared engine_core)
 
 # =============================================================================
 # BedWars Client Library
 # =============================================================================
-add_library(bedwars_client STATIC
+add_library(bedwars_client_lib STATIC
     client/bedwars_client.hpp
     client/bedwars_client.cpp
 )
 
-target_include_directories(bedwars_client PUBLIC 
+target_include_directories(bedwars_client_lib PUBLIC 
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/engine
 )
 
-target_link_libraries(bedwars_client PUBLIC bedwars_shared engine_client engine_ui engine_voxel)
+target_link_libraries(bedwars_client_lib PUBLIC bedwars_shared engine_client engine_ui engine_voxel)
 
 # Note: RAYFLOW_USE_PAK is inherited from engine_client
 
 # =============================================================================
 # BedWars Dedicated Server Executable
 # =============================================================================
-add_executable(bedwars_server_demo
+add_executable(bedwars_server
     app/server_main.cpp
 )
-target_link_libraries(bedwars_server_demo PRIVATE bedwars_server engine_core)
+target_link_libraries(bedwars_server PRIVATE bedwars_server_lib engine_core)
 
-set_target_properties(bedwars_server_demo PROPERTIES
-    OUTPUT_NAME "bedwars_server"
+set_target_properties(bedwars_server PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
 # =============================================================================
 # BedWars Client Executable
 # =============================================================================
-add_executable(bedwars_client_demo
+add_executable(bedwars
     app/client_main.cpp
 )
-# Link with bedwars_server for singleplayer embedded server support
-target_link_libraries(bedwars_client_demo PRIVATE bedwars_client bedwars_server engine_client engine_ui)
+# Link with bedwars_server_lib for singleplayer embedded server support
+target_link_libraries(bedwars PRIVATE bedwars_client_lib bedwars_server_lib engine_client engine_ui)
 
-set_target_properties(bedwars_client_demo PROPERTIES
-    OUTPUT_NAME "bedwars"
+set_target_properties(bedwars PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )
 
@@ -150,9 +148,9 @@ if(NOT ENGINE_USE_PAK)
     # Copy game-specific resources first
     foreach(dir ${BEDWARS_ASSET_DIRS})
         if(EXISTS "${BEDWARS_RESOURCES_DIR}/${dir}")
-            add_custom_command(TARGET bedwars_client_demo POST_BUILD
+            add_custom_command(TARGET bedwars POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${BEDWARS_RESOURCES_DIR}/${dir}" "$<TARGET_FILE_DIR:bedwars_client_demo>/${dir}"
+                "${BEDWARS_RESOURCES_DIR}/${dir}" "$<TARGET_FILE_DIR:bedwars>/${dir}"
                 COMMENT "[BedWars] Copying resources/${dir} to build directory"
             )
         endif()
@@ -161,9 +159,9 @@ if(NOT ENGINE_USE_PAK)
     # Copy engine resources (for assets not overridden by game)
     foreach(dir ${BEDWARS_ASSET_DIRS})
         if(EXISTS "${ENGINE_RESOURCES_DIR}/${dir}")
-            add_custom_command(TARGET bedwars_client_demo POST_BUILD
+            add_custom_command(TARGET bedwars POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${ENGINE_RESOURCES_DIR}/${dir}" "$<TARGET_FILE_DIR:bedwars_client_demo>/${dir}"
+                "${ENGINE_RESOURCES_DIR}/${dir}" "$<TARGET_FILE_DIR:bedwars>/${dir}"
                 COMMENT "[BedWars] Copying engine/${dir} to build directory"
             )
         endif()
@@ -214,13 +212,13 @@ if(ENGINE_USE_PAK)
     )
     
     # Make client depend on packed assets
-    add_dependencies(bedwars_client_demo bedwars_pack_assets_run)
+    add_dependencies(bedwars bedwars_pack_assets_run)
 endif()
 
 # =============================================================================
 # Install Rules (for packaging)
 # =============================================================================
-install(TARGETS bedwars_client_demo bedwars_server_demo
+install(TARGETS bedwars bedwars_server
     RUNTIME DESTINATION bin
 )
 
