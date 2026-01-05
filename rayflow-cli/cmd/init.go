@@ -43,13 +43,11 @@ var (
 	sdkVersion  string
 )
 
-const defaultSDKVersionInit = "0.4.2"
-
 func init() {
 	initCmd.Flags().StringVar(&displayName, "display-name", "", "Display name for the game (default: game_name)")
 	initCmd.Flags().StringVar(&author, "author", "", "Author name")
 	initCmd.Flags().BoolVar(&standalone, "standalone", false, "Create standalone project (uses SDK via find_package)")
-	initCmd.Flags().StringVar(&sdkVersion, "sdk-version", defaultSDKVersionInit, "SDK version to use (standalone only)")
+	initCmd.Flags().StringVar(&sdkVersion, "sdk-version", "latest", "SDK version to use (standalone only)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -73,15 +71,26 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 		gameDir = filepath.Join(cwd, gameName)
 
-		sdkDir = GetSDKDir(sdkVersion)
-		if !IsSDKInstalled(sdkVersion) {
-			fmt.Printf("SDK version %s not found. Installing...\n\n", sdkVersion)
-			if err := installSDK(sdkVersion); err != nil {
+		actualVersion := sdkVersion
+		if sdkVersion == "latest" {
+			fmt.Println("Fetching latest SDK version...")
+			latest, err := GetLatestSDKVersion()
+			if err != nil {
+				return fmt.Errorf("failed to get latest version: %w", err)
+			}
+			actualVersion = latest.Version
+			fmt.Printf("Latest version: %s\n\n", actualVersion)
+		}
+
+		sdkDir = GetSDKDir(actualVersion)
+		if !IsSDKInstalled(actualVersion) {
+			fmt.Printf("SDK version %s not found. Installing...\n\n", actualVersion)
+			if err := installSDK(actualVersion); err != nil {
 				return fmt.Errorf("failed to install SDK: %w", err)
 			}
 			fmt.Println()
 		} else {
-			fmt.Printf("Using SDK version %s from %s\n\n", sdkVersion, sdkDir)
+			fmt.Printf("Using SDK version %s from %s\n\n", actualVersion, sdkDir)
 		}
 	} else {
 		engineRoot, err := findEngineRoot()

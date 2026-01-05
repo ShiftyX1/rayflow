@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,9 +17,22 @@ import (
 )
 
 const (
-	defaultSDKVersion = "0.4.2"
-	sdkBaseURL        = "https://github.com/ShiftyX1/rayflow/releases/download"
+	sdkBaseURL  = "https://github.com/ShiftyX1/rayflow/releases/download"
+	releasesAPI = "https://api.github.com/repos/ShiftyX1/rayflow/releases"
 )
+
+type githubAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+type githubRelease struct {
+	TagName    string        `json:"tag_name"`
+	Name       string        `json:"name"`
+	Draft      bool          `json:"draft"`
+	Prerelease bool          `json:"prerelease"`
+	Assets     []githubAsset `json:"assets"`
+}
 
 var sdkCmd = &cobra.Command{
 	Use:   "sdk",
@@ -26,14 +40,17 @@ var sdkCmd = &cobra.Command{
 	Long: `Manage Rayflow SDK installations.
 
 Commands:
-  install [version]   Download and install SDK (default: ` + defaultSDKVersion + `)
+  install [version]   Download and install SDK (latest if not specified)
   list                Show installed SDK versions
+  available           Show available SDK versions from GitHub
   remove <version>    Remove an installed SDK version
 
 Examples:
-  rayflow-cli sdk install           # Install default version
+  rayflow-cli sdk install           # Install latest version
+  rayflow-cli sdk install latest    # Install latest version
   rayflow-cli sdk install 0.4.2     # Install specific version
   rayflow-cli sdk list              # List installed versions
+  rayflow-cli sdk available         # List available versions
   rayflow-cli sdk remove 0.4.2      # Remove a version`,
 }
 
@@ -42,7 +59,7 @@ var sdkInstallCmd = &cobra.Command{
 	Short: "Download and install Rayflow SDK",
 	Long: `Download and install Rayflow SDK from GitHub releases.
 
-If no version is specified, installs the default version (` + defaultSDKVersion + `).
+If no version is specified or "latest" is used, installs the latest available version.
 
 SDK will be installed to:
   - Linux/macOS: ~/.rayflow/sdk/<version>/
@@ -64,10 +81,19 @@ var sdkRemoveCmd = &cobra.Command{
 	RunE:  runSDKRemove,
 }
 
+var sdkAvailableCmd = &cobra.Command{
+	Use:   "available",
+	Short: "List available SDK versions from GitHub",
+	Long: `Query GitHub releases API to show all available SDK versions
+that have binaries for your current platform.`,
+	RunE: runSDKAvailable,
+}
+
 func init() {
 	sdkCmd.AddCommand(sdkInstallCmd)
 	sdkCmd.AddCommand(sdkListCmd)
 	sdkCmd.AddCommand(sdkRemoveCmd)
+	sdkCmd.AddCommand(sdkAvailableCmd)
 }
 
 func GetSDKCmd() *cobra.Command {
@@ -161,6 +187,111 @@ func getSDKDownloadURL(version string) (string, error) {
 	// https://github.com/ShiftyX1/rayflow/releases/download/v0.4.2/rayflow-sdk-macos-arm64.tar.gz
 	filename := fmt.Sprintf("rayflow-sdk-%s%s", platform.name, platform.extension)
 	return fmt.Sprintf("%s/v%s/%s", sdkBaseURL, version, filename), nil
+}
+
+func getSDKAssetName() (string, error) {
+	platform, err := getPlatformInfo()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("rayflow-sdk-%s%s", platform.name, platform.extension), nil
+}
+
+// =============================================================================
+// GitHub API
+// =============================================================================
+
+func fetchAvailableReleases() ([]githubRelease, error) {
+	req, err := http.NewRequest("GET", releasesAPI, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "rayflow-cli")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch releases: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+	}
+
+	var releases []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, fmt.Errorf("failed to parse releases: %w", err)
+	}
+
+	return releases, nil
+}
+
+// SDKVersion represents an available SDK version
+type SDKVersion struct {
+	Version     string
+	TagName     string
+	DownloadURL string
+	Prerelease  bool
+}
+
+// GetAvailableSDKVersions returns all SDK versions available for the current platform
+func GetAvailableSDKVersions() ([]SDKVersion, error) {
+	assetName, err := getSDKAssetName()
+	if err != nil {
+		return nil, err
+	}
+
+	releases, err := fetchAvailableReleases()
+	if err != nil {
+		return nil, err
+	}
+
+	var versions []SDKVersion
+	for _, release := range releases {
+		if release.Draft {
+			continue
+		}
+
+		// Check if this release has SDK for our platform
+		for _, asset := range release.Assets {
+			if asset.Name == assetName {
+				version := strings.TrimPrefix(release.TagName, "v")
+				versions = append(versions, SDKVersion{
+					Version:     version,
+					TagName:     release.TagName,
+					DownloadURL: asset.BrowserDownloadURL,
+					Prerelease:  release.Prerelease,
+				})
+				break
+			}
+		}
+	}
+
+	return versions, nil
+}
+
+// GetLatestSDKVersion returns the latest stable SDK version for the current platform
+func GetLatestSDKVersion() (*SDKVersion, error) {
+	versions, err := GetAvailableSDKVersions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Find first non-prerelease version (releases are sorted by date, newest first)
+	for _, v := range versions {
+		if !v.Prerelease {
+			return &v, nil
+		}
+	}
+
+	// If no stable releases, return the first prerelease
+	if len(versions) > 0 {
+		return &versions[0], nil
+	}
+
+	return nil, fmt.Errorf("no SDK releases found for your platform")
 }
 
 // =============================================================================
@@ -362,8 +493,20 @@ func extractZip(archivePath, destDir string) error {
 // =============================================================================
 
 func runSDKInstall(cmd *cobra.Command, args []string) error {
-	version := defaultSDKVersion
-	if len(args) > 0 {
+	var version string
+	var downloadURL string
+
+	if len(args) == 0 || args[0] == "latest" {
+		// Fetch latest version from GitHub
+		fmt.Println("Fetching available versions...")
+		latest, err := GetLatestSDKVersion()
+		if err != nil {
+			return fmt.Errorf("failed to get latest version: %w", err)
+		}
+		version = latest.Version
+		downloadURL = latest.DownloadURL
+		fmt.Printf("Latest version: %s\n\n", version)
+	} else {
 		version = args[0]
 	}
 
@@ -379,10 +522,12 @@ func runSDKInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get download URL
-	url, err := getSDKDownloadURL(version)
-	if err != nil {
-		return err
+	// Get download URL if not already set
+	if downloadURL == "" {
+		downloadURL, err = getSDKDownloadURL(version)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create temp directory for download
@@ -394,7 +539,7 @@ func runSDKInstall(cmd *cobra.Command, args []string) error {
 
 	// Download
 	archivePath := filepath.Join(tempDir, fmt.Sprintf("rayflow-sdk-%s%s", platform.name, platform.extension))
-	if err := downloadFile(url, archivePath); err != nil {
+	if err := downloadFile(downloadURL, archivePath); err != nil {
 		return err
 	}
 
@@ -469,5 +614,43 @@ func runSDKRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ SDK %s removed successfully\n", version)
+	return nil
+}
+
+func runSDKAvailable(cmd *cobra.Command, args []string) error {
+	platform, err := getPlatformInfo()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Fetching available SDK versions for %s...\n\n", platform.name)
+
+	versions, err := GetAvailableSDKVersions()
+	if err != nil {
+		return err
+	}
+
+	if len(versions) == 0 {
+		fmt.Println("No SDK versions available for your platform.")
+		return nil
+	}
+
+	fmt.Println("Available SDK versions:")
+	for i, v := range versions {
+		status := ""
+		if IsSDKInstalled(v.Version) {
+			status = " (installed)"
+		}
+		if v.Prerelease {
+			status += " [prerelease]"
+		}
+		if i == 0 {
+			status += " [latest]"
+		}
+		fmt.Printf("  %s%s\n", v.Version, status)
+	}
+
+	fmt.Println("\nInstall with: rayflow-cli sdk install <version>")
+	fmt.Println("              rayflow-cli sdk install         # installs latest")
 	return nil
 }
