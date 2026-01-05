@@ -72,6 +72,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure SDK
+        shell: bash
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -161,6 +162,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
+        shell: bash
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -174,8 +176,9 @@ jobs:
           cmake --build build --target bedwars_pack_assets --parallel || true
 
       - name: Package assets
+        shell: bash
         run: |
-          cd build/games/bedwars
+          cd build
           ./bedwars_pack_assets${{ matrix.ext }} || true
         continue-on-error: true
 
@@ -183,9 +186,9 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p release-package
-          cp build/games/bedwars/bedwars release-package/ || true
-          cp build/games/bedwars/bedwars_server release-package/ || true
-          cp build/games/bedwars/assets.pak release-package/ || true
+          cp build/bedwars release-package/ || true
+          cp build/bedwars_server release-package/ || true
+          cp build/assets.pak release-package/ || true
           # Copy resources if PAK failed
           if [ ! -f release-package/assets.pak ]; then
             cp -r games/bedwars/resources release-package/ || true
@@ -197,9 +200,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-package
-          Copy-Item -Path "build/games/bedwars/bedwars.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/games/bedwars/bedwars_server.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/games/bedwars/assets.pak" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/bedwars.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/bedwars_server.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/assets.pak" -Destination "release-package/" -ErrorAction SilentlyContinue
           # Copy resources if PAK failed
           if (-not (Test-Path "release-package/assets.pak")) {
             Copy-Item -Path "games/bedwars/resources" -Destination "release-package/" -Recurse -ErrorAction SilentlyContinue
