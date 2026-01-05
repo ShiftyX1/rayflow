@@ -176,12 +176,18 @@ jobs:
           cmake --build build --target map_builder --parallel
           cmake --build build --target bedwars_pack_assets --parallel || true
 
+      - name: List build outputs
+        shell: bash
+        run: |
+          echo "=== Build directory contents ==="
+          find build -maxdepth 2 -type f -name "*.exe" -o -name "bedwars" -o -name "bedwars_server" -o -name "map_builder" -o -name "*.pak" 2>/dev/null || true
+          ls -la build/ || true
+
       - name: Package assets
         shell: bash
         run: |
           cd build
-          ./bedwars_pack_assets${{ matrix.ext }} -i ../games/bedwars/resources -o assets.pak || true
-        continue-on-error: true
+          ./bedwars_pack_assets${{ matrix.ext }} -i ../games/bedwars/resources -o assets.pak
 
       - name: Package BedWars (Unix)
         if: runner.os != 'Windows'
