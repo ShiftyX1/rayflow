@@ -173,26 +173,24 @@ jobs:
         run: |
           cmake --build build --target bedwars --parallel
           cmake --build build --target bedwars_server --parallel
+          cmake --build build --target map_builder --parallel
           cmake --build build --target bedwars_pack_assets --parallel || true
 
       - name: Package assets
         shell: bash
         run: |
           cd build
-          ./bedwars_pack_assets${{ matrix.ext }} || true
+          ./bedwars_pack_assets${{ matrix.ext }} -i ../games/bedwars/resources -o assets.pak || true
         continue-on-error: true
 
       - name: Package BedWars (Unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p release-package
-          cp build/bedwars release-package/ || true
-          cp build/bedwars_server release-package/ || true
-          cp build/assets.pak release-package/ || true
-          # Copy resources if PAK failed
-          if [ ! -f release-package/assets.pak ]; then
-            cp -r games/bedwars/resources release-package/ || true
-          fi
+          cp build/bedwars release-package/
+          cp build/bedwars_server release-package/
+          cp build/map_builder release-package/
+          cp build/assets.pak release-package/
           cd release-package && tar -czvf ../${{ matrix.artifact }}.tar.gz *
 
       - name: Package BedWars (Windows)
@@ -200,13 +198,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-package
-          Copy-Item -Path "build/bedwars.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/bedwars_server.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/assets.pak" -Destination "release-package/" -ErrorAction SilentlyContinue
-          # Copy resources if PAK failed
-          if (-not (Test-Path "release-package/assets.pak")) {
-            Copy-Item -Path "games/bedwars/resources" -Destination "release-package/" -Recurse -ErrorAction SilentlyContinue
-          }
+          Copy-Item -Path "build/bedwars.exe" -Destination "release-package/"
+          Copy-Item -Path "build/bedwars_server.exe" -Destination "release-package/"
+          Copy-Item -Path "build/map_builder.exe" -Destination "release-package/"
+          Copy-Item -Path "build/assets.pak" -Destination "release-package/"
           Compress-Archive -Path "release-package/*" -DestinationPath "${{ matrix.artifact }}.zip"
 
       - name: Upload BedWars artifact
