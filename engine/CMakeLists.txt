@@ -69,9 +69,10 @@ add_library(engine_core STATIC
 )
 
 target_include_directories(engine_core PUBLIC 
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_SOURCE_DIR}
-    ${enet_SOURCE_DIR}/include
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${enet_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_compile_features(engine_core PUBLIC cxx_std_20)
@@ -111,9 +112,10 @@ add_library(engine_client STATIC
 )
 
 target_include_directories(engine_client PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/engine
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/engine>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(engine_client PUBLIC engine_core raylib EnTT::EnTT)
@@ -136,9 +138,10 @@ add_library(engine_ui STATIC
 )
 
 target_include_directories(engine_ui PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/engine
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/engine>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(engine_ui PUBLIC engine_client tinyxml2)
@@ -173,9 +176,10 @@ add_library(engine_voxel STATIC
 )
 
 target_include_directories(engine_voxel PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/engine
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/engine>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(engine_voxel PUBLIC engine_client)

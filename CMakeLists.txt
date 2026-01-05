@@ -1,11 +1,11 @@
 # =============================================================================
-# RayFlow - Voxel BedWars Game
+# RayFlow - Voxel Game Engine
 # =============================================================================
 cmake_minimum_required(VERSION 3.21)
 
 project(rayflow
-    VERSION 0.0.0
-    DESCRIPTION "Voxel-based BedWars game"
+    VERSION 0.1.0
+    DESCRIPTION "Rayflow - Voxel Game Engine"
     LANGUAGES C CXX
 )
 
@@ -24,9 +24,12 @@ include(cmake/RayflowPlatform.cmake)
 add_subdirectory(engine)
 
 # =============================================================================
-# Games
+# Games (auto-discovered from games/ directory)
 # =============================================================================
-add_subdirectory(games/bedwars)
+option(RAYFLOW_BUILD_GAMES "Build games in games/ directory" ON)
+if(RAYFLOW_BUILD_GAMES)
+    add_subdirectory(games)
+endif()
 
 # =============================================================================
 # Tests (optional)
@@ -78,3 +81,11 @@ message(STATUS "    BUILD_TESTS:    ${RAYFLOW_BUILD_TESTS}")
 message(STATUS "    MAP_EDITOR:     ${RAYFLOW_BUILD_MAP_EDITOR}")
 message(STATUS "========================================")
 message(STATUS "")
+
+# =============================================================================
+# SDK Installation (for distribution)
+# =============================================================================
+option(RAYFLOW_BUILD_SDK "Build SDK for distribution" OFF)
+if(RAYFLOW_BUILD_SDK)
+    include(cmake/RayflowSDK.cmake)
+endif()

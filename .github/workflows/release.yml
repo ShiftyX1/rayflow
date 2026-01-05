@@ -1,6 +1,7 @@
 # =============================================================================
 # Release Workflow
 # Creates release artifacts when a version tag is pushed
+# Builds: BedWars game + Rayflow SDK for all platforms
 # =============================================================================
 
 name: Release
@@ -17,8 +18,10 @@ on:
         type: string
 
 jobs:
-  build-release:
-    # Only run on GitHub, skip on Gitea mirrors
+  # ===========================================================================
+  # Build SDK
+  # ===========================================================================
+  build-sdk:
     if: github.server_url == 'https://github.com'
     
     strategy:
@@ -26,160 +29,197 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            preset: release
             name: Linux
-            artifact: rayflow-linux-x64
+            artifact: rayflow-sdk-linux-x64
           - os: macos-14
-            preset: release
             name: macOS (ARM64)
-            artifact: rayflow-macos-arm64
+            artifact: rayflow-sdk-macos-arm64
           - os: macos-15
-            preset: release
             name: macOS (x86_64)
-            artifact: rayflow-macos-x64
+            artifact: rayflow-sdk-macos-x64
           - os: windows-2022
-            preset: release
             name: Windows
-            artifact: rayflow-windows-x64
+            artifact: rayflow-sdk-windows-x64
 
     runs-on: ${{ matrix.os }}
-    name: Build ${{ matrix.name }}
+    name: SDK - ${{ matrix.name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for version detection
+          fetch-depth: 0
 
-      # -------------------------------------------------------------------------
-      # Platform-specific setup
-      # -------------------------------------------------------------------------
       - name: Setup (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build \
-            build-essential \
-            libgl1-mesa-dev \
-            libx11-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxext-dev
+            ninja-build build-essential \
+            libgl1-mesa-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev libxext-dev
 
       - name: Setup (macOS)
         if: runner.os == 'macOS'
-        run: |
-          brew install ninja
+        run: brew install ninja
 
       - name: Setup (Windows)
         if: runner.os == 'Windows'
-        run: |
-          choco install ninja
+        run: choco install ninja
 
       - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      # -------------------------------------------------------------------------
-      # Build Release
-      # -------------------------------------------------------------------------
-      - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+      - name: Configure SDK
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRAYFLOW_BUILD_SDK=ON \
+            -DRAYFLOW_BUILD_GAMES=OFF \
+            -DRAYFLOW_BUILD_TESTS=OFF \
+            -DRAYFLOW_BUILD_MAP_EDITOR=OFF
 
-      - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Build SDK
+        run: cmake --build build --parallel
 
-      # -------------------------------------------------------------------------
-      # Run Tests (Release mode)
-      # -------------------------------------------------------------------------
-      - name: Run Tests
-        run: ctest --preset ${{ matrix.preset }} --output-on-failure
-        continue-on-error: true  # Don't fail release on test failure
+      - name: Install SDK
+        run: cmake --install build --prefix sdk
 
-      # -------------------------------------------------------------------------
-      # Package artifacts
-      # -------------------------------------------------------------------------
-      - name: Package (Linux)
+      - name: Package SDK (Unix)
+        if: runner.os != 'Windows'
+        run: tar -czvf ${{ matrix.artifact }}.tar.gz -C sdk .
+
+      - name: Package SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "sdk/*" -DestinationPath "${{ matrix.artifact }}.zip"
+
+      - name: Upload SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.zip
+
+  # ===========================================================================
+  # Build BedWars Game
+  # ===========================================================================
+  build-bedwars:
+    if: github.server_url == 'https://github.com'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: Linux
+            artifact: bedwars-linux-x64
+            ext: ""
+          - os: macos-14
+            name: macOS (ARM64)
+            artifact: bedwars-macos-arm64
+            ext: ""
+          - os: macos-15
+            name: macOS (x86_64)
+            artifact: bedwars-macos-x64
+            ext: ""
+          - os: windows-2022
+            name: Windows
+            artifact: bedwars-windows-x64
+            ext: ".exe"
+
+    runs-on: ${{ matrix.os }}
+    name: BedWars - ${{ matrix.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup (Linux)
         if: runner.os == 'Linux'
         run: |
-          mkdir -p release-package
-          cp build/${{ matrix.preset }}/rayflow release-package/ || true
-          cp build/${{ matrix.preset }}/map_builder release-package/ || true
-          cp build/${{ matrix.preset }}/rfds release-package/ || true
-          cp build/${{ matrix.preset }}/assets.pak release-package/ || true
-          cd release-package && tar -czvf ../rayflow-linux-x64.tar.gz *
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build build-essential \
+            libgl1-mesa-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev libxext-dev
 
-      - name: Package (macOS ARM64)
-        if: runner.os == 'macOS' && matrix.os == 'macos-14'
+      - name: Setup (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Setup (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DRAYFLOW_USE_PAK=ON \
+            -DRAYFLOW_BUILD_TESTS=OFF
+
+      - name: Build BedWars
+        run: |
+          cmake --build build --target bedwars --parallel
+          cmake --build build --target bedwars_server --parallel
+          cmake --build build --target bedwars_pack_assets --parallel || true
+
+      - name: Package assets
+        run: |
+          cd build/games/bedwars
+          ./bedwars_pack_assets${{ matrix.ext }} || true
+        continue-on-error: true
+
+      - name: Package BedWars (Unix)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p release-package
-          cp build/${{ matrix.preset }}/rayflow release-package/ || true
-          cp build/${{ matrix.preset }}/map_builder release-package/ || true
-          cp build/${{ matrix.preset }}/rfds release-package/ || true
-          cp build/${{ matrix.preset }}/assets.pak release-package/ || true
-          cd release-package && tar -czvf ../rayflow-macos-arm64.tar.gz *
+          cp build/games/bedwars/bedwars release-package/ || true
+          cp build/games/bedwars/bedwars_server release-package/ || true
+          cp build/games/bedwars/assets.pak release-package/ || true
+          # Copy resources if PAK failed
+          if [ ! -f release-package/assets.pak ]; then
+            cp -r games/bedwars/resources release-package/ || true
+          fi
+          cd release-package && tar -czvf ../${{ matrix.artifact }}.tar.gz *
 
-      - name: Package (macOS x86_64)
-        if: runner.os == 'macOS' && matrix.os == 'macos-15'
-        run: |
-          mkdir -p release-package
-          cp build/${{ matrix.preset }}/rayflow release-package/ || true
-          cp build/${{ matrix.preset }}/map_builder release-package/ || true
-          cp build/${{ matrix.preset }}/rfds release-package/ || true
-          cp build/${{ matrix.preset }}/assets.pak release-package/ || true
-          cd release-package && tar -czvf ../rayflow-macos-x64.tar.gz *
-
-      - name: Package (Windows)
+      - name: Package BedWars (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-package
-          Copy-Item -Path "build/${{ matrix.preset }}/rayflow.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/${{ matrix.preset }}/map_builder.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/${{ matrix.preset }}/rfds.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/${{ matrix.preset }}/assets.pak" -Destination "release-package/" -ErrorAction SilentlyContinue
-          Compress-Archive -Path "release-package/*" -DestinationPath "rayflow-windows-x64.zip"
+          Copy-Item -Path "build/games/bedwars/bedwars.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/games/bedwars/bedwars_server.exe" -Destination "release-package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/games/bedwars/assets.pak" -Destination "release-package/" -ErrorAction SilentlyContinue
+          # Copy resources if PAK failed
+          if (-not (Test-Path "release-package/assets.pak")) {
+            Copy-Item -Path "games/bedwars/resources" -Destination "release-package/" -Recurse -ErrorAction SilentlyContinue
+          }
+          Compress-Archive -Path "release-package/*" -DestinationPath "${{ matrix.artifact }}.zip"
 
-      # -------------------------------------------------------------------------
-      # Upload artifacts
-      # -------------------------------------------------------------------------
-      - name: Upload release artifact (Linux)
-        if: runner.os == 'Linux'
+      - name: Upload BedWars artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: rayflow-linux-x64.tar.gz
+          path: |
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.zip
 
-      - name: Upload release artifact (macOS ARM64)
-        if: runner.os == 'macOS' && matrix.os == 'macos-14'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: rayflow-macos-arm64.tar.gz
-
-      - name: Upload release artifact (macOS x86_64)
-        if: runner.os == 'macOS' && matrix.os == 'macos-15'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: rayflow-macos-x64.tar.gz
-
-      - name: Upload release artifact (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: rayflow-windows-x64.zip
-
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   # Create GitHub Release
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   create-release:
     if: github.server_url == 'https://github.com'
-    needs: build-release
+    needs: [build-sdk, build-bedwars]
     runs-on: ubuntu-latest
     name: Create Release
     permissions:
@@ -212,23 +252,44 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: RayFlow ${{ steps.version.outputs.version }}
-          draft: false
+          name: Rayflow ${{ steps.version.outputs.version }}
+          draft: true
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           generate_release_notes: true
+          body: |
+            ## Downloads
+            
+            ### BedWars Game
+            Ready-to-play game builds:
+            - **Linux**: `bedwars-linux-x64.tar.gz`
+            - **macOS ARM64**: `bedwars-macos-arm64.tar.gz`
+            - **macOS Intel**: `bedwars-macos-x64.tar.gz`
+            - **Windows**: `bedwars-windows-x64.zip`
+            
+            ### Rayflow SDK
+            For game developers building on Rayflow Engine:
+            - **Linux**: `rayflow-sdk-linux-x64.tar.gz`
+            - **macOS ARM64**: `rayflow-sdk-macos-arm64.tar.gz`
+            - **macOS Intel**: `rayflow-sdk-macos-x64.tar.gz`
+            - **Windows**: `rayflow-sdk-windows-x64.zip`
+            
+            ### Installation
+            
+            **BedWars**: Extract and run `bedwars` (or `bedwars.exe` on Windows)
+            
+            **SDK**: Extract to `~/.rayflow/sdks/${{ steps.version.outputs.version }}/` and use with `rayflow-cli`
           files: |
             release-artifacts/**/*.tar.gz
             release-artifacts/**/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ---------------------------------------------------------------------------
-  # Gitea fallback job (always succeeds)
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # Gitea fallback
+  # ===========================================================================
   gitea-skip:
     if: github.server_url != 'https://github.com'
     runs-on: ubuntu-latest
     name: Release (Gitea - Skipped)
     steps:
-      - name: Skip release on Gitea
-        run: echo "Release skipped on Gitea mirror. Use GitHub for CI/CD."
+      - run: echo "Release skipped on Gitea mirror."

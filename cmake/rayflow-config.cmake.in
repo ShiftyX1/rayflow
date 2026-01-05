@@ -1,0 +1,28 @@
+# =============================================================================
+# Rayflow SDK Config
+# =============================================================================
+# This file is used by find_package(rayflow) in user projects
+# =============================================================================
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Dependencies that users need
+find_dependency(raylib CONFIG)
+
+# Include targets
+include("${CMAKE_CURRENT_LIST_DIR}/rayflow-targets.cmake")
+
+# Provide convenience variables
+set(RAYFLOW_FOUND TRUE)
+set(RAYFLOW_VERSION @RAYFLOW_SDK_VERSION@)
+set(RAYFLOW_INCLUDE_DIRS "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@/rayflow")
+
+# Available targets:
+#   rayflow::engine_core   - Headless engine (server, tools)
+#   rayflow::engine_client - Client with raylib
+#   rayflow::engine_ui     - UI framework
+#   rayflow::engine_voxel  - Voxel module
+
+check_required_components(rayflow)
