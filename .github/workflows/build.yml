@@ -78,15 +78,31 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Package artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p package
+          cp build/bedwars package/ || true
+          cp build/bedwars_server package/ || true
+          cp build/map_builder package/ || true
+          cp -r games/bedwars/resources/* package/ || true
+
+      - name: Package artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package
+          Copy-Item -Path "build/bedwars.exe" -Destination "package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/bedwars_server.exe" -Destination "package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "build/map_builder.exe" -Destination "package/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "games/bedwars/resources/*" -Destination "package/" -Recurse -ErrorAction SilentlyContinue
+
       - name: Upload artifacts (Linux)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: build-linux-x64
-          path: |
-            build/bedwars
-            build/bedwars_server
-            build/map_builder
+          path: package/
           if-no-files-found: warn
 
       - name: Upload artifacts (macOS ARM64)
@@ -94,10 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-macos-arm64
-          path: |
-            build/bedwars
-            build/bedwars_server
-            build/map_builder
+          path: package/
           if-no-files-found: warn
 
       - name: Upload artifacts (macOS x86_64)
@@ -105,10 +118,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-macos-x64
-          path: |
-            build/bedwars
-            build/bedwars_server
-            build/map_builder
+          path: package/
           if-no-files-found: warn
 
       - name: Upload artifacts (Windows)
@@ -116,10 +126,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-windows-x64
-          path: |
-            build/bedwars.exe
-            build/bedwars_server.exe
-            build/map_builder.exe
+          path: package/
           if-no-files-found: warn
 
   # Gitea fallback
