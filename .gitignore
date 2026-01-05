@@ -71,3 +71,7 @@ _deps/
 !documentation/
 
 rfpak_explorer_go/
+# Local instructions (not tracked)
+.cursor/rules/
+.github/copilot-instructions.md
+.github/instructions/
