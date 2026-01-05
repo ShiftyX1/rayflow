@@ -1,11 +1,11 @@
 # =============================================================================
-# RayFlow - Voxel BedWars Game
+# RayFlow - Voxel Game Engine
 # =============================================================================
 cmake_minimum_required(VERSION 3.21)
 
 project(rayflow
-    VERSION 0.0.0
-    DESCRIPTION "Voxel-based BedWars game"
+    VERSION 0.1.0
+    DESCRIPTION "Rayflow - Voxel Game Engine"
     LANGUAGES C CXX
 )
 
@@ -19,13 +19,17 @@ include(cmake/RayflowDependencies.cmake)
 include(cmake/RayflowPlatform.cmake)
 
 # =============================================================================
-# Subdirectories
+# Engine (game-agnostic core + tools)
 # =============================================================================
-add_subdirectory(shared)
-add_subdirectory(server)
-add_subdirectory(client)
-add_subdirectory(app)
-add_subdirectory(tools)
+add_subdirectory(engine)
+
+# =============================================================================
+# Games (auto-discovered from games/ directory)
+# =============================================================================
+option(RAYFLOW_BUILD_GAMES "Build games in games/ directory" ON)
+if(RAYFLOW_BUILD_GAMES)
+    add_subdirectory(games)
+endif()
 
 # =============================================================================
 # Tests (optional)
@@ -36,71 +40,19 @@ if(RAYFLOW_BUILD_TESTS)
 endif()
 
 # =============================================================================
-# Asset deployment
+# Asset deployment - Each game manages its own resources in games/[game]/resources/
+# See games/bedwars/CMakeLists.txt for example
 # =============================================================================
-set(RAYFLOW_ASSETS_SRC ${CMAKE_SOURCE_DIR}/client/static)
-set(RAYFLOW_PAK_FILE ${CMAKE_BINARY_DIR}/assets.pak)
-
-if(RAYFLOW_USE_PAK AND RAYFLOW_BUILD_PACK_ASSETS)
-    # Release mode: Pack assets into .pak file
-    add_custom_target(rayflow_pack_assets_target ALL
-        COMMAND $<TARGET_FILE:rayflow_pack_assets>
-            --input ${RAYFLOW_ASSETS_SRC}
-            --output ${RAYFLOW_PAK_FILE}
-            --verbose
-        DEPENDS rayflow_pack_assets
-        COMMENT "Packing assets into ${RAYFLOW_PAK_FILE}"
-        VERBATIM
-    )
-    add_dependencies(rayflow rayflow_pack_assets_target)
-    if(RAYFLOW_BUILD_MAP_EDITOR)
-        add_dependencies(map_builder rayflow_pack_assets_target)
-    endif()
-else()
-    # Debug mode: Copy loose files
-    add_custom_target(rayflow_copy_assets ALL
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${RAYFLOW_ASSETS_SRC}/textures
-            ${CMAKE_BINARY_DIR}/textures
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${RAYFLOW_ASSETS_SRC}/shaders
-            ${CMAKE_BINARY_DIR}/shaders
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${RAYFLOW_ASSETS_SRC}/fonts
-            ${CMAKE_BINARY_DIR}/fonts
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${RAYFLOW_ASSETS_SRC}/ui
-            ${CMAKE_BINARY_DIR}/ui
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${RAYFLOW_ASSETS_SRC}/models
-            ${CMAKE_BINARY_DIR}/models
-        COMMENT "Copying loose assets to build directory"
-        VERBATIM
-    )
-    add_dependencies(rayflow rayflow_copy_assets)
-    if(RAYFLOW_BUILD_MAP_EDITOR)
-        add_dependencies(map_builder rayflow_copy_assets)
-    endif()
-endif()
 
 # =============================================================================
 # Installation (for packaging)
 # =============================================================================
-install(TARGETS rayflow
-    RUNTIME DESTINATION bin
-    BUNDLE DESTINATION .
-)
+# Main game is now in games/bedwars/
 
 if(RAYFLOW_BUILD_MAP_EDITOR)
     install(TARGETS map_builder
         RUNTIME DESTINATION bin
         BUNDLE DESTINATION .
-    )
-endif()
-
-if(RAYFLOW_BUILD_DEDICATED_SERVER)
-    install(TARGETS rfds
-        RUNTIME DESTINATION bin
     )
 endif()
 
@@ -127,6 +79,13 @@ message(STATUS "  Options:")
 message(STATUS "    USE_PAK:        ${RAYFLOW_USE_PAK}")
 message(STATUS "    BUILD_TESTS:    ${RAYFLOW_BUILD_TESTS}")
 message(STATUS "    MAP_EDITOR:     ${RAYFLOW_BUILD_MAP_EDITOR}")
-message(STATUS "    DEDICATED_SRV:  ${RAYFLOW_BUILD_DEDICATED_SERVER}")
 message(STATUS "========================================")
 message(STATUS "")
+
+# =============================================================================
+# SDK Installation (for distribution)
+# =============================================================================
+option(RAYFLOW_BUILD_SDK "Build SDK for distribution" OFF)
+if(RAYFLOW_BUILD_SDK)
+    include(cmake/RayflowSDK.cmake)
+endif()

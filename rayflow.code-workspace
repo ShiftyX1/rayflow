@@ -1,24 +1,12 @@
 {
     "folders": [
         {
-            "name": "🚀 Entry Point app",
-            "path": "app/"
+            "name": "⚙️ Engine",
+            "path": "engine/"
         },
         {
-            "name": "🧑🏻‍💻 Client",
-            "path": "client/"
-        },
-        {
-            "name": "🖥️ Server",
-            "path": "server/"
-        },
-        {
-            "name": "🎨 UI",
-            "path": "ui/"
-        },
-        {
-            "name": "🎭 Shared",
-            "path": "shared/"
+            "name": "🎮 Games",
+            "path": "games/"
         },
         {
             "name": "🧪 Test",
@@ -67,7 +55,13 @@
             "world.h": "c",
             "block_registry.h": "c",
             "math.h": "c",
-            "block_interaction.h": "c"
+            "block_interaction.h": "c",
+            "string": "cpp",
+            "span": "cpp",
+            "algorithm": "cpp",
+            "cstdint": "cpp",
+            "iostream": "cpp",
+            "vector": "cpp"
         }
     }
 }
