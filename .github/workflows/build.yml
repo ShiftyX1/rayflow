@@ -72,10 +72,8 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DRAYFLOW_BUILD_TESTS=OFF
+        shell: bash
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRAYFLOW_BUILD_TESTS=OFF
 
       - name: Build
         run: cmake --build build --parallel
@@ -86,9 +84,9 @@ jobs:
         with:
           name: build-linux-x64
           path: |
-            build/games/bedwars/bedwars
-            build/games/bedwars/bedwars_server
-            build/engine/modules/voxel/tools/map_editor/map_builder
+            build/bedwars
+            build/bedwars_server
+            build/map_builder
           if-no-files-found: warn
 
       - name: Upload artifacts (macOS ARM64)
@@ -97,9 +95,9 @@ jobs:
         with:
           name: build-macos-arm64
           path: |
-            build/games/bedwars/bedwars
-            build/games/bedwars/bedwars_server
-            build/engine/modules/voxel/tools/map_editor/map_builder
+            build/bedwars
+            build/bedwars_server
+            build/map_builder
           if-no-files-found: warn
 
       - name: Upload artifacts (macOS x86_64)
@@ -108,9 +106,9 @@ jobs:
         with:
           name: build-macos-x64
           path: |
-            build/games/bedwars/bedwars
-            build/games/bedwars/bedwars_server
-            build/engine/modules/voxel/tools/map_editor/map_builder
+            build/bedwars
+            build/bedwars_server
+            build/map_builder
           if-no-files-found: warn
 
       - name: Upload artifacts (Windows)
@@ -119,9 +117,9 @@ jobs:
         with:
           name: build-windows-x64
           path: |
-            build/games/bedwars/bedwars.exe
-            build/games/bedwars/bedwars_server.exe
-            build/engine/modules/voxel/tools/map_editor/map_builder.exe
+            build/bedwars.exe
+            build/bedwars_server.exe
+            build/map_builder.exe
           if-no-files-found: warn
 
   # Gitea fallback
