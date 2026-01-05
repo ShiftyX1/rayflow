@@ -61,7 +61,22 @@
             "algorithm": "cpp",
             "cstdint": "cpp",
             "iostream": "cpp",
-            "vector": "cpp"
+            "vector": "cpp",
+            "__split_buffer": "cpp",
+            "unordered_map": "cpp",
+            "unordered_set": "cpp"
+        },
+        "C_Cpp.default.compileCommands": "${workspaceFolder:📁 Project Root}/build/debug/compile_commands.json",
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+        "C_Cpp.default.cppStandard": "c++17",
+        "C_Cpp.default.cStandard": "c17",
+        "C_Cpp.errorSquiggles": "enabled",
+        "C_Cpp.intelliSenseEngine": "default",
+        "cmake.configureOnOpen": false,
+        "cmake.useCMakePresets": "always",
+        "cmake.buildDirectory": "${workspaceFolder:📁 Project Root}/build/${presetName}",
+        "cmake.configureSettings": {
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
         }
     }
 }

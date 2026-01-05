@@ -1,0 +1,14 @@
+CompileFlags:
+  CompilationDatabase: build/debug
+  Add:
+    - -std=c++17
+    - -Wall
+    - -Wextra
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+
+Index:
+  Background: Build
+
