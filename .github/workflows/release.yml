@@ -1,7 +1,7 @@
 # =============================================================================
 # Release Workflow
 # Creates release artifacts when a version tag is pushed
-# Builds: BedWars game + Rayflow SDK for all platforms
+# Builds: Rayflow CLI + SDK + BedWars game for all platforms
 # =============================================================================
 
 name: Release
@@ -97,6 +97,77 @@ jobs:
         run: Compress-Archive -Path "sdk/*" -DestinationPath "${{ matrix.artifact }}.zip"
 
       - name: Upload SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.tar.gz
+            ${{ matrix.artifact }}.zip
+
+  # ===========================================================================
+  # Build CLI
+  # ===========================================================================
+  build-cli:
+    if: github.server_url == 'https://github.com'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: Linux
+            artifact: rayflow-cli-linux-x64
+            goos: linux
+            goarch: amd64
+          - os: macos-14
+            name: macOS (ARM64)
+            artifact: rayflow-cli-macos-arm64
+            goos: darwin
+            goarch: arm64
+          - os: macos-15
+            name: macOS (x86_64)
+            artifact: rayflow-cli-macos-x64
+            goos: darwin
+            goarch: amd64
+          - os: windows-2022
+            name: Windows
+            artifact: rayflow-cli-windows-x64
+            goos: windows
+            goarch: amd64
+
+    runs-on: ${{ matrix.os }}
+    name: CLI - ${{ matrix.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: rayflow-cli/go.sum
+
+      - name: Build CLI
+        shell: bash
+        working-directory: rayflow-cli
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            go build -ldflags="-s -w" -o rayflow-cli.exe .
+          else
+            go build -ldflags="-s -w" -o rayflow-cli .
+          fi
+
+      - name: Package CLI (Unix)
+        if: runner.os != 'Windows'
+        run: tar -czvf ${{ matrix.artifact }}.tar.gz -C rayflow-cli rayflow-cli
+
+      - name: Package CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "rayflow-cli/rayflow-cli.exe" -DestinationPath "${{ matrix.artifact }}.zip"
+
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -223,7 +294,7 @@ jobs:
   # ===========================================================================
   create-release:
     if: github.server_url == 'https://github.com'
-    needs: [build-sdk, build-bedwars]
+    needs: [build-sdk, build-bedwars, build-cli]
     runs-on: ubuntu-latest
     name: Create Release
     permissions:
@@ -263,6 +334,20 @@ jobs:
           body: |
             ## Downloads
             
+            ### Rayflow CLI
+            Command-line tools for Rayflow Engine development:
+            - **Linux**: `rayflow-cli-linux-x64.tar.gz`
+            - **macOS ARM64**: `rayflow-cli-macos-arm64.tar.gz`
+            - **macOS Intel**: `rayflow-cli-macos-x64.tar.gz`
+            - **Windows**: `rayflow-cli-windows-x64.zip`
+            
+            ### Rayflow SDK
+            For game developers building on Rayflow Engine (can be downloaded with rayflow-cli):
+            - **Linux**: `rayflow-sdk-linux-x64.tar.gz`
+            - **macOS ARM64**: `rayflow-sdk-macos-arm64.tar.gz`
+            - **macOS Intel**: `rayflow-sdk-macos-x64.tar.gz`
+            - **Windows**: `rayflow-sdk-windows-x64.zip`
+            
             ### BedWars Game
             Ready-to-play game builds:
             - **Linux**: `bedwars-linux-x64.tar.gz`
@@ -270,18 +355,18 @@ jobs:
             - **macOS Intel**: `bedwars-macos-x64.tar.gz`
             - **Windows**: `bedwars-windows-x64.zip`
             
-            ### Rayflow SDK
-            For game developers building on Rayflow Engine:
-            - **Linux**: `rayflow-sdk-linux-x64.tar.gz`
-            - **macOS ARM64**: `rayflow-sdk-macos-arm64.tar.gz`
-            - **macOS Intel**: `rayflow-sdk-macos-x64.tar.gz`
-            - **Windows**: `rayflow-sdk-windows-x64.zip`
+            ### Quick Start
             
-            ### Installation
+            ```bash
+            # Install CLI (add to PATH)
+            tar -xzf rayflow-cli-*.tar.gz
             
-            **BedWars**: Extract and run `bedwars` (or `bedwars.exe` on Windows)
+            # Install SDK
+            ./rayflow-cli sdk install
             
-            **SDK**: Extract to `~/.rayflow/sdks/${{ steps.version.outputs.version }}/` and use with `rayflow-cli`
+            # Create a new game
+            ./rayflow-cli init my_game --standalone
+            ```
           files: |
             release-artifacts/**/*.tar.gz
             release-artifacts/**/*.zip
