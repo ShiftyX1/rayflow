@@ -66,6 +66,17 @@ add_library(engine_core STATIC
     modules/voxel/shared/block.hpp
     modules/voxel/shared/block_state.hpp
     modules/voxel/shared/block_shape.hpp
+    
+    # Universal ECS components (headless)
+    ecs/components/common.hpp
+    
+    # Universal ECS systems (headless) - 2D physics, collision, AI
+    ecs/systems/physics2d_system.hpp
+    ecs/systems/physics2d_system.cpp
+    ecs/systems/collision2d_system.hpp
+    ecs/systems/collision2d_system.cpp
+    ecs/systems/ai_system.hpp
+    ecs/systems/ai_system.cpp
 )
 
 target_include_directories(engine_core PUBLIC 
@@ -105,6 +116,15 @@ add_library(engine_client STATIC
     ecs/systems/physics_system.cpp
     ecs/systems/player_system.cpp
     ecs/systems/render_system.cpp
+    
+    # Universal 2D rendering components and systems
+    ecs/components/rendering.hpp
+    ecs/systems/sprite_system.hpp
+    ecs/systems/sprite_system.cpp
+    ecs/systems/particle_system.hpp
+    ecs/systems/particle_system.cpp
+    ecs/systems/camera2d_system.hpp
+    ecs/systems/camera2d_system.cpp
     
     # Renderer (universal - moved from client/renderer/)
     renderer/mesh.cpp
