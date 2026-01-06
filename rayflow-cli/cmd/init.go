@@ -134,14 +134,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	files := map[string]string{
 		"game.toml":                  generateGameToml(gameName, displayName, author),
 		"CMakeLists.txt":             cmakeContent,
-		"src/shared/protocol.hpp":    generateProtocolHpp(gameName),
-		"src/shared/protocol.cpp":    generateProtocolCpp(gameName),
-		"src/server/game_server.hpp": generateServerHpp(gameName, displayName),
-		"src/server/game_server.cpp": generateServerCpp(gameName, displayName),
-		"src/client/game_client.hpp": generateClientHpp(gameName, displayName),
-		"src/client/game_client.cpp": generateClientCpp(gameName, displayName),
-		"src/app/client_main.cpp":    generateClientMain(gameName, displayName),
-		"src/app/server_main.cpp":    generateServerMain(gameName, displayName),
+		"src/shared/protocol.hpp":    generateProtocolHpp(gameName, standalone),
+		"src/shared/protocol.cpp":    generateProtocolCpp(gameName, standalone),
+		"src/server/game_server.hpp": generateServerHpp(gameName, displayName, standalone),
+		"src/server/game_server.cpp": generateServerCpp(gameName, displayName, standalone),
+		"src/client/game_client.hpp": generateClientHpp(gameName, displayName, standalone),
+		"src/client/game_client.cpp": generateClientCpp(gameName, displayName, standalone),
+		"src/app/client_main.cpp":    generateClientMain(gameName, displayName, standalone),
+		"src/app/server_main.cpp":    generateServerMain(gameName, displayName, standalone),
 		"README.md":                  generateReadme(gameName, displayName),
 	}
 

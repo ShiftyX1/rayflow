@@ -240,16 +240,20 @@ target_link_libraries(%s_server PRIVATE %s_server_lib engine_core)
 // Protocol
 // =============================================================================
 
-func generateProtocolHpp(gameName string) string {
+func generateProtocolHpp(gameName string, standalone bool) string {
 	ns := toNamespace(gameName)
+	includePrefix := "engine"
+	if standalone {
+		includePrefix = "rayflow"
+	}
 	return fmt.Sprintf(`#pragma once
 
 // =============================================================================
 // %s - Protocol
 // =============================================================================
 
-#include <engine/core/byte_buffer.hpp>
-#include <engine/core/types.hpp>
+#include <%s/core/byte_buffer.hpp>
+#include <%s/core/types.hpp>
 
 #include <cstdint>
 #include <string>
@@ -343,10 +347,10 @@ std::vector<std::uint8_t> pack(MessageType type, const T& msg) {
 }
 
 } // namespace %s::proto
-`, gameName, ns, ns)
+`, gameName, includePrefix, includePrefix, ns, ns)
 }
 
-func generateProtocolCpp(gameName string) string {
+func generateProtocolCpp(gameName string, standalone bool) string {
 	ns := toNamespace(gameName)
 	return fmt.Sprintf(`#include "protocol.hpp"
 
@@ -467,15 +471,19 @@ StateSnapshot StateSnapshot::deserialize(engine::ByteReader& r) {
 // Server
 // =============================================================================
 
-func generateServerHpp(gameName, displayName string) string {
+func generateServerHpp(gameName, displayName string, standalone bool) string {
 	ns := toNamespace(gameName)
+	includePrefix := "engine"
+	if standalone {
+		includePrefix = "rayflow"
+	}
 	return fmt.Sprintf(`#pragma once
 
 // =============================================================================
 // %s - Game Server
 // =============================================================================
 
-#include <engine/core/game_interface.hpp>
+#include <%s/core/game_interface.hpp>
 #include "shared/protocol.hpp"
 
 #include <string>
@@ -512,10 +520,10 @@ private:
 };
 
 } // namespace %s
-`, displayName, ns, ns)
+`, displayName, includePrefix, ns, ns)
 }
 
-func generateServerCpp(gameName, displayName string) string {
+func generateServerCpp(gameName, displayName string, standalone bool) string {
 	ns := toNamespace(gameName)
 	return fmt.Sprintf(`#include "game_server.hpp"
 
@@ -640,15 +648,19 @@ void GameServer::handle_input_frame(engine::PlayerId id, const proto::InputFrame
 // Client
 // =============================================================================
 
-func generateClientHpp(gameName, displayName string) string {
+func generateClientHpp(gameName, displayName string, standalone bool) string {
 	ns := toNamespace(gameName)
+	includePrefix := "engine"
+	if standalone {
+		includePrefix = "rayflow"
+	}
 	return fmt.Sprintf(`#pragma once
 
 // =============================================================================
 // %s - Game Client
 // =============================================================================
 
-#include <engine/core/game_interface.hpp>
+#include <%s/core/game_interface.hpp>
 #include "shared/protocol.hpp"
 
 #include <string>
@@ -696,10 +708,10 @@ private:
 };
 
 } // namespace %s
-`, displayName, ns, ns)
+`, displayName, includePrefix, ns, ns)
 }
 
-func generateClientCpp(gameName, displayName string) string {
+func generateClientCpp(gameName, displayName string, standalone bool) string {
 	ns := toNamespace(gameName)
 	return fmt.Sprintf(`#include "game_client.hpp"
 
@@ -859,8 +871,12 @@ void GameClient::handle_state_snapshot(const proto::StateSnapshot& msg) {
 // Entry Points
 // =============================================================================
 
-func generateClientMain(gameName, displayName string) string {
+func generateClientMain(gameName, displayName string, standalone bool) string {
 	ns := toNamespace(gameName)
+	includePrefix := "engine"
+	if standalone {
+		includePrefix = "rayflow"
+	}
 	return fmt.Sprintf(`// =============================================================================
 // %s - Client Entry Point
 // =============================================================================
@@ -868,10 +884,10 @@ func generateClientMain(gameName, displayName string) string {
 #include "client/game_client.hpp"
 #include "server/game_server.hpp"
 
-#include <engine/core/client_engine.hpp>
-#include <engine/core/server_engine.hpp>
-#include <engine/transport/local_transport.hpp>
-#include <engine/transport/enet_client.hpp>
+#include <%s/core/client_engine.hpp>
+#include <%s/core/server_engine.hpp>
+#include <%s/transport/local_transport.hpp>
+#include <%s/transport/enet_client.hpp>
 
 #include <cstring>
 #include <iostream>
@@ -942,19 +958,23 @@ int main(int argc, char* argv[]) {
     
     return 0;
 }
-`, displayName, ns, ns, displayName, ns)
+`, displayName, includePrefix, includePrefix, includePrefix, includePrefix, ns, ns, displayName, ns)
 }
 
-func generateServerMain(gameName, displayName string) string {
+func generateServerMain(gameName, displayName string, standalone bool) string {
 	ns := toNamespace(gameName)
+	includePrefix := "engine"
+	if standalone {
+		includePrefix = "rayflow"
+	}
 	return fmt.Sprintf(`// =============================================================================
 // %s - Dedicated Server
 // =============================================================================
 
 #include "server/game_server.hpp"
 
-#include <engine/core/server_engine.hpp>
-#include <engine/transport/enet_server.hpp>
+#include <%s/core/server_engine.hpp>
+#include <%s/transport/enet_server.hpp>
 
 #include <csignal>
 #include <cstring>
@@ -989,13 +1009,15 @@ int main(int argc, char* argv[]) {
     engine::ServerEngine::Config cfg;
     cfg.tickRate = tickRate;
     
+    auto transport = std::make_shared<engine::transport::ENetServerTransport>();
+    
     g_server = std::make_unique<engine::ServerEngine>(cfg);
-    g_server->set_transport(std::make_shared<engine::transport::ENetServerTransport>(port));
+    g_server->set_transport(transport);
     g_server->run(game);
     
     return 0;
 }
-`, displayName, displayName, ns)
+`, displayName, includePrefix, includePrefix, displayName, ns)
 }
 
 // =============================================================================
