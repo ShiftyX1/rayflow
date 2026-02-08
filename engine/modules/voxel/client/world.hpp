@@ -20,6 +20,13 @@ struct ChunkCoordHash {
     }
 };
 
+struct PointLight {
+    Vector3 position;
+    Vector3 color;
+    float radius;
+    float intensity;
+};
+
 class World {
 public:
     explicit World(unsigned int seed);
@@ -28,6 +35,8 @@ public:
     World(const World&) = delete;
     World& operator=(const World&) = delete;
     
+    void set_lights(const std::vector<PointLight>& lights) { scene_lights_ = lights; }
+
     Block get_block(int x, int y, int z) const;
     void set_block(int x, int y, int z, Block type);
     
@@ -64,8 +73,8 @@ public:
 
     void mark_all_chunks_dirty();
 
-    float sample_light01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 1.0f; }
-    float sample_skylight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 1.0f; }
+    float sample_light01(int x, int y, int z) const;
+    float sample_skylight01(int x, int y, int z) const;
     float sample_blocklight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 0.0f; }
 
     void load_voxel_shader();
@@ -73,6 +82,16 @@ public:
     Shader get_voxel_shader() const { return voxel_shader_; }
     bool has_voxel_shader() const { return voxel_shader_loaded_; }
     
+    void set_environment(float timeOfDay, float sunIntensity, float ambientIntensity) {
+        time_of_day_ = timeOfDay;
+        sun_intensity_ = sunIntensity;
+        ambient_intensity_ = ambientIntensity;
+    }
+
+    float get_time_of_day() const { return time_of_day_; }
+    float get_sun_intensity() const { return sun_intensity_; }
+    float get_ambient_intensity() const { return ambient_intensity_; }
+
 private:
     void generate_chunk_terrain(Chunk& chunk);
     void load_chunks_around_player(const Vector3& player_position);
@@ -88,6 +107,10 @@ private:
     int render_distance_{8};
     Vector3 last_player_position_{0, 0, 0};
 
+    float time_of_day_{12.0f};
+    float sun_intensity_{1.0f};
+    float ambient_intensity_{0.5f};
+
     std::optional<shared::maps::MapTemplate> map_template_{};
 
     std::optional<float> temperature_override_{};
@@ -100,6 +123,24 @@ private:
 
     Shader voxel_shader_{};
     bool voxel_shader_loaded_{false};
+
+    std::vector<PointLight> scene_lights_;
+    int light_count_loc_{-1};
+    
+    // Cached shader locations (resolved once on shader load)
+    struct LightLocations {
+        int position;
+        int color;
+        int radius;
+        int intensity;
+    };
+    std::vector<LightLocations> light_locs_;
+    int sun_dir_loc_{-1};
+    int sun_col_loc_{-1};
+    int amb_col_loc_{-1};
+    int view_pos_loc_{-1};
+    
+    std::vector<Chunk*> dirty_chunks_;
 };
 
 } // namespace voxel

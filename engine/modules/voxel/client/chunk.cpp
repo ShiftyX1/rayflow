@@ -8,6 +8,7 @@
 #include <cstring>
 #include <chrono>
 #include <vector>
+#include <tuple>
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
@@ -131,7 +132,95 @@ void Chunk::set_block_with_state(int x, int y, int z, Block type, shared::voxel:
     needs_mesh_update_ = true;
 }
 
+std::uint8_t Chunk::get_light(int x, int y, int z) const {
+    if (!is_valid_position(x, y, z)) return 15;
+    return light_map_[get_index(x, y, z)];
+}
+
+void Chunk::set_light(int x, int y, int z, std::uint8_t value) {
+    if (is_valid_position(x, y, z)) {
+        light_map_[get_index(x, y, z)] = value;
+    }
+}
+
+void Chunk::calculate_lighting() {
+    light_map_.fill(0);
+
+    for (int z = 0; z < CHUNK_DEPTH; ++z) {
+        for (int x = 0; x < CHUNK_WIDTH; ++x) {
+            std::uint8_t currentLight = 15;
+            for (int y = CHUNK_HEIGHT - 1; y >= 0; --y) {
+                Block block = get_block(x, y, z);
+                auto type = static_cast<BlockType>(block);
+                
+                bool transparent = is_transparent(type);
+                
+                if (!transparent && is_solid(type)) {
+                    currentLight = 0;
+                } else {
+                    if (type == BlockType::Leaves || type == BlockType::Water) {
+                         if (currentLight > 1) currentLight -= 1;
+                         else currentLight = 0;
+                    }
+                }
+                
+                light_map_[get_index(x, y, z)] = currentLight;
+            }
+        }
+    }
+    
+    std::vector<std::tuple<int, int, int, std::uint8_t>> light_queue;
+    
+    for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+        for (int z = 0; z < CHUNK_DEPTH; ++z) {
+            for (int x = 0; x < CHUNK_WIDTH; ++x) {
+                std::uint8_t light = light_map_[get_index(x, y, z)];
+                if (light > 1) {
+                    light_queue.emplace_back(x, y, z, light);
+                }
+            }
+        }
+    }
+    
+    static const int dx[] = {1, -1, 0, 0, 0, 0};
+    static const int dy[] = {0, 0, 1, -1, 0, 0};
+    static const int dz[] = {0, 0, 0, 0, 1, -1};
+    
+    size_t queue_idx = 0;
+    while (queue_idx < light_queue.size()) {
+        auto [x, y, z, light] = light_queue[queue_idx++];
+        
+        for (int i = 0; i < 6; ++i) {
+            int nx = x + dx[i];
+            int ny = y + dy[i];
+            int nz = z + dz[i];
+            
+            if (!is_valid_position(nx, ny, nz)) continue;
+            
+            Block neighbor_block = get_block(nx, ny, nz);
+            auto neighbor_type = static_cast<BlockType>(neighbor_block);
+            
+            if (is_solid(neighbor_type) && !is_transparent(neighbor_type)) {
+                continue;
+            }
+            
+            std::uint8_t decay = (dy[i] == 1) ? 1 : 2;
+            if (light <= decay) continue;
+            
+            std::uint8_t new_light = light - decay;
+            int neighbor_idx = get_index(nx, ny, nz);
+            
+            if (new_light > light_map_[neighbor_idx]) {
+                light_map_[neighbor_idx] = new_light;
+                light_queue.emplace_back(nx, ny, nz, new_light);
+            }
+        }
+    }
+}
+
 void Chunk::generate_mesh(const World& world) {
+    calculate_lighting();
+
     const auto t_total0 = std::chrono::steady_clock::now();
 
     const float temperature = std::clamp(world.temperature(), 0.0f, 1.0f);
@@ -376,6 +465,11 @@ void Chunk::generate_mesh(const World& world) {
                 corner_v_sign[corner]
             );
         }
+        
+        const int nwx = wx + face_dir[face_idx][0];
+        const int nwy = wy + face_dir[face_idx][1];
+        const int nwz = wz + face_dir[face_idx][2];
+        uint8_t face_light = static_cast<uint8_t>(world.sample_skylight01(nwx, nwy, nwz) * 255.0f);
 
         for (int v = 0; v < 6; v++) {
             vertices.push_back(bx + fv[v][0]);
@@ -398,7 +492,7 @@ void Chunk::generate_mesh(const World& world) {
             colors.push_back(tint.r);
             colors.push_back(tint.g);
             colors.push_back(tint.b);
-            colors.push_back(255);
+            colors.push_back(face_light);
         }
     };
     
@@ -476,6 +570,8 @@ void Chunk::generate_mesh(const World& world) {
         };
         float cross2b_normal[3] = {-0.707f, 0.0f, -0.707f};
         
+        uint8_t block_light = static_cast<uint8_t>(world.sample_skylight01(static_cast<int>(bx), static_cast<int>(by), static_cast<int>(bz)) * 255.0f);
+
         auto emit_cross_face = [&](float verts[6][3], float uvs[6][2], float normal[3]) {
             for (int v = 0; v < 6; v++) {
                 vertices.push_back(bx + verts[v][0]);
@@ -496,7 +592,7 @@ void Chunk::generate_mesh(const World& world) {
                 colors.push_back(tint.r);
                 colors.push_back(tint.g);
                 colors.push_back(tint.b);
-                colors.push_back(255);
+                colors.push_back(block_light);
             }
         };
         
@@ -648,6 +744,7 @@ void Chunk::generate_mesh(const World& world) {
                                 corner_v_sign[corner]
                             );
                         }
+                        uint8_t face_light = static_cast<uint8_t>(world.sample_skylight01(nwx, nwy, nwz) * 255.0f);
                         
                         for (int v = 0; v < 6; v++) {
                             vertices.push_back(bx + face_vertices[face][v][0]);
@@ -681,7 +778,7 @@ void Chunk::generate_mesh(const World& world) {
                             colors.push_back(r);
                             colors.push_back(g);
                             colors.push_back(b);
-                            colors.push_back(255);
+                            colors.push_back(face_light);
                         }
                     }
                 }

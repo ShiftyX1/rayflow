@@ -1,6 +1,7 @@
 #include "world.hpp"
 #include "engine/client/core/resources.hpp"
 #include <raylib.h>
+#include <raymath.h>
 #include <cmath>
 #include <cstdio>
 #include <chrono>
@@ -194,7 +195,6 @@ void World::set_block(int x, int y, int z, Block type) {
     int local_x = x - chunk_x * CHUNK_WIDTH;
     int local_z = z - chunk_z * CHUNK_DEPTH;
 
-    const Block old_type = chunk->get_block(local_x, y, local_z);
     chunk->set_block(local_x, y, local_z, type);
 
     // If we edited a block on a chunk edge, the adjacent chunk's mesh must be rebuilt
@@ -306,6 +306,13 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
     chunk->set_generated(true);
     
     auto* ptr = chunk.get();
+    
+    chunk->set_dirty_callback([this](Chunk* c) {
+        if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
+            dirty_chunks_.push_back(c);
+        }
+    });
+    
     chunks_[key] = std::move(chunk);
     
     recompute_chunk_states(chunk_x, chunk_z);
@@ -333,6 +340,13 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
     } else {
         auto newChunk = std::make_unique<Chunk>(chunkX, chunkZ);
         chunk = newChunk.get();
+        
+        newChunk->set_dirty_callback([this](Chunk* c) {
+            if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
+                dirty_chunks_.push_back(c);
+            }
+        });
+        
         chunks_[key] = std::move(newChunk);
     }
     
@@ -378,6 +392,11 @@ void World::recompute_chunk_states(int chunkX, int chunkZ) {
     const int baseX = chunkX * CHUNK_WIDTH;
     const int baseZ = chunkZ * CHUNK_DEPTH;
     
+    Chunk* north_chunk = get_chunk(chunkX, chunkZ - 1);
+    Chunk* south_chunk = get_chunk(chunkX, chunkZ + 1);
+    Chunk* east_chunk = get_chunk(chunkX + 1, chunkZ);
+    Chunk* west_chunk = get_chunk(chunkX - 1, chunkZ);
+    
     for (int y = 0; y < CHUNK_HEIGHT; ++y) {
         for (int lz = 0; lz < CHUNK_DEPTH; ++lz) {
             for (int lx = 0; lx < CHUNK_WIDTH; ++lx) {
@@ -387,20 +406,34 @@ void World::recompute_chunk_states(int chunkX, int chunkZ) {
                 if (!uses_connections(blockType)) continue;
                 
                 BlockRuntimeState state{};
-                int wx = baseX + lx;
-                int wz = baseZ + lz;
                 
-                auto northType = static_cast<BlockType>(get_block(wx, y, wz - 1));
-                state.north = can_fence_connect_to(northType);
+                // North neighbor (z-1)
+                if (lz == 0 && north_chunk) {
+                    state.north = can_fence_connect_to(static_cast<BlockType>(north_chunk->get_block(lx, y, CHUNK_DEPTH - 1)));
+                } else if (lz > 0) {
+                    state.north = can_fence_connect_to(static_cast<BlockType>(chunk->get_block(lx, y, lz - 1)));
+                }
                 
-                auto southType = static_cast<BlockType>(get_block(wx, y, wz + 1));
-                state.south = can_fence_connect_to(southType);
+                // South neighbor (z+1)
+                if (lz == CHUNK_DEPTH - 1 && south_chunk) {
+                    state.south = can_fence_connect_to(static_cast<BlockType>(south_chunk->get_block(lx, y, 0)));
+                } else if (lz < CHUNK_DEPTH - 1) {
+                    state.south = can_fence_connect_to(static_cast<BlockType>(chunk->get_block(lx, y, lz + 1)));
+                }
                 
-                auto eastType = static_cast<BlockType>(get_block(wx + 1, y, wz));
-                state.east = can_fence_connect_to(eastType);
+                // East neighbor (x+1)
+                if (lx == CHUNK_WIDTH - 1 && east_chunk) {
+                    state.east = can_fence_connect_to(static_cast<BlockType>(east_chunk->get_block(0, y, lz)));
+                } else if (lx < CHUNK_WIDTH - 1) {
+                    state.east = can_fence_connect_to(static_cast<BlockType>(chunk->get_block(lx + 1, y, lz)));
+                }
                 
-                auto westType = static_cast<BlockType>(get_block(wx - 1, y, wz));
-                state.west = can_fence_connect_to(westType);
+                // West neighbor (x-1)
+                if (lx == 0 && west_chunk) {
+                    state.west = can_fence_connect_to(static_cast<BlockType>(west_chunk->get_block(CHUNK_WIDTH - 1, y, lz)));
+                } else if (lx > 0) {
+                    state.west = can_fence_connect_to(static_cast<BlockType>(chunk->get_block(lx - 1, y, lz)));
+                }
                 
                 chunk->set_block_state(lx, y, lz, state);
             }
@@ -446,12 +479,16 @@ void World::generate_chunk_terrain(Chunk& chunk) {
         return;
     }
     
+    const int base_x = chunk_x * CHUNK_WIDTH;
+    const int base_z = chunk_z * CHUNK_DEPTH;
+    
     for (int x = 0; x < CHUNK_WIDTH; x++) {
+        const int world_xi = base_x + x;
+        const float world_x = static_cast<float>(world_xi);
+        
         for (int z = 0; z < CHUNK_DEPTH; z++) {
-            float world_x = static_cast<float>(chunk_x * CHUNK_WIDTH + x);
-            float world_z = static_cast<float>(chunk_z * CHUNK_DEPTH + z);
-            int world_xi = chunk_x * CHUNK_WIDTH + x;
-            int world_zi = chunk_z * CHUNK_DEPTH + z;
+            const int world_zi = base_z + z;
+            const float world_z = static_cast<float>(world_zi);
             
             float noise = octave_perlin(world_x * 0.02f, world_z * 0.02f, 4, 0.5f);
             int height = static_cast<int>(60 + noise * 20);
@@ -508,21 +545,37 @@ void World::update(const Vector3& player_position) {
     load_chunks_around_player(player_position);
     unload_distant_chunks(player_position);
     
-    {
+    if (dirty_chunks_.empty()) {
+        for (auto& [key, chunk] : chunks_) {
+            (void)key;
+            if (chunk->needs_mesh_update()) {
+                dirty_chunks_.push_back(chunk.get());
+            }
+        }
+    }
+    
+    if (!dirty_chunks_.empty()) {
         // IMPORTANT: generating many chunk meshes in a single frame can stall for seconds.
         // Keep mesh rebuild work budgeted per-frame so lighting/chunk streaming stays responsive.
         constexpr float kMeshBudgetMs = 4.0f;
         const auto t0 = std::chrono::steady_clock::now();
-
-        for (auto& [key, chunk] : chunks_) {
-            (void)key;
-            if (!chunk->needs_mesh_update()) continue;
-
-            chunk->generate_mesh(*this);
-
-            const auto t1 = std::chrono::steady_clock::now();
-            const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
-            if (ms >= kMeshBudgetMs) break;
+        
+        auto it = dirty_chunks_.begin();
+        while (it != dirty_chunks_.end()) {
+            Chunk* chunk = *it;
+            
+            if (chunk->needs_mesh_update()) {
+                chunk->generate_mesh(*this);
+                
+                const auto t1 = std::chrono::steady_clock::now();
+                const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+                
+                it = dirty_chunks_.erase(it);
+                
+                if (ms >= kMeshBudgetMs) break;
+            } else {
+                it = dirty_chunks_.erase(it);
+            }
         }
     }
     
@@ -546,25 +599,77 @@ void World::unload_distant_chunks(const Vector3& player_position) {
     int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
     int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
     
-    std::vector<std::pair<int, int>> to_remove;
+    constexpr int UNLOAD_DIST_SQ = CHUNK_UNLOAD_DISTANCE * CHUNK_UNLOAD_DISTANCE;
     
-    for (const auto& [key, chunk] : chunks_) {
-        int dx = key.first - player_chunk_x;
-        int dz = key.second - player_chunk_z;
+    for (auto it = chunks_.begin(); it != chunks_.end(); ) {
+        int dx = it->first.first - player_chunk_x;
+        int dz = it->first.second - player_chunk_z;
         
-        if (dx * dx + dz * dz > CHUNK_UNLOAD_DISTANCE * CHUNK_UNLOAD_DISTANCE) {
-            to_remove.push_back(key);
+        if (dx * dx + dz * dz > UNLOAD_DIST_SQ) {
+            auto dirty_it = std::find(dirty_chunks_.begin(), dirty_chunks_.end(), it->second.get());
+            if (dirty_it != dirty_chunks_.end()) {
+                dirty_chunks_.erase(dirty_it);
+            }
+            it = chunks_.erase(it);
+        } else {
+            ++it;
         }
-    }
-    
-    for (const auto& key : to_remove) {
-        chunks_.erase(key);
     }
 }
 
 void World::render(const Camera3D& camera) const {
     (void)camera; // May be used for frustum culling later
     
+    if (voxel_shader_loaded_) {
+        // Update lights
+        int count = static_cast<int>(scene_lights_.size());
+        if (count > 32) count = 32;
+        
+        // theta = (time - 12) / 24 * 2PI
+        float theta = (time_of_day_ - 12.0f) / 24.0f * 2.0f * PI;
+        
+        // TODO: Rotate (0,1,0) around Z axis by theta?
+        // x = sin(theta), y = cos(theta)
+        // Noon (0): x=0, y=1. Correct.
+        // TODO: 18:00 (6): theta=PI/2. x=1, y=0. (West?)
+        // TODO: 6:00 (-6): theta=-PI/2. x=-1, y=0. (East?)
+        
+        Vector3 sunDirVec = { -std::sin(theta), std::cos(theta), 0.2f }; // Slight Z tilt
+        sunDirVec = Vector3Normalize(sunDirVec);
+        
+        Vector3 sunColVec = {1.0f, 1.0f, 0.9f};
+        // Simple day/night color
+        if (time_of_day_ < 6.0f || time_of_day_ > 18.0f) {
+           // Night
+           sunColVec = {0.1f, 0.1f, 0.2f};
+        } else if (time_of_day_ < 7.0f || time_of_day_ > 17.0f) {
+           // Transition
+           sunColVec = {1.0f, 0.6f, 0.3f};
+        }
+
+        Vector3 ambColVec = {0.6f, 0.6f, 0.7f};
+        
+        sunColVec = Vector3Scale(sunColVec, sun_intensity_);
+        ambColVec = Vector3Scale(ambColVec, ambient_intensity_);
+
+        if (sun_dir_loc_ != -1) SetShaderValue(voxel_shader_, sun_dir_loc_, &sunDirVec, SHADER_UNIFORM_VEC3);
+        if (sun_col_loc_ != -1) SetShaderValue(voxel_shader_, sun_col_loc_, &sunColVec, SHADER_UNIFORM_VEC3);
+        if (amb_col_loc_ != -1) SetShaderValue(voxel_shader_, amb_col_loc_, &ambColVec, SHADER_UNIFORM_VEC3);
+        if (view_pos_loc_ != -1) SetShaderValue(voxel_shader_, view_pos_loc_, &camera.position, SHADER_UNIFORM_VEC3);
+
+        SetShaderValue(voxel_shader_, light_count_loc_, &count, SHADER_UNIFORM_INT);
+
+        for (int i = 0; i < count; i++) {
+             const auto& locs = light_locs_[i];
+             const auto& light = scene_lights_[i];
+             
+             if (locs.position != -1) SetShaderValue(voxel_shader_, locs.position, &light.position, SHADER_UNIFORM_VEC3);
+             if (locs.color != -1) SetShaderValue(voxel_shader_, locs.color, &light.color, SHADER_UNIFORM_VEC3);
+             if (locs.radius != -1) SetShaderValue(voxel_shader_, locs.radius, &light.radius, SHADER_UNIFORM_FLOAT);
+             if (locs.intensity != -1) SetShaderValue(voxel_shader_, locs.intensity, &light.intensity, SHADER_UNIFORM_FLOAT);
+        }
+    }
+
     for (const auto& [key, chunk] : chunks_) {
         // Render with voxel shader (AO) if available, otherwise use default
         if (voxel_shader_loaded_) {
@@ -584,7 +689,28 @@ void World::load_voxel_shader() {
     voxel_shader_ = resources::load_shader(vs_path, fs_path);
     if (voxel_shader_.id != 0) {
         voxel_shader_loaded_ = true;
-        TraceLog(LOG_INFO, "Voxel shader loaded successfully");
+        
+        // Cache all shader locations once
+        light_count_loc_ = GetShaderLocation(voxel_shader_, "lightCount");
+        sun_dir_loc_ = GetShaderLocation(voxel_shader_, "sunDir");
+        sun_col_loc_ = GetShaderLocation(voxel_shader_, "sunColor");
+        amb_col_loc_ = GetShaderLocation(voxel_shader_, "ambientColor");
+        view_pos_loc_ = GetShaderLocation(voxel_shader_, "viewPos");
+        
+        // Cache light array locations (max 32)
+        light_locs_.clear();
+        light_locs_.reserve(32);
+        for (int i = 0; i < 32; i++) {
+            std::string base = "lights[" + std::to_string(i) + "]";
+            LightLocations locs;
+            locs.position = GetShaderLocation(voxel_shader_, (base + ".position").c_str());
+            locs.color = GetShaderLocation(voxel_shader_, (base + ".color").c_str());
+            locs.radius = GetShaderLocation(voxel_shader_, (base + ".radius").c_str());
+            locs.intensity = GetShaderLocation(voxel_shader_, (base + ".intensity").c_str());
+            light_locs_.push_back(locs);
+        }
+        
+        TraceLog(LOG_INFO, "Voxel shader loaded successfully (active)");
     } else {
         TraceLog(LOG_WARNING, "Voxel shader not found, using default shader");
         voxel_shader_loaded_ = false;
@@ -597,6 +723,14 @@ void World::unload_voxel_shader() {
         voxel_shader_loaded_ = false;
         TraceLog(LOG_INFO, "Voxel shader unloaded");
     }
+}
+
+float World::sample_skylight01(int x, int y, int z) const {
+    auto it = chunks_.find({x >> 4, z >> 4});
+    if (it != chunks_.end()) {
+        return it->second->get_light(x & 15, y, z & 15) / 15.0f;
+    }
+    return 1.0f;
 }
 
 } // namespace voxel

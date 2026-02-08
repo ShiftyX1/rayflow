@@ -86,6 +86,17 @@ struct ClientItemState {
 };
 
 // ============================================================================
+// Configuration
+// ============================================================================
+
+struct LightingConfig {
+    bool enable_player_light{false};      // Enable light from player
+    float player_light_intensity{1.0f};  // Player light intensity (0.0-2.0)
+    float player_light_radius{10.0f};    // Player light radius
+    bool enable_other_players_light{false}; // Enable lights from other players
+};
+
+// ============================================================================
 // BedWarsClient - IGameClient implementation
 // ============================================================================
 
@@ -97,6 +108,9 @@ public:
     // --- Configuration ---
     
     void set_player_name(const std::string& name) { playerName_ = name; }
+    
+    LightingConfig& lighting_config() { return lightingConfig_; }
+    const LightingConfig& lighting_config() const { return lightingConfig_; }
     
     // --- Connection callbacks (set by client_main) ---
     
@@ -158,6 +172,7 @@ private:
 
     // --- Helpers ---
     Color get_team_color(proto::TeamId team) const;
+    void update_lights();
 
 private:
     engine::IClientServices* engine_{nullptr};
@@ -169,6 +184,7 @@ private:
     
     // Player config
     std::string playerName_{"Player"};
+    LightingConfig lightingConfig_;
     
     // UI state
     ui::GameScreen gameScreen_{ui::GameScreen::MainMenu};

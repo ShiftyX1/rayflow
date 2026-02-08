@@ -1105,19 +1105,41 @@ int main() {
         editor_ui::StyledSlider(layout.NextRow(28), "Temp", &visualSettings.temperature, 0.0f, 1.0f, "%.2f");
         editor_ui::StyledSlider(layout.NextRow(28), "Humidity", &visualSettings.humidity, 0.0f, 1.0f, "%.2f");
 
+        editor_ui::StyledSlider(layout.NextRow(28), "Time", &visualSettings.timeOfDayHours, 0.0f, 24.0f, "%.1f h");
+        editor_ui::StyledSlider(layout.NextRow(28), "Sun Int", &visualSettings.sunIntensity, 0.0f, 5.0f, "%.2f");
+        editor_ui::StyledSlider(layout.NextRow(28), "Amb Int", &visualSettings.ambientIntensity, 0.0f, 2.0f, "%.2f");
+
         renderer::Skybox::instance().set_kind(visualSettings.skyboxKind);
 
         {
             static float lastAppliedTemp = -1.0f;
             static float lastAppliedHum = -1.0f;
+            static float lastTime = -1.0f;
+            static float lastSun = -1.0f;
+            static float lastAmb = -1.0f;
+            
             const bool tempChanged = (world && std::fabs(lastAppliedTemp - visualSettings.temperature) > 0.001f);
             const bool humChanged = (world && std::fabs(lastAppliedHum - visualSettings.humidity) > 0.001f);
+            
+            const bool lightChanged = (world && (
+                std::fabs(lastTime - visualSettings.timeOfDayHours) > 0.01f ||
+                std::fabs(lastSun - visualSettings.sunIntensity) > 0.01f ||
+                std::fabs(lastAmb - visualSettings.ambientIntensity) > 0.01f
+            ));
+            
             if (tempChanged || humChanged) {
                 world->set_temperature_override(visualSettings.temperature);
                 world->set_humidity_override(visualSettings.humidity);
                 world->mark_all_chunks_dirty();
                 lastAppliedTemp = visualSettings.temperature;
                 lastAppliedHum = visualSettings.humidity;
+            }
+            
+            if (lightChanged) {
+                world->set_environment(visualSettings.timeOfDayHours, visualSettings.sunIntensity, visualSettings.ambientIntensity);
+                lastTime = visualSettings.timeOfDayHours;
+                lastSun = visualSettings.sunIntensity;
+                lastAmb = visualSettings.ambientIntensity;
             }
         }
 

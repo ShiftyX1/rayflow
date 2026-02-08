@@ -7,6 +7,8 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <functional>
+#include <algorithm>
 
 namespace voxel {
 
@@ -31,6 +33,10 @@ public:
     
     void set_block_with_state(int x, int y, int z, Block type, shared::voxel::BlockRuntimeState state);
     
+    void calculate_lighting();
+    std::uint8_t get_light(int x, int y, int z) const;
+    void set_light(int x, int y, int z, std::uint8_t value);
+
     void generate_mesh(const World& world);
     void render() const;
     void render(Shader shader) const;
@@ -41,15 +47,23 @@ public:
     bool needs_mesh_update() const { return needs_mesh_update_; }
     bool is_generated() const { return is_generated_; }
     
-    void mark_dirty() { needs_mesh_update_ = true; }
+    void mark_dirty() { 
+        needs_mesh_update_ = true;
+        if (on_marked_dirty_) on_marked_dirty_(this);
+    }
     void set_generated(bool value) { is_generated_ = value; }
+    
+    void set_dirty_callback(std::function<void(Chunk*)> callback) { on_marked_dirty_ = callback; }
     
 private:
     static int get_index(int x, int y, int z);
     bool is_valid_position(int x, int y, int z) const;
     void cleanup_mesh();
     
+    std::function<void(Chunk*)> on_marked_dirty_;
+    
     std::array<Block, CHUNK_SIZE> blocks_{};
+    std::array<std::uint8_t, CHUNK_SIZE> light_map_{};
     std::unordered_map<int, shared::voxel::BlockRuntimeState> block_states_{};
     
     Vector3 world_position_{0, 0, 0};

@@ -145,6 +145,8 @@ void BedWarsClient::on_update(float dt) {
             try {
                 auto& world = engine_->world();
                 world.update(transform.position);
+
+                update_lights();
                 
                 // Update block interaction
                 auto& blockInteraction = engine_->block_interaction();
@@ -883,6 +885,47 @@ Color BedWarsClient::get_team_color(proto::TeamId team) const {
         case proto::Teams::Yellow: return YELLOW;
         default: return WHITE;
     }
+}
+
+// TODO: This is a very basic lighting system for demonstration. It can/will be expanded with more lights, colors, and dynamic effects.
+void BedWarsClient::update_lights() {
+    std::vector<voxel::PointLight> active_lights;
+    
+    active_lights.reserve(2 + players_.size());
+
+    if (lightingConfig_.enable_player_light && 
+        playerEntity_ != entt::null && 
+        registry_.all_of<ecs::Transform>(playerEntity_)) {
+        auto& transform = registry_.get<ecs::Transform>(playerEntity_);
+        active_lights.push_back({
+            .position = {transform.position.x, transform.position.y + 1.5f, transform.position.z},
+            .color = {1.0f, 0.9f, 0.7f},
+            .radius = lightingConfig_.player_light_radius,
+            .intensity = lightingConfig_.player_light_intensity
+        });
+    }
+
+    active_lights.push_back({
+        .position = {0.0f, 85.0f, 0.0f},
+        .color = {0.0f, 1.0f, 0.0f},
+        .radius = 15.0f,
+        .intensity = 1.5f
+    });
+
+    if (lightingConfig_.enable_other_players_light) {
+        for (const auto& [id, state] : players_) {
+            if (!state.alive) continue;
+            
+            active_lights.push_back({
+                .position = {state.px, state.py + 1.5f, state.pz},
+                .color = {0.5f, 0.7f, 1.0f},
+                .radius = 8.0f,
+                .intensity = 0.7f
+            });
+        }
+    }
+
+    engine_->world().set_lights(active_lights);
 }
 
 } // namespace bedwars

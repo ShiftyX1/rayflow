@@ -1,8 +1,10 @@
 #version 330
 
 in vec2 fragTexCoord;
-in vec4 fragColor;
+in vec3 fragTint;
+in float fragSkyLight;
 in vec3 fragNormal;
+in vec3 fragPos;
 in float fragAO;
 in float fragFoliageMask;
 
@@ -10,6 +12,23 @@ out vec4 finalColor;
 
 uniform sampler2D texture0;  // Atlas texture
 uniform vec4 colDiffuse;     // Raylib diffuse color (usually WHITE)
+
+uniform vec3 sunDir;
+uniform vec3 sunColor;
+uniform vec3 ambientColor;
+
+#define MAX_LIGHTS 32
+
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float radius;
+    float intensity;
+};
+
+uniform int lightCount;
+uniform PointLight lights[MAX_LIGHTS];
+uniform vec3 viewPos;
 
 void main() {
     // Sample texture from atlas
@@ -21,15 +40,35 @@ void main() {
     }
 
     // Apply vertex color tint (foliage/grass recolor or white)
-    // Note: fragColor is already normalized [0,1] by OpenGL
-    vec3 tintedColor = texelColor.rgb * fragColor.rgb;
+    vec3 tintedColor = texelColor.rgb * fragTint;
 
-    // Simple directional light for depth perception
-    vec3 lightDir = normalize(vec3(0.3, 1.0, 0.5));
-    float NdotL = max(dot(fragNormal, lightDir), 0.0);
-    float ambient = 0.6;
-    float diffuse = 0.4;
-    float lighting = ambient + diffuse * NdotL;
+    vec3 normal = normalize(fragNormal);
+
+    float sunDiff = max(dot(normal, sunDir), 0.0);
+    
+    float minAmbient = 0.15;
+    float skylightFactor = max(fragSkyLight, minAmbient);
+    
+    vec3 lighting = (ambientColor + sunColor * sunDiff) * skylightFactor;
+
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+        if (i >= lightCount) break;
+        
+        PointLight light = lights[i];
+        vec3 lightDir = light.position - fragPos;
+        float distance = length(lightDir);
+        
+        if (distance < light.radius) {
+            lightDir = normalize(lightDir);
+            float diff = max(dot(normal, lightDir), 0.0);
+            
+            float att = 1.0 - smoothstep(0.0, light.radius, distance);
+            att = att * att; // Make it fall off nicer
+            // BTW I love this line of code
+
+            lighting += light.color * light.intensity * diff * att;
+        }
+    }
 
     // Apply Minecraft-style AO
     // AO ranges from ~0.2 (fully occluded corner) to 1.0 (no occlusion)
