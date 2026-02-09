@@ -95,6 +95,7 @@ void Chunk::set_block(int x, int y, int z, Block type) {
     if (!is_valid_position(x, y, z)) return;
     blocks_[get_index(x, y, z)] = type;
     needs_mesh_update_ = true;
+    is_empty_ = false;
 }
 
 shared::voxel::BlockRuntimeState Chunk::get_block_state(int x, int y, int z) const {
@@ -149,11 +150,14 @@ void Chunk::calculate_lighting() {
     for (int z = 0; z < CHUNK_DEPTH; ++z) {
         for (int x = 0; x < CHUNK_WIDTH; ++x) {
             std::uint8_t currentLight = 15;
+            const int col_base = get_index(x, 0, z);
+            
             for (int y = CHUNK_HEIGHT - 1; y >= 0; --y) {
-                Block block = get_block(x, y, z);
-                auto type = static_cast<BlockType>(block);
+                const int idx = col_base + y * CHUNK_WIDTH * CHUNK_DEPTH;
+                const Block block = blocks_[idx];
+                const auto type = static_cast<BlockType>(block);
                 
-                bool transparent = is_transparent(type);
+                const bool transparent = is_transparent(type);
                 
                 if (!transparent && is_solid(type)) {
                     currentLight = 0;
@@ -164,17 +168,18 @@ void Chunk::calculate_lighting() {
                     }
                 }
                 
-                light_map_[get_index(x, y, z)] = currentLight;
+                light_map_[idx] = currentLight;
             }
         }
     }
     
     std::vector<std::tuple<int, int, int, std::uint8_t>> light_queue;
+    light_queue.reserve(CHUNK_SIZE / 4);
     
     for (int y = 0; y < CHUNK_HEIGHT; ++y) {
         for (int z = 0; z < CHUNK_DEPTH; ++z) {
             for (int x = 0; x < CHUNK_WIDTH; ++x) {
-                std::uint8_t light = light_map_[get_index(x, y, z)];
+                const std::uint8_t light = light_map_[get_index(x, y, z)];
                 if (light > 1) {
                     light_queue.emplace_back(x, y, z, light);
                 }
@@ -182,9 +187,9 @@ void Chunk::calculate_lighting() {
         }
     }
     
-    static const int dx[] = {1, -1, 0, 0, 0, 0};
-    static const int dy[] = {0, 0, 1, -1, 0, 0};
-    static const int dz[] = {0, 0, 0, 0, 1, -1};
+    static constexpr int dx[] = {1, -1, 0, 0, 0, 0};
+    static constexpr int dy[] = {0, 0, 1, -1, 0, 0};
+    static constexpr int dz[] = {0, 0, 0, 0, 1, -1};
     
     size_t queue_idx = 0;
     while (queue_idx < light_queue.size()) {
@@ -219,6 +224,24 @@ void Chunk::calculate_lighting() {
 }
 
 void Chunk::generate_mesh(const World& world) {
+    bool has_solid_blocks = false;
+    for (const auto& block : blocks_) {
+        if (block != static_cast<Block>(BlockType::Air)) {
+            has_solid_blocks = true;
+            break;
+        }
+    }
+    
+    if (!has_solid_blocks) {
+        cleanup_mesh();
+        has_mesh_ = false;
+        needs_mesh_update_ = false;
+        is_empty_ = true;
+        light_markers_ws_.clear();
+        return;
+    }
+    
+    is_empty_ = false;
     calculate_lighting();
 
     const auto t_total0 = std::chrono::steady_clock::now();
@@ -232,11 +255,20 @@ void Chunk::generate_mesh(const World& world) {
 
     light_markers_ws_.clear();
     
+    constexpr size_t ESTIMATED_FACES = CHUNK_SIZE / 3;
+    constexpr size_t ESTIMATED_VERTS = ESTIMATED_FACES * 6;
+    
     std::vector<float> vertices;
     std::vector<float> texcoords;
     std::vector<float> texcoords2;
     std::vector<float> normals;
     std::vector<unsigned char> colors;
+    
+    vertices.reserve(ESTIMATED_VERTS * 3);
+    texcoords.reserve(ESTIMATED_VERTS * 2);
+    texcoords2.reserve(ESTIMATED_VERTS * 2);
+    normals.reserve(ESTIMATED_VERTS * 3);
+    colors.reserve(ESTIMATED_VERTS * 4);
     
     auto& registry = BlockRegistry::instance();
     float atlas_size = static_cast<float>(registry.get_atlas_texture().width);
@@ -331,7 +363,7 @@ void Chunk::generate_mesh(const World& world) {
     static const int corner_u_sign[4] = { -1, -1, +1, +1 };
     static const int corner_v_sign[4] = { -1, +1, +1, -1 };
 
-    auto should_cull_model_face = [&world](int wx, int wy, int wz, int face_idx) -> bool {
+    auto should_cull_model_face = [&world](int wx, int wy, int wz) -> bool {
         Block neighbor = world.get_block(wx, wy, wz);
         auto neighbor_type = static_cast<BlockType>(neighbor);
         
@@ -643,7 +675,6 @@ void Chunk::generate_mesh(const World& world) {
                 
                 const float baseFoliageMask =
                     (block_type == BlockType::Leaves) ? 1.0f : 0.0f;
-                const Color baseTint = (baseFoliageMask > 0.5f) ? foliage_tint : WHITE;
                 
                 if (shared::voxel::is_fence(block_type)) {
                     auto fence_elements = shared::voxel::models::make_fence_elements(
@@ -658,7 +689,7 @@ void Chunk::generate_mesh(const World& world) {
                             const int nwy = wy + face_dir[face][1];
                             const int nwz = wz + face_dir[face][2];
                             
-                            if (elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz, face)) {
+                            if (elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz)) {
                                 continue;
                             }
                             
@@ -678,7 +709,7 @@ void Chunk::generate_mesh(const World& world) {
                         const int nwy = wy + face_dir[face][1];
                         const int nwz = wz + face_dir[face][2];
                         
-                        if (slab_elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz, face)) {
+                        if (slab_elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz)) {
                             continue;
                         }
                         
@@ -698,7 +729,7 @@ void Chunk::generate_mesh(const World& world) {
                             const int nwy = wy + face_dir[face][1];
                             const int nwz = wz + face_dir[face][2];
                             
-                            if (elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz, face)) {
+                            if (elem.faces[face].cullface && should_cull_model_face(nwx, nwy, nwz)) {
                                 continue;
                             }
                             

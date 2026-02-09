@@ -46,6 +46,7 @@ public:
     Vector3 get_world_position() const { return world_position_; }
     bool needs_mesh_update() const { return needs_mesh_update_; }
     bool is_generated() const { return is_generated_; }
+    bool is_empty() const { return is_empty_; }
     
     void mark_dirty() { 
         needs_mesh_update_ = true;
@@ -73,6 +74,7 @@ private:
     bool needs_mesh_update_{true};
     bool is_generated_{false};
     bool has_mesh_{false};
+    bool is_empty_{false};
     
     Mesh mesh_{};
     Model model_{};

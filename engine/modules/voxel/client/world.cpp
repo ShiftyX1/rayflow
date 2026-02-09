@@ -670,7 +670,24 @@ void World::render(const Camera3D& camera) const {
         }
     }
 
+    const Vector3& cam_pos = camera.position;
+    const float max_render_dist_sq = static_cast<float>(render_distance_ * CHUNK_WIDTH * render_distance_ * CHUNK_WIDTH);
+    
     for (const auto& [key, chunk] : chunks_) {
+        if (chunk->is_empty()) continue;
+        
+        const Vector3 chunk_center = {
+            chunk->get_world_position().x + CHUNK_WIDTH * 0.5f,
+            CHUNK_HEIGHT * 0.5f,
+            chunk->get_world_position().z + CHUNK_DEPTH * 0.5f
+        };
+        
+        const float dx = chunk_center.x - cam_pos.x;
+        const float dz = chunk_center.z - cam_pos.z;
+        const float dist_sq = dx * dx + dz * dz;
+        
+        if (dist_sq > max_render_dist_sq) continue;
+        
         // Render with voxel shader (AO) if available, otherwise use default
         if (voxel_shader_loaded_) {
             chunk->render(voxel_shader_);
