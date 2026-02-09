@@ -73,6 +73,8 @@ public:
     int window_width() const override { return config_.windowWidth; }
     int window_height() const override { return config_.windowHeight; }
     
+    void request_shutdown() override { stop(); }
+    
     voxel::World& world() override;
     const voxel::World& world() const override;
     void init_world(std::uint32_t seed) override;

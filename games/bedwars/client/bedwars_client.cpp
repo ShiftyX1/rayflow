@@ -819,8 +819,8 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
         }
         else if (std::get_if<ui::QuitGame>(&cmd)) {
             // Request engine shutdown
-            engine_->log(engine::LogLevel::Info, "Quit requested");
-            // We can't directly stop engine from here, but user can close window
+            engine_->log(engine::LogLevel::Info, "Quit requested - shutting down");
+            engine_->request_shutdown();
         }
         else if (std::get_if<ui::ShowConnectScreen>(&cmd)) {
             gameScreen_ = ui::GameScreen::ConnectMenu;

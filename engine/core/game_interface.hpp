@@ -134,6 +134,8 @@ public:
     /// Window height in pixels.
     virtual int window_height() const = 0;
 
+    virtual void request_shutdown() = 0;
+
     // --- Voxel World ---
     
     /// Get the voxel world (engine owns it).
