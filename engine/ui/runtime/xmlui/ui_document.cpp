@@ -74,6 +74,51 @@ static Color to_raylib_color(const UIColor& c) {
     return Color{c.r, c.g, c.b, c.a};
 }
 
+static Color apply_opacity(const UIColor& c, float opacity) {
+    return Color{
+        c.r,
+        c.g,
+        c.b,
+        static_cast<unsigned char>(c.a * opacity)
+    };
+}
+
+static void draw_box_shadow(const Rectangle& r, const UIStyle& style) {
+    if (!style.has_shadow) return;
+    
+    const float blur = static_cast<float>(style.shadow_blur);
+    const float offsetX = static_cast<float>(style.shadow_offset_x);
+    const float offsetY = static_cast<float>(style.shadow_offset_y);
+    
+    const int layers = std::max(1, std::min(10, style.shadow_blur / 2));
+    for (int i = 0; i < layers; ++i) {
+        const float alpha = (1.0f - (static_cast<float>(i) / layers)) * (style.shadow_color.a / 255.0f);
+        const float spread = (static_cast<float>(i) / layers) * blur;
+        
+        Rectangle shadowRect = {
+            r.x + offsetX - spread,
+            r.y + offsetY - spread,
+            r.width + spread * 2,
+            r.height + spread * 2
+        };
+        
+        Color shadowColor = {
+            style.shadow_color.r,
+            style.shadow_color.g,
+            style.shadow_color.b,
+            static_cast<unsigned char>(alpha * 255)
+        };
+        
+        if (style.border_radius > 0) {
+            DrawRectangleRounded(shadowRect, 
+                static_cast<float>(style.border_radius) / std::min(r.width, r.height), 
+                8, shadowColor);
+        } else {
+            DrawRectangleRec(shadowRect, shadowColor);
+        }
+    }
+}
+
 UIDocument::Node UIDocument::parse_node_rec(tinyxml2::XMLElement* el) {
     Node n;
     n.type = el->Name() ? el->Name() : "";
@@ -524,21 +569,25 @@ void UIDocument::render_node(const Node& node, const UIViewModel& vm) {
 void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
     const Rectangle& r = node.computed_rect;
 
+    draw_box_shadow(r, node.style);
+
     // Background
     if (node.style.background_color.has_value()) {
+        Color bgColor = apply_opacity(*node.style.background_color, node.style.opacity);
         if (node.style.border_radius > 0) {
-            DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, to_raylib_color(*node.style.background_color));
+            DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, bgColor);
         } else {
-            DrawRectangleRec(r, to_raylib_color(*node.style.background_color));
+            DrawRectangleRec(r, bgColor);
         }
     }
 
     // Border
     if (node.style.border_width > 0) {
+        Color borderColor = apply_opacity(node.style.border_color, node.style.opacity);
         if (node.style.border_radius > 0) {
-            DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, static_cast<float>(node.style.border_width), to_raylib_color(node.style.border_color));
+            DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, static_cast<float>(node.style.border_width), borderColor);
         } else {
-            DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), to_raylib_color(node.style.border_color));
+            DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), borderColor);
         }
     }
 
@@ -596,6 +645,8 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
 
     const Rectangle& r = node.computed_rect;
 
+    draw_box_shadow(r, node.style);
+
     // Button background with hover/pressed states
     UIColor bg = node.style.background_color.value_or(UIColor{60, 60, 60, 255});
     if (node.pressed) {
@@ -608,10 +659,11 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
         bg.b = static_cast<unsigned char>(std::min(255, bg.b + 30));
     }
 
+    Color bgColor = apply_opacity(bg, node.style.opacity);
     if (node.style.border_radius > 0) {
-        DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, to_raylib_color(bg));
+        DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, bgColor);
     } else {
-        DrawRectangleRec(r, to_raylib_color(bg));
+        DrawRectangleRec(r, bgColor);
     }
 
     // Border
@@ -622,20 +674,52 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
             border_col.g = static_cast<unsigned char>(std::min(255, border_col.g + 50));
             border_col.b = static_cast<unsigned char>(std::min(255, border_col.b + 50));
         }
+        Color borderColor = apply_opacity(border_col, node.style.opacity);
         if (node.style.border_radius > 0) {
-            DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, static_cast<float>(node.style.border_width), to_raylib_color(border_col));
+            DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, static_cast<float>(node.style.border_width), borderColor);
         } else {
-            DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), to_raylib_color(border_col));
+            DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), borderColor);
         }
     }
 
-    // Text centered
     if (!node.text.empty()) {
         const int fontSize = node.style.font_size;
+        const Color textColor = to_raylib_color(node.style.color);
         const int textW = MeasureText(node.text.c_str(), fontSize);
-        const int tx = static_cast<int>(r.x + (r.width - textW) / 2);
-        const int ty = static_cast<int>(r.y + (r.height - fontSize) / 2);
-        DrawText(node.text.c_str(), tx, ty, fontSize, to_raylib_color(node.style.color));
+        const int textH = fontSize;
+        
+        const float innerX = r.x + node.style.padding.left;
+        const float innerY = r.y + node.style.padding.top;
+        const float innerW = r.width - node.style.padding.left - node.style.padding.right;
+        const float innerH = r.height - node.style.padding.top - node.style.padding.bottom;
+        
+        int tx = static_cast<int>(innerX);
+        switch (node.style.text_align) {
+            case UITextAlign::Left:
+                tx = static_cast<int>(innerX);
+                break;
+            case UITextAlign::Center:
+                tx = static_cast<int>(innerX + (innerW - textW) / 2);
+                break;
+            case UITextAlign::Right:
+                tx = static_cast<int>(innerX + innerW - textW);
+                break;
+        }
+        
+        int ty = static_cast<int>(innerY);
+        switch (node.style.vertical_align) {
+            case UIVerticalAlign::Top:
+                ty = static_cast<int>(innerY);
+                break;
+            case UIVerticalAlign::Middle:
+                ty = static_cast<int>(innerY + (innerH - textH) / 2);
+                break;
+            case UIVerticalAlign::Bottom:
+                ty = static_cast<int>(innerY + innerH - textH);
+                break;
+        }
+        
+        DrawText(node.text.c_str(), tx, ty, fontSize, textColor);
     }
 }
 

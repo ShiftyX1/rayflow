@@ -402,6 +402,54 @@ CSSParseResult parse_css_lite(std::string_view css) {
                 if (auto v = parse_int(value); v.has_value()) rule.style.border_radius = *v;
             } else if (key == "visible") {
                 rule.style.visible = parse_bool(value);
+            } else if (key == "opacity") {
+                try {
+                    float opacity = std::stof(std::string(value));
+                    rule.style.opacity = std::max(0.0f, std::min(1.0f, opacity));
+                } catch (...) {}
+            } else if (key == "box-shadow") {
+                rule.style.has_shadow = true;
+                size_t pos = 0;
+                std::string val_str{value};
+                // Skip whitespace
+                while (pos < val_str.size() && std::isspace(static_cast<unsigned char>(val_str[pos]))) pos++;
+                
+                // Parse offsetX
+                size_t start = pos;
+                while (pos < val_str.size() && (std::isdigit(static_cast<unsigned char>(val_str[pos])) || val_str[pos] == '-')) pos++;
+                if (pos > start) {
+                    rule.style.shadow_offset_x = std::stoi(val_str.substr(start, pos - start));
+                }
+                
+                // Skip whitespace
+                while (pos < val_str.size() && std::isspace(static_cast<unsigned char>(val_str[pos]))) pos++;
+                
+                // Parse offsetY
+                start = pos;
+                while (pos < val_str.size() && (std::isdigit(static_cast<unsigned char>(val_str[pos])) || val_str[pos] == '-')) pos++;
+                if (pos > start) {
+                    rule.style.shadow_offset_y = std::stoi(val_str.substr(start, pos - start));
+                }
+                
+                // Skip whitespace
+                while (pos < val_str.size() && std::isspace(static_cast<unsigned char>(val_str[pos]))) pos++;
+                
+                // Parse blur
+                start = pos;
+                while (pos < val_str.size() && std::isdigit(static_cast<unsigned char>(val_str[pos]))) pos++;
+                if (pos > start) {
+                    rule.style.shadow_blur = std::stoi(val_str.substr(start, pos - start));
+                }
+                
+                // Skip whitespace
+                while (pos < val_str.size() && std::isspace(static_cast<unsigned char>(val_str[pos]))) pos++;
+                
+                // Parse color (rest of string)
+                if (pos < val_str.size()) {
+                    if (auto c = parse_color(val_str.substr(pos)); c.has_value()) {
+                        rule.style.shadow_color = *c;
+                    }
+                }
             }
         }
 
@@ -445,6 +493,16 @@ UIStyle compute_style(
         out.border_color = r.style.border_color;
         out.border_radius = r.style.border_radius;
         out.visible = r.style.visible;
+        out.opacity = r.style.opacity;
+        
+        // Shadow properties
+        if (r.style.has_shadow) {
+            out.has_shadow = r.style.has_shadow;
+            out.shadow_offset_x = r.style.shadow_offset_x;
+            out.shadow_offset_y = r.style.shadow_offset_y;
+            out.shadow_blur = r.style.shadow_blur;
+            out.shadow_color = r.style.shadow_color;
+        }
     }
 
     return out;
