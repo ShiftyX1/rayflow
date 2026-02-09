@@ -87,6 +87,13 @@ struct UIStyle {
     int border_radius{0};
 
     bool visible{true};
+    float opacity{1.0f};
+    
+    bool has_shadow{false};
+    int shadow_offset_x{0};
+    int shadow_offset_y{4};
+    int shadow_blur{8};
+    UIColor shadow_color{0, 0, 0, 128};
 };
 
 struct CSSSelector {
