@@ -887,7 +887,27 @@ Color BedWarsClient::get_team_color(proto::TeamId team) const {
     }
 }
 
-// TODO: This is a very basic lighting system for demonstration. It can/will be expanded with more lights, colors, and dynamic effects.
+// ============================================================================
+// Dynamic Point Lights Update
+// ============================================================================
+// This creates DYNAMIC PointLight objects (shader-based lighting) for moving
+// entities like players. These are NOT the same as BlockType::Light blocks!
+//
+// PointLight (this function):
+// - Dynamic, moves with players/objects every frame
+// - Shader-based per-pixel lighting (passed to GPU)
+// - Limited to 32 active lights (MAX_LIGHTS)
+// - Creates "halos" of light around moving entities
+//
+// BlockType::Light (static blocks in world):
+// - Static blocks placed in map editor
+// - Minecraft-style voxel lighting (0-15 propagation)
+// - Unlimited count, deterministic across clients
+// - Base illumination for the world
+//
+// Both work together: BlockType::Light provides base lighting, PointLights
+// add dynamic highlights. See docs/LIGHTING_SYSTEMS.md for details.
+// ============================================================================
 void BedWarsClient::update_lights() {
     std::vector<voxel::PointLight> active_lights;
     

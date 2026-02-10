@@ -19,6 +19,22 @@ uniform vec3 ambientColor;
 
 #define MAX_LIGHTS 32
 
+// ============================================================================
+// Dynamic Point Lights (Shader-based)
+// ============================================================================
+// These are PointLight structs from engine/modules/voxel/client/world.hpp
+// Used for DYNAMIC, REAL-TIME lighting of moving objects (players, effects).
+// 
+// This is SEPARATE from BlockType::Light blocks which provide STATIC voxel
+// lighting through Minecraft-style light propagation (0-15 values stored in
+// vertex colors via fragSkyLight).
+//
+// Both systems work together:
+// - fragSkyLight: base illumination from voxel lighting (static blocks)
+// - lights[]: additional dynamic highlights from moving objects
+//
+// See docs/LIGHTING_SYSTEMS.md for complete explanation.
+// ============================================================================
 struct PointLight {
     vec3 position;
     vec3 color;

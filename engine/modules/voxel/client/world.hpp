@@ -20,6 +20,31 @@ struct ChunkCoordHash {
     }
 };
 
+// ============================================================================
+// Dynamic Shader-based Point Light
+// ============================================================================
+// NOTE: This is NOT the same as BlockType::Light!
+// 
+// PointLight is used for DYNAMIC, REAL-TIME lighting of moving objects
+// (players, projectiles, effects) via shader calculations. These lights:
+// - Update every frame
+// - Are passed to fragment shader for per-pixel lighting
+// - Use continuous position/color/radius (not discrete grid)
+// - Limited to MAX_LIGHTS (32) active at once
+// - Calculated per-pixel on GPU
+//
+// BlockType::Light (in shared/block.hpp) is used for STATIC, VOXEL-BASED
+// lighting via Minecraft-style light propagation:
+// - Placed as blocks in world (like torches)
+// - Propagates light 0-15 through BFS algorithm
+// - Deterministic (same on all clients)
+// - Unlimited count (just blocks in world)
+// - Stored as vertex colors, minimal GPU cost
+//
+// Both systems work together: Minecraft lighting provides base illumination,
+// PointLights add dynamic highlights and effects.
+// See docs/LIGHTING_SYSTEMS.md for full explanation.
+// ============================================================================
 struct PointLight {
     Vector3 position;
     Vector3 color;

@@ -30,7 +30,26 @@ enum class BlockType : std::uint8_t {
     Iron,
     Gold,
     Diamond,
+    // ============================================================================
+    // Light Block - Static Voxel Light Source
+    // ============================================================================
+    // NOTE: This is NOT the same as the PointLight struct in client/world.hpp!
+    //
+    // BlockType::Light is a STATIC light source block used for:
+    // - Map editor placement of permanent light sources
+    // - Minecraft-style voxel lighting (0-15 propagation)
+    // - Deterministic lighting (same on all clients)
+    // - No collision (players walk through it)
+    // - Emits light level 15 in blocklight system
+    //
+    // PointLight (in client/world.hpp) is for DYNAMIC shader-based lighting:
+    // - Moving objects (players, projectiles)
+    // - Real-time per-pixel shader calculations
+    // - Continuous position/color in 3D space
+    //
     // LS-1: map/editor light marker block. Must stay stable (append-only).
+    // See docs/LIGHTING_SYSTEMS.md for detailed comparison.
+    // ============================================================================
     Light,
     
     // Non-full blocks (slabs, fences, etc.)

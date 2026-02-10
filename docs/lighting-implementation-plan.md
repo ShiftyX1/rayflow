@@ -1,5 +1,12 @@
 # Minecraft-style Lighting: Implementation Plan
 
+> **NOTE:** This document describes the **Minecraft-style voxel lighting system** 
+> (BlockType::Light, blocklight/skylight propagation). This is separate from the
+> **dynamic shader-based lighting** system (PointLight struct).
+> 
+> For a complete overview of both systems and how they work together, see:
+> **[docs/LIGHTING_SYSTEMS.md](LIGHTING_SYSTEMS.md)**
+
 ## Executive Summary
 
 Цель: детерминированное Minecraft-style освещение (0..15 block + sky), единое у всех клиентов.
