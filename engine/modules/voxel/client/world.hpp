@@ -36,7 +36,10 @@ public:
     World& operator=(const World&) = delete;
     
     void set_lights(const std::vector<PointLight>& lights) { scene_lights_ = lights; }
-
+    
+    void set_static_lights(const std::vector<Vector3>& positions);
+    const std::vector<PointLight>& static_lights() const { return static_lights_; }
+    
     Block get_block(int x, int y, int z) const;
     void set_block(int x, int y, int z, Block type);
     
@@ -96,6 +99,7 @@ private:
     void generate_chunk_terrain(Chunk& chunk);
     void load_chunks_around_player(const Vector3& player_position);
     void unload_distant_chunks(const Vector3& player_position);
+    void extract_lights_from_map();
     
     float perlin_noise(float x, float y) const;
     float octave_perlin(float x, float y, int octaves, float persistence) const;
@@ -125,6 +129,7 @@ private:
     bool voxel_shader_loaded_{false};
 
     std::vector<PointLight> scene_lights_;
+    std::vector<PointLight> static_lights_;
     int light_count_loc_{-1};
     
     // Cached shader locations (resolved once on shader load)

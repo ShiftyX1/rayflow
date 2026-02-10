@@ -53,11 +53,13 @@ World::~World() {
 void World::set_map_template(shared::maps::MapTemplate map) {
     map_template_ = std::move(map);
     chunks_.clear();
+    extract_lights_from_map();
 }
 
 void World::clear_map_template() {
     map_template_.reset();
     chunks_.clear();
+    static_lights_.clear();
 }
 
 float World::temperature() const {
@@ -357,6 +359,11 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
                                         static_cast<std::size_t>(lz) * static_cast<std::size_t>(CHUNK_WIDTH) +
                                         static_cast<std::size_t>(lx);
                 Block bt = static_cast<Block>(blockData[idx]);
+                
+                if (static_cast<BlockType>(bt) == BlockType::Light) {
+                    bt = static_cast<Block>(BlockType::Air);
+                }
+                
                 chunk->set_block(lx, y, lz, bt);
             }
         }
@@ -389,8 +396,6 @@ void World::recompute_chunk_states(int chunkX, int chunkZ) {
     if (it == chunks_.end()) return;
     
     Chunk* chunk = it->second.get();
-    const int baseX = chunkX * CHUNK_WIDTH;
-    const int baseZ = chunkZ * CHUNK_DEPTH;
     
     Chunk* north_chunk = get_chunk(chunkX, chunkZ - 1);
     Chunk* south_chunk = get_chunk(chunkX, chunkZ + 1);
@@ -461,6 +466,10 @@ void World::generate_chunk_terrain(Chunk& chunk) {
                                                     static_cast<std::size_t>(z) * static_cast<std::size_t>(CHUNK_WIDTH) +
                                                     static_cast<std::size_t>(x);
                             bt = static_cast<Block>(src->blocks[idx]);
+                            
+                            if (static_cast<BlockType>(bt) == BlockType::Light) {
+                                bt = static_cast<Block>(BlockType::Air);
+                            }
                         }
                         chunk.set_block(x, y, z, bt);
                     }
@@ -621,8 +630,17 @@ void World::render(const Camera3D& camera) const {
     (void)camera; // May be used for frustum culling later
     
     if (voxel_shader_loaded_) {
-        // Update lights
-        int count = static_cast<int>(scene_lights_.size());
+        // Merge static lights from map + dynamic scene lights
+        std::vector<PointLight> all_lights;
+        all_lights.reserve(static_lights_.size() + scene_lights_.size());
+        
+        // Add static lights first
+        all_lights.insert(all_lights.end(), static_lights_.begin(), static_lights_.end());
+        // Add dynamic lights (players, etc.)
+        all_lights.insert(all_lights.end(), scene_lights_.begin(), scene_lights_.end());
+        
+        // Limit to shader maximum
+        int count = static_cast<int>(all_lights.size());
         if (count > 32) count = 32;
         
         // theta = (time - 12) / 24 * 2PI
@@ -661,7 +679,7 @@ void World::render(const Camera3D& camera) const {
 
         for (int i = 0; i < count; i++) {
              const auto& locs = light_locs_[i];
-             const auto& light = scene_lights_[i];
+             const auto& light = all_lights[i];
              
              if (locs.position != -1) SetShaderValue(voxel_shader_, locs.position, &light.position, SHADER_UNIFORM_VEC3);
              if (locs.color != -1) SetShaderValue(voxel_shader_, locs.color, &light.color, SHADER_UNIFORM_VEC3);
@@ -748,6 +766,68 @@ float World::sample_skylight01(int x, int y, int z) const {
         return it->second->get_light(x & 15, y, z & 15) / 15.0f;
     }
     return 1.0f;
+}
+
+void World::set_static_lights(const std::vector<Vector3>& positions) {
+    static_lights_.clear();
+    static_lights_.reserve(positions.size());
+    
+    // Default light properties for map lights
+    const Vector3 default_color = {1.0f, 0.95f, 0.85f};
+    const float default_radius = 12.0f;
+    const float default_intensity = 1.2f;
+    
+    for (const auto& pos : positions) {
+        static_lights_.push_back(PointLight{
+            .position = pos,
+            .color = default_color,
+            .radius = default_radius,
+            .intensity = default_intensity
+        });
+    }
+    
+    TraceLog(LOG_INFO, "Set %zu static lights from map", static_lights_.size());
+}
+
+void World::extract_lights_from_map() {
+    static_lights_.clear();
+    
+    if (!map_template_) {
+        return;
+    }
+    
+    std::vector<Vector3> light_positions;
+    
+    // Scan all chunks in the map template for Light blocks
+    for (const auto& [chunk_coord, chunk_data] : map_template_->chunks) {
+        const int chunk_x = chunk_coord.first;
+        const int chunk_z = chunk_coord.second;
+        const int base_x = chunk_x * CHUNK_WIDTH;
+        const int base_z = chunk_z * CHUNK_DEPTH;
+        
+        for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+            for (int z = 0; z < CHUNK_DEPTH; ++z) {
+                for (int x = 0; x < CHUNK_WIDTH; ++x) {
+                    const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(CHUNK_WIDTH * CHUNK_DEPTH) +
+                                            static_cast<std::size_t>(z) * static_cast<std::size_t>(CHUNK_WIDTH) +
+                                            static_cast<std::size_t>(x);
+                    
+                    const auto block_type = chunk_data.blocks[idx];
+                    
+                    if (block_type == BlockType::Light) {
+                        Vector3 pos = {
+                            static_cast<float>(base_x + x) + 0.5f,
+                            static_cast<float>(y) + 0.5f,
+                            static_cast<float>(base_z + z) + 0.5f
+                        };
+                        light_positions.push_back(pos);
+                    }
+                }
+            }
+        }
+    }
+    
+    set_static_lights(light_positions);
 }
 
 } // namespace voxel
