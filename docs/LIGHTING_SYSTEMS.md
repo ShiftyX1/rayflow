@@ -1,5 +1,7 @@
 # Rayflow Lighting Systems Overview
 
+> **Краткий справочник на русском:** [LIGHTING_SYSTEMS_RU.md](LIGHTING_SYSTEMS_RU.md)
+
 ## TL;DR
 
 Rayflow использует **две независимые системы освещения**, которые работают вместе:

@@ -5,7 +5,8 @@
 > **dynamic shader-based lighting** system (PointLight struct).
 > 
 > For a complete overview of both systems and how they work together, see:
-> **[docs/LIGHTING_SYSTEMS.md](LIGHTING_SYSTEMS.md)**
+> - **English:** [docs/LIGHTING_SYSTEMS.md](LIGHTING_SYSTEMS.md)
+> - **Russian:** [docs/LIGHTING_SYSTEMS_RU.md](LIGHTING_SYSTEMS_RU.md)
 
 ## Executive Summary
 
