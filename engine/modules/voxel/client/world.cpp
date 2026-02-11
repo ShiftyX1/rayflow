@@ -1,4 +1,5 @@
 #include "world.hpp"
+#include "block_registry.hpp"
 #include "engine/client/core/resources.hpp"
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
@@ -682,8 +683,21 @@ void World::render(const rf::Camera& camera) const {
         }
     }
 
-    // Atlas texture is bound to unit 0 by the caller (block_registry or engine)
+    // Bind atlas texture to unit 0
+    if (BlockRegistry::instance().is_initialized()) {
+        BlockRegistry::instance().get_atlas_texture().bind(0);
+    }
     shader.setInt("texture0", 0);
+
+    // Shadow disabled in legacy path
+    shader.setInt("shadowEnabled", 0);
+    shader.setMat4("lightSpaceMatrix", rf::Mat4(1.0f));
+
+    // Fog
+    rf::Vec3 fogCol = get_fog_color();
+    shader.setVec3("fogColor", fogCol);
+    shader.setFloat("fogStart", get_fog_start());
+    shader.setFloat("fogEnd", get_fog_end());
 
     // Draw all chunks
     for (const auto& [coord, chunk] : chunks_) {
@@ -693,6 +707,128 @@ void World::render(const rf::Camera& camera) const {
     }
 
     rf::GLShader::unbind();
+}
+
+// -----------------------------------------------------------------------------
+// Pipeline-aware render (shadows, fog, HDR)
+// -----------------------------------------------------------------------------
+
+void World::render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const {
+    if (!voxel_shader_.isValid()) return;
+
+    auto& shader = const_cast<rf::GLShader&>(voxel_shader_);
+    shader.bind();
+
+    // MVP
+    rf::Mat4 view = camera.viewMatrix();
+    rf::Mat4 proj = camera.projectionMatrix();
+    rf::Mat4 model = rf::Mat4(1.0f);
+    rf::Mat4 mvp = proj * view * model;
+
+    shader.setMat4("mvp", mvp);
+    shader.setMat4("matModel", model);
+    rf::Mat4 normalMat = glm::transpose(glm::inverse(model));
+    shader.setMat4("matNormal", normalMat);
+    shader.setVec4("colDiffuse", rf::Vec4(1.0f));
+
+    // Sun direction
+    float angle = (time_of_day_ / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
+    rf::Vec3 sunDir = glm::normalize(rf::Vec3(
+        std::cos(angle), std::sin(angle), 0.3f
+    ));
+    shader.setVec3("sunDir", sunDir);
+
+    // Sun and ambient colors
+    rf::Vec3 sunColor = rf::Vec3(1.0f, 0.95f, 0.9f) * sun_intensity_;
+    rf::Vec3 ambientColor = rf::Vec3(0.4f, 0.45f, 0.55f) * ambient_intensity_;
+    shader.setVec3("sunColor", sunColor);
+    shader.setVec3("ambientColor", ambientColor);
+    shader.setVec3("viewPos", camera.position());
+
+    // Point lights
+    auto all_lights = scene_lights_;
+    all_lights.insert(all_lights.end(), static_lights_.begin(), static_lights_.end());
+    int light_count = std::min(static_cast<int>(all_lights.size()), 32);
+    shader.setInt("lightCount", light_count);
+    for (int i = 0; i < light_count; ++i) {
+        if (i < static_cast<int>(light_locs_.size())) {
+            shader.setVec3(light_locs_[i].position, all_lights[i].position);
+            shader.setVec3(light_locs_[i].color, all_lights[i].color);
+            shader.setFloat(light_locs_[i].radius, all_lights[i].radius);
+            shader.setFloat(light_locs_[i].intensity, all_lights[i].intensity);
+        }
+    }
+
+    // Atlas texture on unit 0
+    if (BlockRegistry::instance().is_initialized()) {
+        BlockRegistry::instance().get_atlas_texture().bind(0);
+    }
+    shader.setInt("texture0", 0);
+
+    // Shadow map on unit 1
+    shader.setInt("shadowEnabled", 1);
+    shader.setMat4("lightSpaceMatrix", pipeline.lightSpaceMatrix());
+    pipeline.bindShadowMap(1);
+    shader.setInt("shadowMap", 1);
+
+    // Fog
+    rf::Vec3 fogCol = get_fog_color();
+    shader.setVec3("fogColor", fogCol);
+    shader.setFloat("fogStart", get_fog_start());
+    shader.setFloat("fogEnd", get_fog_end());
+
+    // Update frustum and draw visible chunks
+    pipeline.updateFrustum(camera);
+
+    for (const auto& [coord, chunk] : chunks_) {
+        if (chunk && chunk->is_generated()) {
+            if (pipeline.isChunkVisible(coord.first, coord.second)) {
+                chunk->render();
+            }
+        }
+    }
+
+    rf::GLShader::unbind();
+}
+
+// -----------------------------------------------------------------------------
+// Shadow depth pass
+// -----------------------------------------------------------------------------
+
+void World::renderShadowPass(rf::GLShader& shadowShader, rf::RenderPipeline& /*pipeline*/) const {
+    // Bind atlas for alpha-test on foliage
+    if (BlockRegistry::instance().is_initialized()) {
+        BlockRegistry::instance().get_atlas_texture().bind(0);
+    }
+    shadowShader.setInt("texture0", 0);
+
+    for (const auto& [coord, chunk] : chunks_) {
+        if (chunk && chunk->is_generated()) {
+            // Shadow frustum culling not strictly needed (ortho covers area)
+            // but skip very distant chunks for performance
+            chunk->render();
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Fog helpers
+// -----------------------------------------------------------------------------
+
+rf::Vec3 World::get_fog_color() const {
+    // Blend between day/night fog colors based on sun intensity
+    rf::Vec3 dayFog = rf::Vec3(0.7f, 0.8f, 0.95f);
+    rf::Vec3 nightFog = rf::Vec3(0.05f, 0.06f, 0.12f);
+    float t = std::clamp(sun_intensity_, 0.0f, 1.0f);
+    return dayFog * t + nightFog * (1.0f - t);
+}
+
+float World::get_fog_start() const {
+    return static_cast<float>(render_distance_) * 16.0f * 0.6f;
+}
+
+float World::get_fog_end() const {
+    return static_cast<float>(render_distance_) * 16.0f * 0.95f;
 }
 
 void World::load_voxel_shader() {

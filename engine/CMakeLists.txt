@@ -139,6 +139,7 @@ add_library(engine_client STATIC
     renderer/stb_impl.cpp
     renderer/mesh.cpp
     renderer/skybox.cpp
+    renderer/render_pipeline.cpp
 )
 
 target_include_directories(engine_client PUBLIC

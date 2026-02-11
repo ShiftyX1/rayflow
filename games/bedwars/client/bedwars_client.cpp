@@ -8,6 +8,7 @@
 #include "engine/ecs/systems/input_system.hpp"
 #include "engine/ecs/systems/player_system.hpp"
 #include "engine/renderer/skybox.hpp"
+#include "engine/renderer/camera.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
 #include "engine/modules/voxel/shared/block.hpp"
 #include "engine/maps/rfmap_io.hpp"
@@ -21,7 +22,9 @@
 #include "engine/renderer/gl_font.hpp"
 #include "engine/client/core/window.hpp"
 #include <filesystem>
+#include <glad/gl.h>
 
+#include <glm/gtc/constants.hpp>
 #include <cstdio>
 #include <cmath>
 
@@ -61,12 +64,23 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
     // Start in main menu with cursor enabled
     gameScreen_ = ui::GameScreen::MainMenu;
     rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
+
+    // Initialize render pipeline (HDR + shadows + tone mapping)
+    auto& win = rf::Window::instance();
+    if (renderPipeline_.init(win.width(), win.height())) {
+        pipelineInitialized_ = true;
+        engine_->log(engine::LogLevel::Info, "Render pipeline initialized");
+    } else {
+        engine_->log(engine::LogLevel::Warning, "Render pipeline failed — falling back to legacy");
+    }
     
     engine_->log(engine::LogLevel::Info, "Starting in main menu");
 }
 
 void BedWarsClient::on_shutdown() {
     engine_->log(engine::LogLevel::Info, "BedWarsClient shutting down");
+    renderPipeline_.shutdown();
+    pipelineInitialized_ = false;
     inputSystem_.reset();
     playerSystem_.reset();
     registry_.clear();
@@ -246,28 +260,76 @@ void BedWarsClient::on_render() {
         return;
     }
     
-    // // Get camera from ECS (same as rayflow)
-    // Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
-    //
-    // BeginMode3D(camera);
-    //
-    // // Draw skybox first (before world)
-    // renderer::Skybox::instance().draw(camera);
-    //
-    // render_world(camera);
-    // render_players();
-    // render_items();
-    //
-    // // Block interaction highlight
-    // try {
-    //     auto& blockInteraction = engine_->block_interaction();
-    //     blockInteraction.render_highlight(camera);
-    //     blockInteraction.render_break_overlay(camera);
-    // } catch (const std::runtime_error&) {
-    //     // Not initialized yet
-    // }
-    //
-    // EndMode3D();
+    // Get camera from ECS
+    ecs::Camera3D ecsCamera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    
+    // Convert to rf::Camera for OpenGL rendering
+    rf::Camera camera;
+    camera.setPerspective(ecsCamera.fovy, static_cast<float>(sw) / static_cast<float>(sh), 0.1f, 1000.0f);
+    camera.setPosition(ecsCamera.position);
+    camera.setTarget(ecsCamera.target);
+    camera.setUp(ecsCamera.up);
+
+    // Handle window resize for pipeline
+    if (pipelineInitialized_ && (renderPipeline_.width() != sw || renderPipeline_.height() != sh)) {
+        renderPipeline_.resize(sw, sh);
+    }
+
+    // ---- Compute sun direction (shared between shadow and main pass) ----
+    float timeOfDay = 12.0f;
+    rf::Vec3 sunDir(0.0f, 1.0f, 0.3f);
+    try {
+        auto& world = engine_->world();
+        timeOfDay = world.get_time_of_day();
+        float angle = (timeOfDay / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
+        sunDir = glm::normalize(rf::Vec3(std::cos(angle), std::sin(angle), 0.3f));
+    } catch (const std::runtime_error&) {}
+
+    if (pipelineInitialized_) {
+        // ===== PIPELINE PATH: Shadow → HDR Scene → Tone Map =====
+
+        // 1. Shadow pass
+        renderPipeline_.beginShadowPass(camera, sunDir);
+        try {
+            auto& world = engine_->world();
+            world.renderShadowPass(renderPipeline_.shadowShader(), renderPipeline_);
+        } catch (const std::runtime_error&) {}
+        renderPipeline_.endShadowPass();
+
+        // 2. HDR scene pass
+        renderPipeline_.beginScene();
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        // Skybox
+        renderer::Skybox::instance().draw(camera);
+
+        // Voxel world (with shadows + fog)
+        try {
+            auto& world = engine_->world();
+            world.render(camera, renderPipeline_);
+        } catch (const std::runtime_error&) {}
+
+        glDisable(GL_DEPTH_TEST);
+        renderPipeline_.endScene();
+
+        // 3. Tone mapping (HDR → LDR)
+        renderPipeline_.postProcess(1.2f);
+
+    } else {
+        // ===== FALLBACK: Legacy forward rendering =====
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        renderer::Skybox::instance().draw(camera);
+
+        try {
+            auto& world = engine_->world();
+            world.render(camera);
+        } catch (const std::runtime_error&) {}
+
+        glDisable(GL_DEPTH_TEST);
+    }
     
     // 2D overlay
     batch.begin(sw, sh);

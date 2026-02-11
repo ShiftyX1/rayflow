@@ -4,6 +4,7 @@
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_shader.hpp"
 #include "engine/renderer/camera.hpp"
+#include "engine/renderer/render_pipeline.hpp"
 #include <unordered_map>
 #include <memory>
 #include <functional>
@@ -59,6 +60,12 @@ public:
     void update(const rf::Vec3& player_position);
     /// Render all visible chunks using the voxel shader.
     void render(const rf::Camera& camera) const;
+
+    /// Render all visible chunks using the full pipeline (shadows, fog, HDR).
+    void render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const;
+
+    /// Render shadow depth pass (call between pipeline.beginShadowPass/endShadowPass).
+    void renderShadowPass(rf::GLShader& shadowShader, rf::RenderPipeline& pipeline) const;
     
     void set_render_distance(int distance) { render_distance_ = distance; }
     int get_render_distance() const { return render_distance_; }
@@ -82,6 +89,11 @@ public:
     float sample_light01(int x, int y, int z) const;
     float sample_skylight01(int x, int y, int z) const;
     float sample_blocklight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 0.0f; }
+
+    /// Fog settings derived from environment.
+    rf::Vec3 get_fog_color() const;
+    float get_fog_start() const;
+    float get_fog_end() const;
 
     void load_voxel_shader();
     void unload_voxel_shader();

@@ -8,6 +8,7 @@
 #include "engine/core/types.hpp"
 #include "engine/ui/runtime/ui_view_model.hpp"
 #include "engine/ui/runtime/ui_frame.hpp"
+#include "engine/renderer/render_pipeline.hpp"
 
 #include "../shared/protocol/messages.hpp"
 
@@ -235,6 +236,10 @@ private:
     
     // UI input capture
     bool uiCapturesInput_{false};
+    
+    // Render pipeline (HDR + shadows + tone mapping)
+    rf::RenderPipeline renderPipeline_;
+    bool pipelineInitialized_{false};
     
     // Debug
     bool showDebug_{false};
