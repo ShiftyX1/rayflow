@@ -15,9 +15,8 @@ bool BlockInteraction::init() {
     for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
         char path[128];
         snprintf(path, sizeof(path), "textures/destroy_stages/destroy_stage_%d.png", i);
-        auto tex = resources::load_texture(path);
-        destroy_textures_[i].id = tex.id;
-        if (destroy_textures_[i].id == 0) {
+        destroy_textures_[i] = resources::load_texture(path);
+        if (!destroy_textures_[i].isValid()) {
             TraceLog(LOG_ERROR, "Failed to load destroy texture: %s", path);
             return false;
         }
@@ -30,10 +29,9 @@ bool BlockInteraction::init() {
 
 void BlockInteraction::destroy() {
     if (textures_loaded_) {
-        // TODO(Phase 4): Unload GPU textures via OpenGL
-        // for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
-        //     UnloadTexture(destroy_textures_[i]);
-        // }
+        for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
+            destroy_textures_[i].destroy();
+        }
         textures_loaded_ = false;
     }
 }

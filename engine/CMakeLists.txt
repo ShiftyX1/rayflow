@@ -129,6 +129,12 @@ add_library(engine_client STATIC
     ecs/systems/camera2d_system.cpp
     
     # Renderer (universal - moved from client/renderer/)
+    renderer/gl_shader.cpp
+    renderer/gl_texture.cpp
+    renderer/gl_framebuffer.cpp
+    renderer/gl_mesh.cpp
+    renderer/camera.cpp
+    renderer/stb_impl.cpp
     renderer/mesh.cpp
     renderer/skybox.cpp
 )

@@ -6,6 +6,7 @@
 #include "../shared/block_shape.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/core/logging.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include <cstring>
 #include <chrono>
 #include <vector>
@@ -39,11 +40,8 @@ Chunk::Chunk(Chunk&& other) noexcept
     , needs_mesh_update_(other.needs_mesh_update_)
     , is_generated_(other.is_generated_)
     , has_mesh_(other.has_mesh_)
-    , mesh_(other.mesh_)
-    , model_(other.model_) {
+    , mesh_(std::move(other.mesh_)) {
     other.has_mesh_ = false;
-    other.mesh_ = {};
-    other.model_ = {};
 }
 
 Chunk& Chunk::operator=(Chunk&& other) noexcept {
@@ -58,19 +56,16 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
         needs_mesh_update_ = other.needs_mesh_update_;
         is_generated_ = other.is_generated_;
         has_mesh_ = other.has_mesh_;
-        mesh_ = other.mesh_;
-        model_ = other.model_;
+        mesh_ = std::move(other.mesh_);
         
         other.has_mesh_ = false;
-        other.mesh_ = {};
-        other.model_ = {};
     }
     return *this;
 }
 
 void Chunk::cleanup_mesh() {
     if (has_mesh_) {
-        // TODO Phase 2: UnloadModel(model_);
+        mesh_.destroy();
         has_mesh_ = false;
     }
 }
@@ -272,7 +267,7 @@ void Chunk::generate_mesh(const World& world) {
     colors.reserve(ESTIMATED_VERTS * 4);
     
     auto& registry = BlockRegistry::instance();
-    float atlas_size = static_cast<float>(registry.get_atlas_texture().width);
+    float atlas_size = static_cast<float>(registry.get_atlas_texture().width());
     float tile_size = 16.0f;
     float uv_size = tile_size / atlas_size;
     
@@ -839,50 +834,32 @@ void Chunk::generate_mesh(const World& world) {
     
     TraceLog(LOG_DEBUG, "Chunk (%d, %d) mesh: %zu vertices", chunk_x_, chunk_z_, vertices.size() / 3);
 
-    // TODO Phase 2: Upload mesh data to GPU via GLMesh
-    // Vertex data has been computed above in: vertices, texcoords, texcoords2, normals, colors
-    (void)vertices;
-    (void)texcoords;
-    (void)texcoords2;
-    (void)normals;
-    (void)colors;
+    // Upload mesh data to GPU via GLMesh
+    int vtxCount = static_cast<int>(vertices.size() / 3);
 
-    // mesh_ = {0};
-    // mesh_.vertexCount = static_cast<int>(vertices.size() / 3);
-    // mesh_.triangleCount = mesh_.vertexCount / 3;
-    //
-    // mesh_.vertices = static_cast<float*>(RL_MALLOC(vertices.size() * sizeof(float)));
-    // mesh_.texcoords = static_cast<float*>(RL_MALLOC(texcoords.size() * sizeof(float)));
-    // mesh_.texcoords2 = static_cast<float*>(RL_MALLOC(texcoords2.size() * sizeof(float)));
-    // mesh_.normals = static_cast<float*>(RL_MALLOC(normals.size() * sizeof(float)));
-    // mesh_.colors = static_cast<unsigned char*>(RL_MALLOC(colors.size() * sizeof(unsigned char)));
-    //
-    // std::memcpy(mesh_.vertices, vertices.data(), vertices.size() * sizeof(float));
-    // std::memcpy(mesh_.texcoords, texcoords.data(), texcoords.size() * sizeof(float));
-    // std::memcpy(mesh_.texcoords2, texcoords2.data(), texcoords2.size() * sizeof(float));
-    // std::memcpy(mesh_.normals, normals.data(), normals.size() * sizeof(float));
-    // std::memcpy(mesh_.colors, colors.data(), colors.size() * sizeof(unsigned char));
-    //
-    // const auto t_up0 = std::chrono::steady_clock::now();
-    // UploadMesh(&mesh_, false);
-    // const auto t_up1 = std::chrono::steady_clock::now();
-    //
-    // const float upload_ms = std::chrono::duration<float, std::milli>(t_up1 - t_up0).count();
-    // {
-    //     const auto& prof = core::Config::instance().profiling();
-    //     if (prof.enabled && prof.upload_mesh) {
-    //         static double last_log_s_upload = 0.0;
-    //         const double now_s = GetTime();
-    //         const bool interval_ok = prof.log_every_event || ((now_s - last_log_s_upload) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
-    //         if (upload_ms >= prof.warn_upload_mesh_ms && interval_ok) {
-    //             TraceLog(LOG_INFO, "[prof] UploadMesh: %.2f ms (chunk=%d,%d, vtx=%d)", upload_ms, chunk_x_, chunk_z_, mesh_.vertexCount);
-    //             last_log_s_upload = now_s;
-    //         }
-    //     }
-    // }
-    //
-    // model_ = LoadModelFromMesh(mesh_);
-    // model_.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = registry.get_atlas_texture();
+    const auto t_up0 = std::chrono::steady_clock::now();
+    mesh_.upload(vtxCount,
+                 vertices.data(),
+                 texcoords.data(),
+                 texcoords2.data(),
+                 normals.data(),
+                 colors.data(),
+                 false /* static draw — chunks rebuild rarely */);
+    const auto t_up1 = std::chrono::steady_clock::now();
+
+    const float upload_ms = std::chrono::duration<float, std::milli>(t_up1 - t_up0).count();
+    {
+        const auto& prof = core::Config::instance().profiling();
+        if (prof.enabled && prof.upload_mesh) {
+            static double last_log_s_upload = 0.0;
+            const double now_s = GetTime();
+            const bool interval_ok = prof.log_every_event || ((now_s - last_log_s_upload) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
+            if (upload_ms >= prof.warn_upload_mesh_ms && interval_ok) {
+                TraceLog(LOG_INFO, "[prof] UploadMesh: %.2f ms (chunk=%d,%d, vtx=%d)", upload_ms, chunk_x_, chunk_z_, vtxCount);
+                last_log_s_upload = now_s;
+            }
+        }
+    }
     
     has_mesh_ = true;
     needs_mesh_update_ = false;
@@ -905,32 +882,22 @@ void Chunk::generate_mesh(const World& world) {
 }
 
 void Chunk::render() const {
-    // TODO Phase 2: Draw chunk mesh via OpenGL renderer
-    // if (has_mesh_) {
-    //     DrawModel(model_, {0, 0, 0}, 1.0f, WHITE);
-    // }
-
-    // TODO Phase 2: Draw light markers
-    // if (!light_markers_ws_.empty()) {
-    //     for (const auto& p : light_markers_ws_) {
-    //         DrawSphere(p, 0.18f, YELLOW);
-    //     }
-    // }
+    if (has_mesh_) {
+        mesh_.draw();
+    }
 }
 
-// NOTE(migration): Shader is a raylib type. Phase 2 will replace.
-// void Chunk::render(Shader shader) const {
-//     if (has_mesh_) {
-//         Model model_copy = model_;
-//         model_copy.materials[0].shader = shader;
-//         DrawModel(model_copy, {0, 0, 0}, 1.0f, WHITE);
-//     }
-//
-//     if (!light_markers_ws_.empty()) {
-//         for (const auto& p : light_markers_ws_) {
-//             DrawSphere(p, 0.18f, YELLOW);
-//         }
-//     }
-// }
+void Chunk::render(rf::GLShader& shader) const {
+    if (has_mesh_) {
+        // Set model matrix (chunk is at world_position_, no rotation/scale)
+        rf::Mat4 model = glm::translate(rf::Mat4(1.0f), rf::Vec3(0.0f)); // already in world coords
+        shader.setMat4("matModel", model);
+        
+        rf::Mat4 normalMat = glm::transpose(glm::inverse(model));
+        shader.setMat4("matNormal", normalMat);
+        
+        mesh_.draw();
+    }
+}
 
 } // namespace voxel

@@ -4,6 +4,7 @@
 #include "engine/ecs/components.hpp"
 #include "engine/core/player_constants.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_texture.hpp"
 
 #include <optional>
 #include <array>
@@ -77,9 +78,7 @@ private:
     std::optional<BreakRequest> outgoing_break_;
     std::optional<PlaceRequest> outgoing_place_;
 
-    // NOTE(migration): Texture2D array placeholder. Phase 2 will replace.
-    struct Tex2DPlaceholder { unsigned int id{0}; };
-    std::array<Tex2DPlaceholder, DESTROY_STAGE_COUNT> destroy_textures_{};
+    std::array<rf::GLTexture, DESTROY_STAGE_COUNT> destroy_textures_;
     bool textures_loaded_{false};
 };
 

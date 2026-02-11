@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_texture.hpp"
 
 #include "css_lite.hpp"
 
@@ -70,16 +71,16 @@ private:
         bool focused{false};
     };
 
+    // Texture cache — stores loaded textures by path
     struct TextureRef {
-        // NOTE(migration): Texture2D placeholder. Phase 2 replaces with GLTexture.
-        struct Tex2D { unsigned int id{0}; };
-        Tex2D tex{};
+        rf::GLTexture tex{};
     };
 
-    // NOTE(migration): These return placeholders. Phase 2/3 will replace.
-    struct Tex2DPlaceholder { unsigned int id{0}; };
+    // NOTE(migration): Font placeholder remains until Phase 3 (text rendering).
     struct FontPlaceholder {};
-    Tex2DPlaceholder load_texture_cached(const std::string& path);
+
+    /// Load a texture (or return cached). Returns the GL texture ID (0 if failed).
+    GLuint load_texture_cached(const std::string& path);
     FontPlaceholder load_font_cached(int size);
 
     Node parse_node_rec(tinyxml2::XMLElement* el);

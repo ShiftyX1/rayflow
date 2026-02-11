@@ -1,17 +1,16 @@
 #pragma once
 
-#include "engine/core/math_types.hpp"
+// =============================================================================
+// Legacy MeshBuilder — thin wrapper around GLMesh for backwards compatibility.
+// New code should use rf::GLMesh directly.
+// =============================================================================
+
+#include "engine/renderer/gl_mesh.hpp"
 
 namespace renderer {
 
-// NOTE(migration): MeshData still wraps raylib types.
-// Phase 2 will replace with GLMesh.
-struct RaylibMeshPlaceholder {};
-struct RaylibMaterialPlaceholder {};
-
 struct MeshData {
-    RaylibMeshPlaceholder mesh{};
-    RaylibMaterialPlaceholder material{};
+    rf::GLMesh mesh{};
     bool valid{false};
 };
 

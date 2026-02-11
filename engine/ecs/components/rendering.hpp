@@ -9,10 +9,8 @@
 //
 
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_texture.hpp"
 #include <cstdint>
-
-// NOTE(migration): Placeholder texture type until Phase 2 GL renderer
-struct RaylibTexture2D { unsigned int id{0}; int width{0}; int height{0}; };
 
 namespace ecs {
 
@@ -22,19 +20,19 @@ namespace ecs {
 
 /// Static sprite component
 struct Sprite {
-    RaylibTexture2D texture{};
-    rf::Rect source{0, 0, 0, 0};   // source rect in texture (0,0,0,0 = full texture)
-    rf::Vec2 origin{0, 0};         // pivot point (0,0 = top-left)
+    rf::GLTexture* texture{nullptr};   // non-owning pointer to a loaded texture
+    rf::Rect source{0, 0, 0, 0};      // source rect in texture (0,0,0,0 = full texture)
+    rf::Vec2 origin{0, 0};            // pivot point (0,0 = top-left)
     rf::Color tint{rf::Color::White()};
     float scale{1.0f};
-    int z_order{0};                // draw order (higher = on top)
+    int z_order{0};                   // draw order (higher = on top)
     bool flip_x{false};
     bool flip_y{false};
 };
 
 /// Animated sprite component
 struct AnimatedSprite {
-    RaylibTexture2D spritesheet{};
+    rf::GLTexture* spritesheet{nullptr};
     int frame_width{0};            // width of single frame
     int frame_height{0};           // height of single frame
     int frame{0};                  // current frame

@@ -3,6 +3,8 @@
 #include "block.hpp"
 #include "../shared/block_state.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gl_shader.hpp"
 #include <array>
 #include <memory>
 #include <vector>
@@ -38,9 +40,12 @@ public:
     void set_light(int x, int y, int z, std::uint8_t value);
 
     void generate_mesh(const World& world);
+    
+    /// Draw this chunk's mesh (shader must already be bound).
     void render() const;
-    // NOTE(migration): Shader is a raylib type. Phase 2 will replace.
-    // void render(Shader shader) const;
+    
+    /// Draw with a specific shader (binds uniform for model matrix).
+    void render(rf::GLShader& shader) const;
     
     int get_chunk_x() const { return chunk_x_; }
     int get_chunk_z() const { return chunk_z_; }
@@ -77,11 +82,8 @@ private:
     bool has_mesh_{false};
     bool is_empty_{false};
     
-    // NOTE(migration): Mesh/Model are raylib types. Phase 2 will replace with GLMesh.
-    struct MeshPlaceholder {};
-    struct ModelPlaceholder {};
-    MeshPlaceholder mesh_{};
-    ModelPlaceholder model_{};
+    // GPU mesh (Phase 2: real OpenGL VAO/VBO)
+    rf::GLMesh mesh_;
 
     std::vector<rf::Vec3> light_markers_ws_{};
 };

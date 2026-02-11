@@ -11,7 +11,7 @@ in float fragFoliageMask;
 out vec4 finalColor;
 
 uniform sampler2D texture0;  // Atlas texture
-uniform vec4 colDiffuse;     // Raylib diffuse color (usually WHITE)
+uniform vec4 colDiffuse;     // Material diffuse color (usually WHITE)
 
 uniform vec3 sunDir;
 uniform vec3 sunColor;

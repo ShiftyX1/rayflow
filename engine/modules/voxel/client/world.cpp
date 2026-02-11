@@ -2,6 +2,7 @@
 #include "engine/client/core/resources.hpp"
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <cstdio>
 #include <chrono>
@@ -626,62 +627,108 @@ void World::unload_distant_chunks(const rf::Vec3& player_position) {
     }
 }
 
-// NOTE(migration): render() commented out — depends on Camera3D, SetShaderValue, raylib Shader.
-// Phase 2 will reimplement with rf::Camera and OpenGL uniform calls.
-#if 0
-void World::render(/* const Camera3D& camera */) const {
-    // ... raylib rendering code removed during Phase 0 migration ...
+// =============================================================================
+// Rendering
+// =============================================================================
+
+void World::render(const rf::Camera& camera) const {
+    if (!voxel_shader_.isValid()) return;
+
+    auto& shader = const_cast<rf::GLShader&>(voxel_shader_);
+    shader.bind();
+
+    // MVP = projection * view (model is identity for chunks — vertices are in world space)
+    rf::Mat4 view = camera.viewMatrix();
+    rf::Mat4 proj = camera.projectionMatrix();
+    rf::Mat4 model = rf::Mat4(1.0f);
+    rf::Mat4 mvp = proj * view * model;
+
+    shader.setMat4("mvp", mvp);
+    shader.setMat4("matModel", model);
+    rf::Mat4 normalMat = glm::transpose(glm::inverse(model));
+    shader.setMat4("matNormal", normalMat);
+
+    // Diffuse color (white by default)
+    shader.setVec4("colDiffuse", rf::Vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    // Sun direction (based on time of day)
+    float angle = (time_of_day_ / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
+    rf::Vec3 sunDir = glm::normalize(rf::Vec3(
+        std::cos(angle), std::sin(angle), 0.3f
+    ));
+    shader.setVec3("sunDir", sunDir);
+
+    // Sun and ambient colors
+    rf::Vec3 sunColor = rf::Vec3(1.0f, 0.95f, 0.9f) * sun_intensity_;
+    rf::Vec3 ambientColor = rf::Vec3(0.4f, 0.45f, 0.55f) * ambient_intensity_;
+    shader.setVec3("sunColor", sunColor);
+    shader.setVec3("ambientColor", ambientColor);
+
+    // Camera position (for specular / point light distance)
+    shader.setVec3("viewPos", camera.position());
+
+    // Point lights
+    auto all_lights = scene_lights_;
+    all_lights.insert(all_lights.end(), static_lights_.begin(), static_lights_.end());
+    int light_count = std::min(static_cast<int>(all_lights.size()), 32);
+    shader.setInt("lightCount", light_count);
+
+    for (int i = 0; i < light_count; ++i) {
+        if (i < static_cast<int>(light_locs_.size())) {
+            shader.setVec3(light_locs_[i].position, all_lights[i].position);
+            shader.setVec3(light_locs_[i].color, all_lights[i].color);
+            shader.setFloat(light_locs_[i].radius, all_lights[i].radius);
+            shader.setFloat(light_locs_[i].intensity, all_lights[i].intensity);
+        }
+    }
+
+    // Atlas texture is bound to unit 0 by the caller (block_registry or engine)
+    shader.setInt("texture0", 0);
+
+    // Draw all chunks
+    for (const auto& [coord, chunk] : chunks_) {
+        if (chunk && chunk->is_generated()) {
+            chunk->render();
+        }
+    }
+
+    rf::GLShader::unbind();
 }
-#endif
 
 void World::load_voxel_shader() {
-    if (voxel_shader_loaded_) return;
+    if (voxel_shader_.isValid()) return;
 
-    // NOTE(migration): Shader loading commented out — raylib Shader API removed.
-    // Phase 2 will use OpenGL shader compilation directly.
-#if 0
-    const char* vs_path = "shaders/voxel.vs";
-    const char* fs_path = "shaders/voxel.fs";
+    bool ok = voxel_shader_.loadFromFiles("shaders/voxel.vs", "shaders/voxel.fs");
+    if (ok) {
+        // Cache uniform locations
+        light_count_loc_ = voxel_shader_.getUniformLocation("lightCount");
+        sun_dir_loc_ = voxel_shader_.getUniformLocation("sunDir");
+        sun_col_loc_ = voxel_shader_.getUniformLocation("sunColor");
+        amb_col_loc_ = voxel_shader_.getUniformLocation("ambientColor");
+        view_pos_loc_ = voxel_shader_.getUniformLocation("viewPos");
 
-    voxel_shader_ = resources::load_shader(vs_path, fs_path);
-    if (voxel_shader_.id != 0) {
-        voxel_shader_loaded_ = true;
-        
-        light_count_loc_ = GetShaderLocation(voxel_shader_, "lightCount");
-        sun_dir_loc_ = GetShaderLocation(voxel_shader_, "sunDir");
-        sun_col_loc_ = GetShaderLocation(voxel_shader_, "sunColor");
-        amb_col_loc_ = GetShaderLocation(voxel_shader_, "ambientColor");
-        view_pos_loc_ = GetShaderLocation(voxel_shader_, "viewPos");
-        
         light_locs_.clear();
         light_locs_.reserve(32);
         for (int i = 0; i < 32; i++) {
             std::string base = "lights[" + std::to_string(i) + "]";
             LightLocations locs;
-            locs.position = GetShaderLocation(voxel_shader_, (base + ".position").c_str());
-            locs.color = GetShaderLocation(voxel_shader_, (base + ".color").c_str());
-            locs.radius = GetShaderLocation(voxel_shader_, (base + ".radius").c_str());
-            locs.intensity = GetShaderLocation(voxel_shader_, (base + ".intensity").c_str());
+            locs.position = voxel_shader_.getUniformLocation(base + ".position");
+            locs.color = voxel_shader_.getUniformLocation(base + ".color");
+            locs.radius = voxel_shader_.getUniformLocation(base + ".radius");
+            locs.intensity = voxel_shader_.getUniformLocation(base + ".intensity");
             light_locs_.push_back(locs);
         }
-        
-        TraceLog(LOG_INFO, "Voxel shader loaded successfully (active)");
+
+        TraceLog(LOG_INFO, "Voxel shader loaded successfully");
     } else {
-        TraceLog(LOG_WARNING, "Voxel shader not found, using default shader");
-        voxel_shader_loaded_ = false;
+        TraceLog(LOG_WARNING, "Voxel shader failed to load");
     }
-#endif
-    TraceLog(LOG_INFO, "Voxel shader loading skipped (Phase 0 migration)");
 }
 
 void World::unload_voxel_shader() {
-    if (voxel_shader_loaded_) {
-        // NOTE(migration): UnloadShader() removed — raylib API.
-        // Phase 2 will use glDeleteProgram() directly.
-        // UnloadShader(voxel_shader_);
-        voxel_shader_loaded_ = false;
-        TraceLog(LOG_INFO, "Voxel shader unloaded");
-    }
+    voxel_shader_.destroy();
+    light_locs_.clear();
+    TraceLog(LOG_INFO, "Voxel shader unloaded");
 }
 
 float World::sample_skylight01(int x, int y, int z) const {

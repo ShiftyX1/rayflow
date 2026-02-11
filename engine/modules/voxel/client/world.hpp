@@ -2,6 +2,8 @@
 
 #include "chunk.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/camera.hpp"
 #include <unordered_map>
 #include <memory>
 #include <functional>
@@ -55,8 +57,8 @@ public:
     void recompute_chunk_states(int chunkX, int chunkZ);
     
     void update(const rf::Vec3& player_position);
-    // NOTE(migration): render needs Camera. Phase 2 will define rf::Camera.
-    // void render(const Camera3D& camera) const;
+    /// Render all visible chunks using the voxel shader.
+    void render(const rf::Camera& camera) const;
     
     void set_render_distance(int distance) { render_distance_ = distance; }
     int get_render_distance() const { return render_distance_; }
@@ -81,12 +83,11 @@ public:
     float sample_skylight01(int x, int y, int z) const;
     float sample_blocklight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 0.0f; }
 
-    // NOTE(migration): Shader is a raylib type. Phase 2 will replace.
-    struct ShaderPlaceholder {};
     void load_voxel_shader();
     void unload_voxel_shader();
-    ShaderPlaceholder get_voxel_shader() const { return voxel_shader_; }
-    bool has_voxel_shader() const { return voxel_shader_loaded_; }
+    rf::GLShader& get_voxel_shader() { return voxel_shader_; }
+    const rf::GLShader& get_voxel_shader() const { return voxel_shader_; }
+    bool has_voxel_shader() const { return voxel_shader_.isValid(); }
     
     void set_environment(float timeOfDay, float sunIntensity, float ambientIntensity) {
         time_of_day_ = timeOfDay;
@@ -128,8 +129,7 @@ private:
     mutable bool perm_initialized_{false};
     void init_perlin() const;
 
-    ShaderPlaceholder voxel_shader_{};
-    bool voxel_shader_loaded_{false};
+    rf::GLShader voxel_shader_;
 
     std::vector<PointLight> scene_lights_;
     std::vector<PointLight> static_lights_;

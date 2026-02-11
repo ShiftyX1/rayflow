@@ -88,27 +88,34 @@ bool is_pak_mode() {
 #endif
 }
 
-TexturePlaceholder load_texture(const std::string& path) {
-    // TODO(migration): Implement GL texture loading (Phase 2)
-    TraceLog(LOG_WARNING, "[resources] load_texture() stubbed — texture not loaded: %s", path.c_str());
-    return TexturePlaceholder{0};
+rf::GLTexture load_texture(const std::string& path) {
+    rf::GLTexture tex;
+    if (!tex.loadFromFile(path)) {
+        TraceLog(LOG_WARNING, "[resources] Failed to load texture: %s", path.c_str());
+    }
+    return tex;
 }
 
-ImagePlaceholder load_image(const std::string& path) {
-    // TODO(migration): Implement image loading with stb_image (Phase 2)
-    TraceLog(LOG_WARNING, "[resources] load_image() stubbed — image not loaded: %s", path.c_str());
-    return ImagePlaceholder{};
+rf::GLTexture load_image(const std::string& path) {
+    rf::GLTexture tex;
+    tex.retainPixelData(true);
+    if (!tex.loadFromFile(path)) {
+        TraceLog(LOG_WARNING, "[resources] Failed to load image: %s", path.c_str());
+    }
+    return tex;
 }
 
-ShaderPlaceholder load_shader(const char* vsPath, const char* fsPath) {
-    // TODO(migration): Implement GL shader compilation (Phase 2)
-    TraceLog(LOG_WARNING, "[resources] load_shader() stubbed — shader not loaded: vs=%s fs=%s",
-               vsPath ? vsPath : "(null)", fsPath ? fsPath : "(null)");
-    return ShaderPlaceholder{};
+rf::GLShader load_shader(const char* vsPath, const char* fsPath) {
+    rf::GLShader shader;
+    if (!shader.loadFromFiles(vsPath ? vsPath : "", fsPath ? fsPath : "")) {
+        TraceLog(LOG_WARNING, "[resources] Failed to load shader: vs=%s fs=%s",
+                   vsPath ? vsPath : "(null)", fsPath ? fsPath : "(null)");
+    }
+    return shader;
 }
 
 FontPlaceholder load_font(const std::string& path, int fontSize) {
-    // TODO(migration): Implement font loading with stb_truetype (Phase 2)
+    // TODO(Phase 3): Implement font loading with stb_truetype
     TraceLog(LOG_WARNING, "[resources] load_font() stubbed — font not loaded: %s (size %d)", path.c_str(), fontSize);
     return FontPlaceholder{};
 }

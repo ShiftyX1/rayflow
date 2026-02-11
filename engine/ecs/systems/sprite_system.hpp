@@ -135,13 +135,13 @@ private:
         const auto& transform = registry.get<Transform2D>(entity);
         const auto& sprite = registry.get<Sprite>(entity);
         
-        if (sprite.texture.id == 0) return;  // no texture
+        if (!sprite.texture || !sprite.texture->isValid()) return;  // no texture
         
         rf::Rect source = sprite.source;
         if (source.w == 0 || source.h == 0) {
             source = {0, 0, 
-                static_cast<float>(sprite.texture.width),
-                static_cast<float>(sprite.texture.height)};
+                static_cast<float>(sprite.texture->width()),
+                static_cast<float>(sprite.texture->height())};
         }
         
         if (sprite.flip_x) source.w = -source.w;
@@ -170,7 +170,7 @@ private:
         const auto& transform = registry.get<Transform2D>(entity);
         const auto& anim = registry.get<AnimatedSprite>(entity);
         
-        if (anim.spritesheet.id == 0) return;  // no texture
+        if (!anim.spritesheet || !anim.spritesheet->isValid()) return;  // no texture
         if (anim.frame_width == 0 || anim.frame_height == 0) return;
         
         int col = anim.frame % anim.frames_per_row;

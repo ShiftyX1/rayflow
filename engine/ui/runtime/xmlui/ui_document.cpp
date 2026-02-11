@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include <glad/gl.h>
 #include <tinyxml2.h>
 
 #include "../ui_view_model.hpp"
@@ -226,7 +227,7 @@ void UIDocument::unload() {
     }
 
     for (auto& [_, ref] : texture_cache_) {
-        ref.tex = {};  // TODO(migration): Phase 3 — glDeleteTextures
+        ref.tex.destroy();
     }
     texture_cache_.clear();
 
@@ -236,20 +237,20 @@ void UIDocument::unload() {
     font_cache_.clear();
 }
 
-UIDocument::Tex2DPlaceholder UIDocument::load_texture_cached(const std::string& path) {
+GLuint UIDocument::load_texture_cached(const std::string& path) {
     if (path.empty()) {
-        return Tex2DPlaceholder{};
+        return 0;
     }
     auto it = texture_cache_.find(path);
     if (it != texture_cache_.end()) {
-        return Tex2DPlaceholder{it->second.tex.id};
+        return it->second.tex.id();
     }
 
     TextureRef ref;
-    auto loaded = resources::load_texture(path);
-    ref.tex.id = loaded.id;
-    texture_cache_.emplace(path, ref);
-    return Tex2DPlaceholder{ref.tex.id};
+    ref.tex = resources::load_texture(path);
+    GLuint id = ref.tex.id();
+    texture_cache_.emplace(path, std::move(ref));
+    return id;
 }
 
 UIDocument::FontPlaceholder UIDocument::load_font_cached(int size) {
@@ -748,11 +749,11 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
 }
 
 void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
-    const auto full = load_texture_cached(node.full);
-    const auto half = load_texture_cached(node.half);
-    const auto empty_tex = load_texture_cached(node.empty);
+    const GLuint full = load_texture_cached(node.full);
+    const GLuint half = load_texture_cached(node.half);
+    const GLuint empty_tex = load_texture_cached(node.empty);
 
-    if (full.id == 0 || half.id == 0 || empty_tex.id == 0) {
+    if (full == 0 || half == 0 || empty_tex == 0) {
         return;
     }
 

@@ -65,21 +65,18 @@ struct RigidBody {
     bool is_kinematic{false};
 };
 
-// NOTE(migration): MeshComponent/ModelComponent still use raylib Mesh/Model/Material.
-// These will be replaced with GLMesh*/rf::Material in Phase 2/5.
-// For now we forward-declare placeholder types to keep compilation.
-struct RaylibMesh {};      // placeholder — Phase 2 will replace
-struct RaylibMaterial {};  // placeholder — Phase 2 will replace
-struct RaylibModel {};     // placeholder — Phase 2 will replace
+// NOTE(migration): MeshComponent/ModelComponent use placeholder types.
+// Phase 5 will define a proper rf::Material and model pipeline.
+// For now, these are compile-able stubs.
 
 struct MeshComponent {
-    RaylibMesh mesh{};
-    RaylibMaterial material{};
+    rf::Vec3 position{0, 0, 0};  // world position offset
     bool cast_shadow{true};
+    bool visible{true};
 };
 
 struct ModelComponent {
-    RaylibModel model{};
+    rf::Vec3 position{0, 0, 0};
     bool visible{true};
 };
 

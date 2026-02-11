@@ -11,39 +11,34 @@ void RenderSystem::update(entt::registry& registry, float delta_time) {
     (void)delta_time;
 }
 
-// NOTE(migration): render() commented out — Camera3D not yet defined.
-// Phase 2 will reintroduce this with the new camera type.
-#if 0
-void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
+void RenderSystem::render(entt::registry& registry, const rf::Camera& camera) {
     if (world_) {
         world_->render(camera);
     }
-    
+
+    // Entity mesh rendering (Phase 5 — proper material pipeline)
     auto mesh_view = registry.view<Transform, MeshComponent>();
     for (auto entity : mesh_view) {
         auto& transform = mesh_view.get<Transform>(entity);
         auto& mesh_comp = mesh_view.get<MeshComponent>(entity);
-        
-        auto model_matrix = glm::translate(glm::mat4(1.0f), glm::vec3(transform.position.x, transform.position.y, transform.position.z));
-        // NOTE(migration): Phase 2 - replace with OpenGL mesh rendering
-        // DrawMesh(mesh_comp.mesh, mesh_comp.material, model_matrix);
-        (void)mesh_comp;
-        (void)model_matrix;
+
+        if (!mesh_comp.visible) continue;
+
+        // TODO(Phase 5): Bind material shader, upload model matrix, draw mesh
+        (void)transform;
     }
-    
+
     auto model_view = registry.view<Transform, ModelComponent>();
     for (auto entity : model_view) {
         auto& transform = model_view.get<Transform>(entity);
         auto& model_comp = model_view.get<ModelComponent>(entity);
-        
-        if (model_comp.visible) {
-            // NOTE(migration): Phase 2 - replace with OpenGL model rendering
-            // DrawModel(model_comp.model, transform.position, 1.0f, rf::Color::White());
-            (void)transform;
-        }
+
+        if (!model_comp.visible) continue;
+
+        // TODO(Phase 5): Bind model shader, draw model
+        (void)transform;
     }
 }
-#endif
 
 void RenderSystem::render_ui(entt::registry& registry, int screen_width, int screen_height) {
     (void)registry;

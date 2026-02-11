@@ -2,9 +2,9 @@
 #include "engine/client/core/resources.hpp"
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
-#include <cstdio>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace voxel {
 
@@ -20,37 +20,23 @@ BlockRegistry::~BlockRegistry() {
 bool BlockRegistry::init(const std::string& atlas_path) {
     if (initialized_) return true;
     
-    // NOTE(migration): resources::load_texture returns TexturePlaceholder (id only);
-    // copy id into Tex2DPlaceholder which also carries width/height.
-    {
-        auto tex = resources::load_texture(atlas_path);
-        atlas_texture_.id = tex.id;
-    }
-    if (atlas_texture_.id == 0) {
+    atlas_texture_ = resources::load_texture(atlas_path);
+    if (!atlas_texture_.isValid()) {
         TraceLog(LOG_ERROR, "Failed to load texture atlas: %s", atlas_path.c_str());
         return false;
     }
     
     atlas_tile_size_ = 16;
-    atlas_tiles_per_row_ = atlas_texture_.width / atlas_tile_size_;
+    atlas_tiles_per_row_ = atlas_texture_.width() / atlas_tile_size_;
 
-    // NOTE(migration): resources::load_image returns resources::ImagePlaceholder (empty stub).
-    // Colormap loading is stubbed for Phase 0 — colormaps will always use fallback.
-    {
-        auto img = resources::load_image("textures/grasscolor.png");
-        (void)img;
-    }
-    grass_colormap_loaded_ = false;
-    if (!grass_colormap_loaded_) {
+    // Load colormaps with CPU pixel retention for biome tinting
+    grass_colormap_ = resources::load_image("textures/grasscolor.png");
+    if (!grass_colormap_.isValid()) {
         TraceLog(LOG_WARNING, "[voxel] grasscolor.png not found; grass recolor will use fallback");
     }
 
-    {
-        auto img = resources::load_image("textures/foliagecolor.png");
-        (void)img;
-    }
-    foliage_colormap_loaded_ = false;
-    if (!foliage_colormap_loaded_) {
+    foliage_colormap_ = resources::load_image("textures/foliagecolor.png");
+    if (!foliage_colormap_.isValid()) {
         TraceLog(LOG_WARNING, "[voxel] foliagecolor.png not found; foliage recolor will use fallback");
     }
     
@@ -64,45 +50,44 @@ bool BlockRegistry::init(const std::string& atlas_path) {
 
 void BlockRegistry::destroy() {
     if (initialized_) {
-        // NOTE(migration): UnloadTexture/UnloadImage are raylib calls — stubbed for Phase 0
-        // UnloadTexture(atlas_texture_);
-        atlas_texture_ = {};
-
-        if (grass_colormap_loaded_) {
-            // UnloadImage(grass_colormap_);
-            grass_colormap_ = {};
-            grass_colormap_loaded_ = false;
-        }
-        if (foliage_colormap_loaded_) {
-            // UnloadImage(foliage_colormap_);
-            foliage_colormap_ = {};
-            foliage_colormap_loaded_ = false;
-        }
-
+        atlas_texture_.destroy();
+        grass_colormap_.destroy();
+        foliage_colormap_.destroy();
         initialized_ = false;
     }
 }
 
-rf::Color BlockRegistry::sample_colormap_(const ImagePlaceholder& img, bool loaded, float temperature, float humidity, rf::Color fallback) {
-    // NOTE(migration): Image data access and GetImageColor are raylib calls — stubbed for Phase 0.
-    // Always returns fallback until Phase 2 provides a real image sampling path.
-    (void)img;
-    (void)temperature;
-    (void)humidity;
-    if (!loaded) {
+rf::Color BlockRegistry::sample_colormap_(const rf::GLTexture& tex, float temperature, float humidity, rf::Color fallback) {
+    if (!tex.isValid()) {
         return fallback;
     }
-    return fallback;
+
+    // Minecraft-style colormap lookup:
+    // x = temperature * (width - 1), y = humidity * (height - 1)
+    temperature = std::clamp(temperature, 0.0f, 1.0f);
+    humidity = std::clamp(humidity, 0.0f, 1.0f);
+    // Clamp humidity to not exceed temperature (triangular region)
+    humidity *= temperature;
+
+    int x = static_cast<int>((1.0f - temperature) * (tex.width() - 1));
+    int y = static_cast<int>((1.0f - humidity) * (tex.height() - 1));
+
+    rf::Color c = tex.samplePixel(x, y);
+    // If samplePixel returned blank (no pixel data), use fallback
+    if (c.a == 0 && c.r == 0 && c.g == 0 && c.b == 0) {
+        return fallback;
+    }
+    return c;
 }
 
 rf::Color BlockRegistry::sample_grass_color(float temperature, float humidity) const {
     const rf::Color fallback{120, 200, 80, 255};
-    return sample_colormap_(grass_colormap_, grass_colormap_loaded_, temperature, humidity, fallback);
+    return sample_colormap_(grass_colormap_, temperature, humidity, fallback);
 }
 
 rf::Color BlockRegistry::sample_foliage_color(float temperature, float humidity) const {
     const rf::Color fallback{90, 180, 70, 255};
-    return sample_colormap_(foliage_colormap_, foliage_colormap_loaded_, temperature, humidity, fallback);
+    return sample_colormap_(foliage_colormap_, temperature, humidity, fallback);
 }
 
 void BlockRegistry::register_blocks() {
