@@ -35,7 +35,7 @@ public:
     
     void set_block_with_state(int x, int y, int z, Block type, shared::voxel::BlockRuntimeState state);
     
-    void calculate_lighting();
+    void calculate_lighting(const World& world);
     std::uint8_t get_light(int x, int y, int z) const;
     void set_light(int x, int y, int z, std::uint8_t value);
 

@@ -25,6 +25,7 @@
 #include <glad/gl.h>
 
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cstdio>
 #include <cmath>
 
@@ -70,6 +71,15 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
     } else {
         engine_->log(engine::LogLevel::Warning, "Render pipeline failed — falling back to legacy");
     }
+
+    // Initialize solid shader and cube mesh for entity rendering (players, items)
+    if (solidShader_.loadFromFiles("shaders/solid.vs", "shaders/solid.fs")) {
+        entityCube_ = rf::GLMesh::createCube(1.0f);
+        entityRenderReady_ = entityCube_.isValid();
+    }
+    if (!entityRenderReady_) {
+        engine_->log(engine::LogLevel::Warning, "Entity render resources failed to load");
+    }
     
     engine_->log(engine::LogLevel::Info, "Starting in main menu");
 }
@@ -78,6 +88,9 @@ void BedWarsClient::on_shutdown() {
     engine_->log(engine::LogLevel::Info, "BedWarsClient shutting down");
     renderPipeline_.shutdown();
     pipelineInitialized_ = false;
+    solidShader_.destroy();
+    entityCube_.destroy();
+    entityRenderReady_ = false;
     inputSystem_.reset();
     playerSystem_.reset();
     registry_.clear();
@@ -185,11 +198,17 @@ void BedWarsClient::on_update(float dt) {
                     // Check for pending block operations
                     if (auto breakReq = blockInteraction.consume_break_request()) {
                         send_try_break_block(breakReq->x, breakReq->y, breakReq->z);
+                        // Client-side prediction: remove block immediately
+                        world.set_block(breakReq->x, breakReq->y, breakReq->z,
+                                        static_cast<voxel::Block>(shared::voxel::BlockType::Air));
                     }
                     if (auto placeReq = blockInteraction.consume_place_request()) {
                         send_try_place_block(placeReq->x, placeReq->y, placeReq->z,
                                              static_cast<proto::BlockType>(placeReq->block_type),
                                              placeReq->hitY, placeReq->face);
+                        // Client-side prediction: place block immediately
+                        world.set_block(placeReq->x, placeReq->y, placeReq->z,
+                                        static_cast<voxel::Block>(placeReq->block_type));
                     }
                 }
             } catch (const std::runtime_error&) {
@@ -265,7 +284,10 @@ void BedWarsClient::on_render() {
         auto& world = engine_->world();
         timeOfDay = world.get_time_of_day();
         float angle = (timeOfDay / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
-        sunDir = glm::normalize(rf::Vec3(std::cos(angle), std::sin(angle), 0.3f));
+        sunDir = rf::Vec3(std::cos(angle), std::sin(angle), 0.3f);
+        // Clamp sun above horizon to prevent everything going dark + broken shadow map
+        sunDir.y = std::max(sunDir.y, 0.05f);
+        sunDir = glm::normalize(sunDir);
     } catch (const std::runtime_error&) {}
 
     if (pipelineInitialized_) {
@@ -298,7 +320,17 @@ void BedWarsClient::on_render() {
             world.render(camera, renderPipeline_);
         } catch (const std::runtime_error&) {}
 
-        glEnable(GL_BLEND);  // Restore for subsequent passes
+        // Render player/item entities and block interaction overlays
+        glEnable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        render_players(camera);
+        render_items(camera);
+        try {
+            auto& bi = engine_->block_interaction();
+            bi.render_highlight(camera);
+            bi.render_break_overlay(camera);
+        } catch (const std::runtime_error&) {}
+
         glDisable(GL_DEPTH_TEST);
         renderPipeline_.endScene();
 
@@ -315,6 +347,15 @@ void BedWarsClient::on_render() {
         try {
             auto& world = engine_->world();
             world.render(camera);
+        } catch (const std::runtime_error&) {}
+
+        // Render player/item entities and block interaction overlays
+        render_players(camera);
+        render_items(camera);
+        try {
+            auto& bi = engine_->block_interaction();
+            bi.render_highlight(camera);
+            bi.render_break_overlay(camera);
         } catch (const std::runtime_error&) {}
 
         glDisable(GL_DEPTH_TEST);
@@ -342,42 +383,55 @@ void BedWarsClient::on_render() {
     engine_->ui_manager().render(uiViewModel_);
 }
 
-#if 0 // TODO(migration): Phase 2 — restore render_world
-void BedWarsClient::render_world(const ecs::Camera3D& camera) {
-    (void)camera;
-}
-#endif
+void BedWarsClient::render_players(const rf::Camera& camera) {
+    if (!entityRenderReady_) return;
 
-void BedWarsClient::render_players() {
-    // TODO(Phase 2): Restore player rendering with GLFW+OpenGL backend
-    // Render other players as simple colored cubes
+    rf::Mat4 vp = camera.viewProjectionMatrix();
+
+    solidShader_.bind();
+
     for (const auto& [id, player] : players_) {
         if (id == localPlayerId_) continue;  // Don't render self
-        
+
         rf::Color color = get_team_color(player.team);
         if (!player.alive) {
             color.a = 100;  // Semi-transparent when dead
         }
-        
+
         rf::Vec3 pos = {player.px, player.py + 0.9f, player.pz};  // Center of player
-        // DrawCube(pos, 0.6f, 1.8f, 0.6f, color);      // TODO(Phase 2)
-        // DrawCubeWires(pos, 0.6f, 1.8f, 0.6f, BLACK);  // TODO(Phase 2)
-        (void)pos;
-        (void)color;
+        rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                       * glm::scale(rf::Mat4(1.0f), rf::Vec3(0.6f, 1.8f, 0.6f));
+        rf::Mat4 mvp = vp * model;
+
+        solidShader_.setMat4("mvp", mvp);
+        solidShader_.setVec4("color", color.normalized());
+        entityCube_.draw();
     }
+
+    rf::GLShader::unbind();
 }
 
-void BedWarsClient::render_items() {
-    // TODO(Phase 2): Restore item rendering with GLFW+OpenGL backend
-    // Render dropped items as small floating cubes
+void BedWarsClient::render_items(const rf::Camera& camera) {
+    if (!entityRenderReady_) return;
+
+    rf::Mat4 vp = camera.viewProjectionMatrix();
+
+    solidShader_.bind();
+
     for (const auto& [id, item] : items_) {
         rf::Color color = rf::Color{255, 203, 0, 255};  // GOLD
-        
+
         rf::Vec3 pos = {item.x, item.y + 0.2f, item.z};
-        // DrawCube(pos, 0.3f, 0.3f, 0.3f, color);  // TODO(Phase 2)
-        (void)pos;
-        (void)color;
+        rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                       * glm::scale(rf::Mat4(1.0f), rf::Vec3(0.3f, 0.3f, 0.3f));
+        rf::Mat4 mvp = vp * model;
+
+        solidShader_.setMat4("mvp", mvp);
+        solidShader_.setVec4("color", color.normalized());
+        entityCube_.draw();
     }
+
+    rf::GLShader::unbind();
 }
 
 void BedWarsClient::render_debug_info() {

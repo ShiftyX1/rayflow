@@ -4,6 +4,7 @@
 // Extends engine base view model with BedWars game data.
 
 #include "engine/ui/runtime/ui_view_model_base.hpp"
+#include "engine/core/math_types.hpp"
 #include "../../shared/game/team_types.hpp"
 #include "../../shared/game/item_types.hpp"
 
@@ -30,8 +31,8 @@ struct ResourceCount {
 
 struct BedWarsPlayerViewModel {
     // Base player data
-    Vector3 position{0.0f, 0.0f, 0.0f};
-    Vector3 velocity{0.0f, 0.0f, 0.0f};
+    rf::Vec3 position{0.0f, 0.0f, 0.0f};
+    rf::Vec3 velocity{0.0f, 0.0f, 0.0f};
 
     bool on_ground{false};
     bool sprinting{false};

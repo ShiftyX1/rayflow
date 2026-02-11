@@ -159,7 +159,7 @@ else()
 endif()
 
 # =============================================================================
-# Engine UI (with raylib - UI framework)
+# Engine UI framework
 # =============================================================================
 add_library(engine_ui STATIC
     ui/runtime/ui_manager.cpp

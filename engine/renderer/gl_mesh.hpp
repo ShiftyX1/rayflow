@@ -89,6 +89,15 @@ public:
     /// Create a unit cube centered at origin (for skybox).
     static GLMesh createCube(float size = 1.0f);
 
+    /// Create a wireframe cube (GL_LINES) centered at origin.
+    static GLMesh createWireframeCube(float size = 1.0f);
+
+    /// Create an XZ plane centered at origin with normals and UVs.
+    static GLMesh createPlane(float width = 1.0f, float depth = 1.0f);
+
+    /// Create a cube with per-face UV coordinates (for texture-mapped overlays).
+    static GLMesh createCubeWithUVs(float size = 1.0f);
+
     /// Create a fullscreen triangle (covers [-1,1] NDC).
     static GLMesh createFullscreenTriangle();
 

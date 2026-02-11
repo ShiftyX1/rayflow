@@ -313,7 +313,7 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
     
     chunk->set_dirty_callback([this](Chunk* c) {
         if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
-            dirty_chunks_.push_back(c);
+            dirty_chunks_.insert(dirty_chunks_.begin(), c);
         }
     });
     
@@ -347,7 +347,7 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
         
         newChunk->set_dirty_callback([this](Chunk* c) {
             if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
-                dirty_chunks_.push_back(c);
+                dirty_chunks_.insert(dirty_chunks_.begin(), c);
             }
         });
         
@@ -654,9 +654,10 @@ void World::render(const rf::Camera& camera) const {
 
     // Sun direction (based on time of day)
     float angle = (time_of_day_ / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
-    rf::Vec3 sunDir = glm::normalize(rf::Vec3(
-        std::cos(angle), std::sin(angle), 0.3f
-    ));
+    rf::Vec3 sunDir = rf::Vec3(std::cos(angle), std::sin(angle), 0.3f);
+    // Clamp sun above horizon to prevent darkness and broken shadow map
+    sunDir.y = std::max(sunDir.y, 0.05f);
+    sunDir = glm::normalize(sunDir);
     shader.setVec3("sunDir", sunDir);
 
     // Sun and ambient colors
@@ -733,9 +734,10 @@ void World::render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const
 
     // Sun direction
     float angle = (time_of_day_ / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
-    rf::Vec3 sunDir = glm::normalize(rf::Vec3(
-        std::cos(angle), std::sin(angle), 0.3f
-    ));
+    rf::Vec3 sunDir = rf::Vec3(std::cos(angle), std::sin(angle), 0.3f);
+    // Clamp sun above horizon to prevent darkness and broken shadow map
+    sunDir.y = std::max(sunDir.y, 0.05f);
+    sunDir = glm::normalize(sunDir);
     shader.setVec3("sunDir", sunDir);
 
     // Sun and ambient colors

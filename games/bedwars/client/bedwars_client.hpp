@@ -9,6 +9,8 @@
 #include "engine/ui/runtime/ui_view_model.hpp"
 #include "engine/ui/runtime/ui_frame.hpp"
 #include "engine/renderer/render_pipeline.hpp"
+#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gl_mesh.hpp"
 
 #include "../shared/protocol/messages.hpp"
 
@@ -161,10 +163,8 @@ private:
     void clear_player_input();
     
     // --- Rendering ---
-    // NOTE(migration): Camera3D placeholder. Phase 2 will define rf::Camera.
-    // void render_world(const Camera3D& camera);
-    void render_players();
-    void render_items();
+    void render_players(const rf::Camera& camera);
+    void render_items(const rf::Camera& camera);
     void render_debug_info();
     
     // --- UI ---
@@ -239,6 +239,11 @@ private:
     // Render pipeline (HDR + shadows + tone mapping)
     rf::RenderPipeline renderPipeline_;
     bool pipelineInitialized_{false};
+    
+    // Solid color shader + cube mesh for entity rendering
+    rf::GLShader solidShader_;
+    rf::GLMesh   entityCube_;
+    bool         entityRenderReady_{false};
     
     // Debug
     bool showDebug_{false};

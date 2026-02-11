@@ -5,6 +5,11 @@
 
 #include "engine/core/player_constants.hpp"
 
+namespace rf {
+    class GLMesh;
+    class GLShader;
+}
+
 namespace ecs {
 
 struct Transform {
@@ -65,19 +70,22 @@ struct RigidBody {
     bool is_kinematic{false};
 };
 
-// NOTE(migration): MeshComponent/ModelComponent use placeholder types.
-// Phase 5 will define a proper rf::Material and model pipeline.
-// For now, these are compile-able stubs.
+// ECS mesh/model components with material pipeline.
+// mesh/shader pointers are non-owning — the resource system owns the lifetime.
 
 struct MeshComponent {
-    rf::Vec3 position{0, 0, 0};  // world position offset
-    bool cast_shadow{true};
-    bool visible{true};
+    rf::GLMesh*   mesh{nullptr};      // If null, RenderSystem uses default cube
+    rf::GLShader* shader{nullptr};    // If null, RenderSystem uses solid-color shader
+    rf::Color     color{rf::Color::White()};
+    bool          cast_shadow{true};
+    bool          visible{true};
 };
 
 struct ModelComponent {
-    rf::Vec3 position{0, 0, 0};
-    bool visible{true};
+    rf::GLMesh*   mesh{nullptr};
+    rf::GLShader* shader{nullptr};
+    rf::Color     color{rf::Color::White()};
+    bool          visible{true};
 };
 
 struct ToolHolder {

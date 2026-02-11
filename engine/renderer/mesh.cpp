@@ -12,10 +12,8 @@ MeshData MeshBuilder::create_cube(float size) {
 
 MeshData MeshBuilder::create_plane(float width, float depth) {
     MeshData data;
-    // TODO(Phase 5): Implement GLMesh::createPlane()
-    (void)width;
-    (void)depth;
-    data.valid = false;
+    data.mesh = rf::GLMesh::createPlane(width, depth);
+    data.valid = data.mesh.isValid();
     return data;
 }
 

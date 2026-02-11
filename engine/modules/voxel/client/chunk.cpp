@@ -140,9 +140,10 @@ void Chunk::set_light(int x, int y, int z, std::uint8_t value) {
     }
 }
 
-void Chunk::calculate_lighting() {
+void Chunk::calculate_lighting(const World& world) {
     light_map_.fill(0);
 
+    // Phase 1: Vertical skylight propagation (within chunk)
     for (int z = 0; z < CHUNK_DEPTH; ++z) {
         for (int x = 0; x < CHUNK_WIDTH; ++x) {
             std::uint8_t currentLight = 15;
@@ -172,6 +173,7 @@ void Chunk::calculate_lighting() {
     std::vector<std::tuple<int, int, int, std::uint8_t>> light_queue;
     light_queue.reserve(CHUNK_SIZE / 4);
     
+    // Seed queue from internal lit cells
     for (int y = 0; y < CHUNK_HEIGHT; ++y) {
         for (int z = 0; z < CHUNK_DEPTH; ++z) {
             for (int x = 0; x < CHUNK_WIDTH; ++x) {
@@ -182,7 +184,56 @@ void Chunk::calculate_lighting() {
             }
         }
     }
+
+    // Phase 2: Seed border cells with light from neighbor chunks.
+    // This allows skylight to propagate across chunk boundaries.
+    const int base_x = chunk_x_ * CHUNK_WIDTH;
+    const int base_z = chunk_z_ * CHUNK_DEPTH;
+
+    auto seed_border = [&](int lx, int ly, int lz, int wx, int wy, int wz) {
+        Block nb = world.get_block(wx, wy, wz);
+        auto nbt = static_cast<BlockType>(nb);
+        if (is_solid(nbt) && !is_transparent(nbt)) return;
+
+        // Read the neighbor chunk's skylight at that world position
+        std::uint8_t neighbor_light = static_cast<std::uint8_t>(
+            world.sample_skylight01(wx, wy, wz) * 15.0f);
+        if (neighbor_light <= 2) return;
+
+        // Light entering this chunk decays by 2 (horizontal propagation)
+        std::uint8_t incoming = neighbor_light - 2;
+
+        Block local_block = get_block(lx, ly, lz);
+        auto local_type = static_cast<BlockType>(local_block);
+        if (is_solid(local_type) && !is_transparent(local_type)) return;
+
+        int idx = get_index(lx, ly, lz);
+        if (incoming > light_map_[idx]) {
+            light_map_[idx] = incoming;
+            light_queue.emplace_back(lx, ly, lz, incoming);
+        }
+    };
+
+    for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+        // -X border: local x=0, neighbor world x = base_x - 1
+        for (int z = 0; z < CHUNK_DEPTH; ++z) {
+            seed_border(0, y, z, base_x - 1, y, base_z + z);
+        }
+        // +X border: local x=CHUNK_WIDTH-1, neighbor world x = base_x + CHUNK_WIDTH
+        for (int z = 0; z < CHUNK_DEPTH; ++z) {
+            seed_border(CHUNK_WIDTH - 1, y, z, base_x + CHUNK_WIDTH, y, base_z + z);
+        }
+        // -Z border: local z=0, neighbor world z = base_z - 1
+        for (int x = 0; x < CHUNK_WIDTH; ++x) {
+            seed_border(x, y, 0, base_x + x, y, base_z - 1);
+        }
+        // +Z border: local z=CHUNK_DEPTH-1, neighbor world z = base_z + CHUNK_DEPTH
+        for (int x = 0; x < CHUNK_WIDTH; ++x) {
+            seed_border(x, y, CHUNK_DEPTH - 1, base_x + x, y, base_z + CHUNK_DEPTH);
+        }
+    }
     
+    // Phase 3: BFS flood fill (within chunk only)
     static constexpr int dx[] = {1, -1, 0, 0, 0, 0};
     static constexpr int dy[] = {0, 0, 1, -1, 0, 0};
     static constexpr int dz[] = {0, 0, 0, 0, 1, -1};
@@ -238,7 +289,7 @@ void Chunk::generate_mesh(const World& world) {
     }
     
     is_empty_ = false;
-    calculate_lighting();
+    calculate_lighting(world);
 
     const auto t_total0 = std::chrono::steady_clock::now();
 

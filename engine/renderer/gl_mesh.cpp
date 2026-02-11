@@ -255,6 +255,132 @@ GLMesh GLMesh::createCube(float size) {
     return mesh;
 }
 
+GLMesh GLMesh::createCubeWithUVs(float size) {
+    float s = size * 0.5f;
+
+    // 36 vertices (6 faces * 2 triangles * 3 vertices)
+    // Each face maps UV from (0,0) to (1,1)
+    // clang-format off
+    float positions[] = {
+        // +X face
+        s, -s, -s,  s,  s, -s,  s,  s,  s,
+        s, -s, -s,  s,  s,  s,  s, -s,  s,
+        // -X face
+       -s, -s,  s, -s,  s,  s, -s,  s, -s,
+       -s, -s,  s, -s,  s, -s, -s, -s, -s,
+        // +Y face
+       -s,  s, -s, -s,  s,  s,  s,  s,  s,
+       -s,  s, -s,  s,  s,  s,  s,  s, -s,
+        // -Y face
+       -s, -s,  s, -s, -s, -s,  s, -s, -s,
+       -s, -s,  s,  s, -s, -s,  s, -s,  s,
+        // +Z face
+       -s, -s,  s,  s, -s,  s,  s,  s,  s,
+       -s, -s,  s,  s,  s,  s, -s,  s,  s,
+        // -Z face
+        s, -s, -s, -s, -s, -s, -s,  s, -s,
+        s, -s, -s, -s,  s, -s,  s,  s, -s,
+    };
+    float texcoords[] = {
+        // Each face: two triangles covering full 0-1 UV range
+        // +X face
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        // -X face
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        // +Y face
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        // -Y face
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        // +Z face
+        0.0f, 1.0f,  1.0f, 1.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  0.0f, 0.0f,
+        // -Z face
+        0.0f, 1.0f,  1.0f, 1.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  0.0f, 0.0f,
+    };
+    // clang-format on
+
+    GLMesh mesh;
+    mesh.upload(36, positions, texcoords);
+    return mesh;
+}
+
+GLMesh GLMesh::createWireframeCube(float size) {
+    float s = size * 0.5f;
+
+    // 8 corner vertices
+    //   0: (-s, -s, -s)   1: ( s, -s, -s)
+    //   2: ( s,  s, -s)   3: (-s,  s, -s)
+    //   4: (-s, -s,  s)   5: ( s, -s,  s)
+    //   6: ( s,  s,  s)   7: (-s,  s,  s)
+
+    // 12 edges × 2 endpoints = 24 vertices for GL_LINES
+    // clang-format off
+    float positions[] = {
+        // Bottom face edges
+        -s, -s, -s,   s, -s, -s,
+         s, -s, -s,   s, -s,  s,
+         s, -s,  s,  -s, -s,  s,
+        -s, -s,  s,  -s, -s, -s,
+        // Top face edges
+        -s,  s, -s,   s,  s, -s,
+         s,  s, -s,   s,  s,  s,
+         s,  s,  s,  -s,  s,  s,
+        -s,  s,  s,  -s,  s, -s,
+        // Vertical edges
+        -s, -s, -s,  -s,  s, -s,
+         s, -s, -s,   s,  s, -s,
+         s, -s,  s,   s,  s,  s,
+        -s, -s,  s,  -s,  s,  s,
+    };
+    // clang-format on
+
+    GLMesh mesh;
+    mesh.uploadPositionOnly(positions, 24);
+    return mesh;
+}
+
+GLMesh GLMesh::createPlane(float width, float depth) {
+    float hw = width * 0.5f;
+    float hd = depth * 0.5f;
+
+    // 6 vertices (2 triangles) on XZ plane, Y = 0
+    // clang-format off
+    float positions[] = {
+        -hw, 0.0f,  hd,
+         hw, 0.0f,  hd,
+         hw, 0.0f, -hd,
+        -hw, 0.0f,  hd,
+         hw, 0.0f, -hd,
+        -hw, 0.0f, -hd,
+    };
+    float texcoords[] = {
+        0.0f, 0.0f,
+        1.0f, 0.0f,
+        1.0f, 1.0f,
+        0.0f, 0.0f,
+        1.0f, 1.0f,
+        0.0f, 1.0f,
+    };
+    float normals[] = {
+        0.0f, 1.0f, 0.0f,
+        0.0f, 1.0f, 0.0f,
+        0.0f, 1.0f, 0.0f,
+        0.0f, 1.0f, 0.0f,
+        0.0f, 1.0f, 0.0f,
+        0.0f, 1.0f, 0.0f,
+    };
+    // clang-format on
+
+    GLMesh mesh;
+    mesh.upload(6, positions, texcoords, nullptr, normals);
+    return mesh;
+}
+
 GLMesh GLMesh::createFullscreenTriangle() {
     // One large triangle that covers the entire [-1,1] clip space
     float positions[] = {

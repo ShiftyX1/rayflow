@@ -4,6 +4,8 @@
 #include "../shared/block_state.hpp"
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
+#include <glad/gl.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <cstdio>
 
@@ -24,6 +26,22 @@ bool BlockInteraction::init() {
 
     textures_loaded_ = true;
     TraceLog(LOG_INFO, "Destroy stage textures loaded");
+
+    // Load rendering resources for highlight + destroy overlay
+    if (!render_resources_loaded_) {
+        if (!solidShader_.loadFromFiles("shaders/solid.vs", "shaders/solid.fs")) {
+            TraceLog(LOG_WARNING, "BlockInteraction: failed to load solid shader");
+        }
+        if (!overlayShader_.loadFromFiles("shaders/overlay.vs", "shaders/overlay.fs")) {
+            TraceLog(LOG_WARNING, "BlockInteraction: failed to load overlay shader");
+        }
+
+        wireframeCube_ = rf::GLMesh::createWireframeCube(1.0f);
+        overlayCube_ = rf::GLMesh::createCubeWithUVs(1.0f);
+        render_resources_loaded_ = true;
+        TraceLog(LOG_INFO, "BlockInteraction render resources loaded");
+    }
+
     return true;
 }
 
@@ -33,6 +51,13 @@ void BlockInteraction::destroy() {
             destroy_textures_[i].destroy();
         }
         textures_loaded_ = false;
+    }
+    if (render_resources_loaded_) {
+        solidShader_.destroy();
+        overlayShader_.destroy();
+        wireframeCube_.destroy();
+        overlayCube_.destroy();
+        render_resources_loaded_ = false;
     }
 }
 
@@ -259,46 +284,75 @@ float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::To
     return base_time / mining_speed;
 }
 
-// NOTE(migration): render_highlight commented out — declaration removed from header.
-// TODO(Phase 4): Reimplement with OpenGL wireframe cube drawing.
-// void BlockInteraction::render_highlight(const Camera3D& camera) const {
-//     if (!target_.hit) return;
-//     rf::Vec3 pos = {
-//         static_cast<float>(target_.block_x) + 0.5f,
-//         static_cast<float>(target_.block_y) + 0.5f,
-//         static_cast<float>(target_.block_z) + 0.5f
-//     };
-//     DrawCubeWires(pos, 1.02f, 1.02f, 1.02f, rf::Color::Black());
-// }
+// ============================================================================
+// Rendering
+// ============================================================================
 
-// NOTE(migration): render_break_overlay commented out — declaration removed from header.
-// TODO(Phase 4): Reimplement with OpenGL textured overlay drawing.
-// void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
-//     if (!target_.hit || break_progress_ <= 0.0f) return;
-//     if (!textures_loaded_) return;
-//     (void)camera;
-//     int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
-//     if (stage < 0) stage = 0;
-//     if (stage > 9) stage = 9;
-//     const Tex2DPlaceholder& tex = destroy_textures_[stage];
-//     rf::Vec3 pos = { ... };
-//     // ... rlgl drawing code omitted ...
-// }
+void BlockInteraction::render_highlight(const rf::Camera& camera) const {
+    if (!target_.hit) return;
+    if (!render_resources_loaded_ || !solidShader_.isValid() || !wireframeCube_.isValid()) return;
+
+    rf::Vec3 pos = {
+        static_cast<float>(target_.block_x) + 0.5f,
+        static_cast<float>(target_.block_y) + 0.5f,
+        static_cast<float>(target_.block_z) + 0.5f
+    };
+
+    // Slightly larger than 1.0 to avoid z-fighting with block surface
+    rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                   * glm::scale(rf::Mat4(1.0f), rf::Vec3(1.005f));
+    rf::Mat4 mvp = camera.viewProjectionMatrix() * model;
+
+    glLineWidth(2.0f);
+    solidShader_.bind();
+    solidShader_.setMat4("mvp", mvp);
+    solidShader_.setVec4("color", rf::Vec4(0.0f, 0.0f, 0.0f, 0.8f));
+    wireframeCube_.draw(GL_LINES);
+    rf::GLShader::unbind();
+    glLineWidth(1.0f);
+}
+
+void BlockInteraction::render_break_overlay(const rf::Camera& camera) const {
+    if (!target_.hit || break_progress_ <= 0.0f) return;
+    if (!render_resources_loaded_ || !overlayShader_.isValid() || !overlayCube_.isValid()) return;
+    if (!textures_loaded_) return;
+
+    int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
+    if (stage < 0) stage = 0;
+    if (stage > 9) stage = 9;
+
+    rf::Vec3 pos = {
+        static_cast<float>(target_.block_x) + 0.5f,
+        static_cast<float>(target_.block_y) + 0.5f,
+        static_cast<float>(target_.block_z) + 0.5f
+    };
+
+    // Render destroy texture on a cube slightly larger than the block
+    rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                   * glm::scale(rf::Mat4(1.0f), rf::Vec3(1.002f));
+    rf::Mat4 mvp = camera.viewProjectionMatrix() * model;
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1.0f, -1.0f);
+
+    overlayShader_.bind();
+    overlayShader_.setMat4("mvp", mvp);
+    overlayShader_.setVec4("tintColor", rf::Vec4(1.0f, 1.0f, 1.0f, 0.7f));
+    overlayShader_.setInt("tex", 0);
+    destroy_textures_[stage].bind(0);
+    overlayCube_.draw();
+    rf::GLTexture::unbind(0);
+    rf::GLShader::unbind();
+
+    glDisable(GL_POLYGON_OFFSET_FILL);
+}
 
 void BlockInteraction::render_crosshair(int screen_width, int screen_height) {
     (void)screen_width;
     (void)screen_height;
-    // TODO(Phase 3): Reimplement crosshair with OpenGL 2D quad drawing.
-    // int center_x = screen_width / 2;
-    // int center_y = screen_height / 2;
-    // int size = 10;
-    // int thickness = 2;
-    // DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, rf::Color::White());
-    // DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, rf::Color::White());
-    // DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1,
-    //                    size * 2 + 2, thickness + 2, rf::Color::Black());
-    // DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1,
-    //                    thickness + 2, size * 2 + 2, rf::Color::Black());
+    // Crosshair rendering moved to game-level code (bedwars_client / render_system)
 }
 
 } // namespace voxel
