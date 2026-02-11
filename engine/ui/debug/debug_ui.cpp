@@ -18,14 +18,14 @@
 namespace ui::debug {
 
 // ============================================================================
-// Cached frame stats (updated once per second to avoid flicker)
+// Cached frame stats (updated twice per second to avoid flicker)
 // ============================================================================
 
 static int    s_cachedFps{0};
 static float  s_cachedFrameTimeMs{0.0f};
 static float  s_fpsAccumulator{0.0f};
 static int    s_fpsFrameCount{0};
-constexpr float kFpsUpdateInterval = 1.0f;
+constexpr float kFpsUpdateInterval = 0.5f;
 
 static void update_frame_stats(const UIViewModel& vm) {
     s_fpsAccumulator += vm.dt;
