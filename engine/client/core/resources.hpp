@@ -2,12 +2,10 @@
 
 #include "engine/renderer/gl_texture.hpp"
 #include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gl_font.hpp"
 #include <string>
 
 namespace resources {
-
-// NOTE(migration): FontPlaceholder remains until Phase 3 (text rendering).
-struct FontPlaceholder {};
 
 void init();
 
@@ -24,7 +22,8 @@ rf::GLTexture load_image(const std::string& path);
 /// Load and compile a shader program from vertex/fragment paths.
 rf::GLShader load_shader(const char* vsPath, const char* fsPath);
 
-FontPlaceholder load_font(const std::string& path, int fontSize = 20);
+/// Load a TTF font at the given pixel size. Caller takes ownership.
+rf::GLFont load_font(const std::string& path, int fontSize = 20);
 
 std::string load_text(const std::string& path);
 

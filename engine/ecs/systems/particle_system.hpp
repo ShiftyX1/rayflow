@@ -23,6 +23,7 @@
 #include "../components/rendering.hpp"
 
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/batch_2d.hpp"
 #include <cmath>
 #include <random>
 
@@ -213,13 +214,12 @@ private:
     }
     
     void render_emitter(const ParticleEmitter& emitter) {
+        auto& batch = rf::Batch2D::instance();
         for (int i = 0; i < ParticleEmitter::kMaxParticles; ++i) {
             const auto& p = emitter.particles[i];
             if (!p.active) continue;
             
-            // TODO(migration): Phase 3 will draw via Batch2D
-            // DrawCircleV({p.x, p.y}, p.size, p.color);
-            (void)p;
+            batch.drawCircle(p.x, p.y, p.size, p.color);
         }
     }
     
@@ -245,6 +245,7 @@ private:
     void render_trail(const TrailEffect& trail) {
         if (trail.point_count < 2) return;
         
+        auto& batch = rf::Batch2D::instance();
         for (int i = 0; i < trail.point_count - 1; ++i) {
             int idx1 = (trail.head - trail.point_count + i + TrailEffect::kMaxPoints) % TrailEffect::kMaxPoints;
             int idx2 = (idx1 + 1) % TrailEffect::kMaxPoints;
@@ -253,9 +254,9 @@ private:
             float width = lerp(trail.width_end, trail.width_start, t);
             rf::Color color = lerp_color(trail.color_end, trail.color_start, t);
             
-            // TODO(migration): Phase 3 will draw via Batch2D
-            // DrawLineEx(trail.points[idx1], trail.points[idx2], width, color);
-            (void)width; (void)color;
+            batch.drawLine(trail.points[idx1].x, trail.points[idx1].y,
+                           trail.points[idx2].x, trail.points[idx2].y,
+                           width, color);
         }
     }
     

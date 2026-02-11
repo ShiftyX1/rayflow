@@ -133,6 +133,8 @@ add_library(engine_client STATIC
     renderer/gl_texture.cpp
     renderer/gl_framebuffer.cpp
     renderer/gl_mesh.cpp
+    renderer/gl_font.cpp
+    renderer/batch_2d.cpp
     renderer/camera.cpp
     renderer/stb_impl.cpp
     renderer/mesh.cpp

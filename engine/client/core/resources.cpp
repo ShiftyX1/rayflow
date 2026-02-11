@@ -114,10 +114,12 @@ rf::GLShader load_shader(const char* vsPath, const char* fsPath) {
     return shader;
 }
 
-FontPlaceholder load_font(const std::string& path, int fontSize) {
-    // TODO(Phase 3): Implement font loading with stb_truetype
-    TraceLog(LOG_WARNING, "[resources] load_font() stubbed — font not loaded: %s (size %d)", path.c_str(), fontSize);
-    return FontPlaceholder{};
+rf::GLFont load_font(const std::string& path, int fontSize) {
+    rf::GLFont font;
+    if (!font.loadFromFile(path, static_cast<float>(fontSize))) {
+        TraceLog(LOG_WARNING, "[resources] Failed to load font: %s (size %d)", path.c_str(), fontSize);
+    }
+    return font;
 }
 
 std::string load_text(const std::string& path) {

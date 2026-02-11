@@ -10,12 +10,11 @@
 #include "engine/client/core/resources.hpp"
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/batch_2d.hpp"
+#include "engine/renderer/gl_font.hpp"
 #include "engine/ui/scripting/ui_script_engine.hpp"
 
 namespace ui::xmlui {
-
-// TODO(migration): Phase 3 - MeasureText stub for layout (returns 0 until renderer is implemented)
-static int MeasureText(const char*, int) { return 0; }
 
 UIDocument::UIDocument() = default;
 UIDocument::~UIDocument() = default;
@@ -115,16 +114,14 @@ static void draw_box_shadow(const rf::Rect& r, const UIStyle& style) {
             static_cast<unsigned char>(alpha * 255)
         };
         
-        // TODO(migration): Phase 3
-        // if (style.border_radius > 0) {
-        //     DrawRectangleRounded(shadowRect, 
-        //         static_cast<float>(style.border_radius) / std::min(r.w, r.h), 
-        //         8, shadowColor);
-        // } else {
-        //     DrawRectangleRec(shadowRect, shadowColor);
-        // }
-        (void)shadowRect;
-        (void)shadowColor;
+        auto& batch = rf::Batch2D::instance();
+        if (style.border_radius > 0) {
+            batch.drawRectRounded(shadowRect.x, shadowRect.y, shadowRect.w, shadowRect.h,
+                static_cast<float>(style.border_radius) / std::min(shadowRect.w, shadowRect.h),
+                8, shadowColor);
+        } else {
+            batch.drawRect(shadowRect.x, shadowRect.y, shadowRect.w, shadowRect.h, shadowColor);
+        }
     }
 }
 
@@ -232,7 +229,7 @@ void UIDocument::unload() {
     texture_cache_.clear();
 
     for (auto& [_, font] : font_cache_) {
-        (void)font;  // TODO(migration): Phase 3 — cleanup font resources
+        font.reset();
     }
     font_cache_.clear();
 }
@@ -253,16 +250,24 @@ GLuint UIDocument::load_texture_cached(const std::string& path) {
     return id;
 }
 
-UIDocument::FontPlaceholder UIDocument::load_font_cached(int size) {
+rf::GLFont* UIDocument::load_font_cached(int size) {
     auto it = font_cache_.find(size);
     if (it != font_cache_.end()) {
-        return it->second;
+        return it->second.get();
     }
 
-    // TODO(migration): Phase 3 — load actual font
-    FontPlaceholder f{};
-    font_cache_.emplace(size, f);
-    return f;
+    auto font = std::make_unique<rf::GLFont>();
+    // Try to use the default system font at the requested size
+    rf::GLFont* def = rf::GLFont::defaultFont();
+    if (def && def->isValid()) {
+        // For now, all sizes share the default font (it scales via drawText size parameter)
+        // To get per-size atlases, we'd bake a new atlas per size.
+        // Just return default font for now.
+        font_cache_.emplace(size, nullptr);
+        return def;
+    }
+    font_cache_.emplace(size, std::move(font));
+    return font_cache_[size].get();
 }
 
 int UIDocument::measure_content_width(const Node& node) {
@@ -273,13 +278,13 @@ int UIDocument::measure_content_width(const Node& node) {
     // For Text, measure text width
     if (node.type == "Text" && !node.text.empty()) {
         const int fontSize = node.style.font_size;
-        return MeasureText(node.text.c_str(), fontSize);
+        return static_cast<int>(rf::Batch2D::instance().measureText(node.text, static_cast<float>(fontSize)));
     }
 
     // For Button, measure text width + padding
     if (node.type == "Button" && !node.text.empty()) {
         const int fontSize = node.style.font_size;
-        return MeasureText(node.text.c_str(), fontSize) + node.style.padding.left + node.style.padding.right;
+        return static_cast<int>(rf::Batch2D::instance().measureText(node.text, static_cast<float>(fontSize))) + node.style.padding.left + node.style.padding.right;
     }
 
     // For containers (Panel, Row, Column), sum children
@@ -580,28 +585,28 @@ void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
 
     draw_box_shadow(r, node.style);
 
+    auto& batch = rf::Batch2D::instance();
+
     // Background
     if (node.style.background_color.has_value()) {
         rf::Color bgColor = apply_opacity(*node.style.background_color, node.style.opacity);
-        // TODO(migration): Phase 3
-        // if (node.style.border_radius > 0) {
-        //     DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.w, r.h), 8, bgColor);
-        // } else {
-        //     DrawRectangleRec(r, bgColor);
-        // }
-        (void)bgColor;
+        if (node.style.border_radius > 0) {
+            float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+            batch.drawRectRounded(r.x, r.y, r.w, r.h, roundness, 8, bgColor);
+        } else {
+            batch.drawRect(r.x, r.y, r.w, r.h, bgColor);
+        }
     }
 
     // Border
     if (node.style.border_width > 0) {
         rf::Color borderColor = apply_opacity(node.style.border_color, node.style.opacity);
-        // TODO(migration): Phase 3
-        // if (node.style.border_radius > 0) {
-        //     DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.w, r.h), 8, static_cast<float>(node.style.border_width), borderColor);
-        // } else {
-        //     DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), borderColor);
-        // }
-        (void)borderColor;
+        if (node.style.border_radius > 0) {
+            float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+            batch.drawRectRoundedLines(r.x, r.y, r.w, r.h, roundness, 8, static_cast<float>(node.style.border_width), borderColor);
+        } else {
+            batch.drawRectLinesEx(r.x, r.y, r.w, r.h, static_cast<float>(node.style.border_width), borderColor);
+        }
     }
 
     // Render children
@@ -619,7 +624,8 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
 
     const int fontSize = node.style.font_size;
     const rf::Color color = to_rf_color(node.style.color);
-    const int textW = MeasureText(node.text.c_str(), fontSize);
+    auto& batch = rf::Batch2D::instance();
+    const int textW = static_cast<int>(batch.measureText(node.text, static_cast<float>(fontSize)));
     const rf::Rect& r = node.computed_rect;
 
     // Horizontal alignment
@@ -650,11 +656,7 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
             break;
     }
 
-    // TODO(migration): Phase 3
-    // DrawText(node.text.c_str(), tx, ty, fontSize, color);
-    (void)tx;
-    (void)ty;
-    (void)color;
+    batch.drawText(node.text, static_cast<float>(tx), static_cast<float>(ty), static_cast<float>(fontSize), color);
 }
 
 void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
@@ -676,14 +678,14 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
         bg.b = static_cast<unsigned char>(std::min(255, bg.b + 30));
     }
 
+    auto& batch = rf::Batch2D::instance();
     rf::Color bgColor = apply_opacity(bg, node.style.opacity);
-    // TODO(migration): Phase 3
-    // if (node.style.border_radius > 0) {
-    //     DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.w, r.h), 8, bgColor);
-    // } else {
-    //     DrawRectangleRec(r, bgColor);
-    // }
-    (void)bgColor;
+    if (node.style.border_radius > 0) {
+        float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+        batch.drawRectRounded(r.x, r.y, r.w, r.h, roundness, 8, bgColor);
+    } else {
+        batch.drawRect(r.x, r.y, r.w, r.h, bgColor);
+    }
 
     // Border
     if (node.style.border_width > 0) {
@@ -694,19 +696,18 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
             border_col.b = static_cast<unsigned char>(std::min(255, border_col.b + 50));
         }
         rf::Color borderColor = apply_opacity(border_col, node.style.opacity);
-        // TODO(migration): Phase 3
-        // if (node.style.border_radius > 0) {
-        //     DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.w, r.h), 8, static_cast<float>(node.style.border_width), borderColor);
-        // } else {
-        //     DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), borderColor);
-        // }
-        (void)borderColor;
+        if (node.style.border_radius > 0) {
+            float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+            batch.drawRectRoundedLines(r.x, r.y, r.w, r.h, roundness, 8, static_cast<float>(node.style.border_width), borderColor);
+        } else {
+            batch.drawRectLinesEx(r.x, r.y, r.w, r.h, static_cast<float>(node.style.border_width), borderColor);
+        }
     }
 
     if (!node.text.empty()) {
         const int fontSize = node.style.font_size;
         const rf::Color textColor = to_rf_color(node.style.color);
-        const int textW = MeasureText(node.text.c_str(), fontSize);
+        const int textW = static_cast<int>(batch.measureText(node.text, static_cast<float>(fontSize)));
         const int textH = fontSize;
         
         const float innerX = r.x + node.style.padding.left;
@@ -740,11 +741,7 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
                 break;
         }
         
-        // TODO(migration): Phase 3
-        // DrawText(node.text.c_str(), tx, ty, fontSize, textColor);
-        (void)tx;
-        (void)ty;
-        (void)textColor;
+        batch.drawText(node.text, static_cast<float>(tx), static_cast<float>(ty), static_cast<float>(fontSize), textColor);
     }
 }
 
@@ -766,8 +763,8 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
     const int fullHearts = health / 2;
     const bool hasHalf = (health % 2) != 0;
 
-    const int heartW = node.style.width.has_value() ? *node.style.width : 16; // TODO(migration): Phase 3 — get texture width
-    const int heartH = node.style.height.has_value() ? *node.style.height : 16; // TODO(migration): Phase 3 — get texture height
+    const int heartW = node.style.width.has_value() ? *node.style.width : 16;
+    const int heartH = node.style.height.has_value() ? *node.style.height : 16;
 
     const int gap = node.style.gap;
     const int contentW = hearts * heartW + (hearts > 0 ? (hearts - 1) * gap : 0);
@@ -788,11 +785,7 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
 
         const rf::Rect src{0.0f, 0.0f, static_cast<float>(heartW), static_cast<float>(heartH)};
         const rf::Rect dst{static_cast<float>(x), static_cast<float>(y), static_cast<float>(heartW), static_cast<float>(heartH)};
-        // TODO(migration): Phase 3
-        // DrawTexturePro(tex, src, dst, rf::Vec2{0.0f, 0.0f}, 0.0f, rf::Color::White());
-        (void)tex;
-        (void)src;
-        (void)dst;
+        rf::Batch2D::instance().drawTextureRaw(tex, heartW, heartH, src, dst);
     }
 }
 

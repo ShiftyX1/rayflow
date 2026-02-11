@@ -10,9 +10,6 @@
 #include "../debug/debug_ui.hpp"
 #endif
 
-// NOTE(migration): MeasureText placeholder — will be replaced in Phase 3 (GLFont).
-static int MeasureText(const char*, int) { return 0; }
-
 namespace ui {
 
 UIManager::~UIManager() {

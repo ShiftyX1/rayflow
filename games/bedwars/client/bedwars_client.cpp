@@ -17,6 +17,9 @@
 #include "engine/core/math_types.hpp"
 #include "engine/core/key_codes.hpp"
 #include "engine/core/logging.hpp"
+#include "engine/renderer/batch_2d.hpp"
+#include "engine/renderer/gl_font.hpp"
+#include "engine/client/core/window.hpp"
 #include <filesystem>
 
 #include <cstdio>
@@ -203,31 +206,35 @@ void BedWarsClient::clear_player_input() {
 // ============================================================================
 
 void BedWarsClient::on_render() {
-    // TODO(Phase 2): Restore rendering with GLFW+OpenGL backend.
-    // All raylib draw calls are commented out until the renderer migration.
+    auto& win = rf::Window::instance();
+    int sw = win.width();
+    int sh = win.height();
+    auto& batch = rf::Batch2D::instance();
 
     // Render based on game screen
     if (gameScreen_ == ui::GameScreen::MainMenu || 
         gameScreen_ == ui::GameScreen::ConnectMenu ||
         gameScreen_ == ui::GameScreen::Paused) {
-        // ClearBackground(DARKGRAY);  // TODO(Phase 2)
+        batch.begin(sw, sh);
+        batch.end();
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
     if (gameScreen_ == ui::GameScreen::Connecting) {
-        // ClearBackground(BLACK);  // TODO(Phase 2)
-        // DrawText("Connecting to server...", 100, 100, 30, rf::Color::White());  // TODO(Phase 2)
-        //
-        // if (sessionState_ == SessionState::WaitingServerHello) {
-        //     DrawText("Waiting for ServerHello...", 100, 140, 20, rf::Color{130,130,130,255});
-        // } else if (sessionState_ == SessionState::WaitingJoinAck) {
-        //     DrawText("Joining match...", 100, 140, 20, rf::Color{130,130,130,255});
-        // }
-        //
-        // if (!connectionError_.empty()) {
-        //     DrawText(connectionError_.c_str(), 100, 200, 20, rf::Color::Red());
-        // }
+        batch.begin(sw, sh);
+        batch.drawText("Connecting to server...", 100, 100, 30, rf::Color::White());
+
+        if (sessionState_ == SessionState::WaitingServerHello) {
+            batch.drawText("Waiting for ServerHello...", 100, 140, 20, rf::Color{130,130,130,255});
+        } else if (sessionState_ == SessionState::WaitingJoinAck) {
+            batch.drawText("Joining match...", 100, 140, 20, rf::Color{130,130,130,255});
+        }
+
+        if (!connectionError_.empty()) {
+            batch.drawText(connectionError_, 100, 200, 20, rf::Color::Red());
+        }
+        batch.end();
         
         engine_->ui_manager().render(uiViewModel_);
         return;
@@ -235,7 +242,6 @@ void BedWarsClient::on_render() {
     
     // Playing - render 3D world
     if (playerEntity_ == entt::null) {
-        // ClearBackground(BLACK);  // TODO(Phase 2)
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
@@ -264,7 +270,8 @@ void BedWarsClient::on_render() {
     // EndMode3D();
     
     // 2D overlay
-    // render_hud();
+    batch.begin(sw, sh);
+    render_hud();
     
 #ifdef NDEBUG
     // BedWars-specific debug info (F3 toggle, Release only)
@@ -273,10 +280,15 @@ void BedWarsClient::on_render() {
     }
 #endif
     
-    // // Crosshair (show when playing and UI not capturing input)
-    // if (!uiCapturesInput_) {
-    //     voxel::BlockInteraction::render_crosshair(GetScreenWidth(), GetScreenHeight());
-    // }
+    // Crosshair (show when playing and UI not capturing input)
+    if (!uiCapturesInput_) {
+        // Simple crosshair
+        int cx = sw / 2, cy = sh / 2;
+        batch.drawRect(static_cast<float>(cx - 10), static_cast<float>(cy - 1), 20.0f, 2.0f, rf::Color::White());
+        batch.drawRect(static_cast<float>(cx - 1), static_cast<float>(cy - 10), 2.0f, 20.0f, rf::Color::White());
+    }
+    
+    batch.end();
     
     // Render UI (HUD, debug overlays handled by engine's UI manager)
     engine_->ui_manager().render(uiViewModel_);
@@ -321,86 +333,96 @@ void BedWarsClient::render_items() {
 }
 
 void BedWarsClient::render_hud() {
-    // TODO(Phase 2): Restore HUD rendering with GLFW+OpenGL backend
-    // int sw = GetScreenWidth();
-    // int sh = GetScreenHeight();
-    //
-    // // Health bar
-    // int barWidth = 200;
-    // int barHeight = 20;
-    // int barX = 20;
-    // int barY = sh - 40;
-    //
-    // float healthPercent = static_cast<float>(localPlayer_.hp) / static_cast<float>(localPlayer_.maxHp);
-    //
-    // DrawRectangle(barX, barY, barWidth, barHeight, rf::Color{80, 80, 80, 255});
-    // DrawRectangle(barX, barY, static_cast<int>(barWidth * healthPercent), barHeight, rf::Color::Red());
-    // DrawRectangleLines(barX, barY, barWidth, barHeight, rf::Color::White());
-    //
-    // // Health text
-    // char healthText[32];
-    // std::snprintf(healthText, sizeof(healthText), "%d / %d HP", localPlayer_.hp, localPlayer_.maxHp);
-    // DrawText(healthText, barX + barWidth + 10, barY + 2, 16, rf::Color::White());
-    //
-    // // Team indicator
-    // rf::Color teamColor = get_team_color(localPlayer_.team);
-    // DrawRectangle(sw - 120, 20, 100, 30, teamColor);
-    //
-    // const char* teamName = "None";
-    // switch (localPlayer_.team) {
-    //     case proto::Teams::Red: teamName = "RED"; break;
-    //     case proto::Teams::Blue: teamName = "BLUE"; break;
-    //     case proto::Teams::Green: teamName = "GREEN"; break;
-    //     case proto::Teams::Yellow: teamName = "YELLOW"; break;
-    //     default: break;
-    // }
-    // DrawText(teamName, sw - 110, 25, 20, rf::Color::White());
+    auto& win = rf::Window::instance();
+    int sw = win.width();
+    int sh = win.height();
+    auto& batch = rf::Batch2D::instance();
+
+    // Health bar
+    int barWidth = 200;
+    int barHeight = 20;
+    int barX = 20;
+    int barY = sh - 40;
+
+    float healthPercent = (localPlayer_.maxHp > 0)
+        ? static_cast<float>(localPlayer_.hp) / static_cast<float>(localPlayer_.maxHp)
+        : 0.0f;
+
+    batch.drawRect(static_cast<float>(barX), static_cast<float>(barY),
+                   static_cast<float>(barWidth), static_cast<float>(barHeight),
+                   rf::Color{80, 80, 80, 255});
+    batch.drawRect(static_cast<float>(barX), static_cast<float>(barY),
+                   static_cast<float>(static_cast<int>(barWidth * healthPercent)),
+                   static_cast<float>(barHeight), rf::Color::Red());
+    batch.drawRectLines(static_cast<float>(barX), static_cast<float>(barY),
+                        static_cast<float>(barWidth), static_cast<float>(barHeight),
+                        rf::Color::White());
+
+    // Health text
+    char healthText[32];
+    std::snprintf(healthText, sizeof(healthText), "%d / %d HP", localPlayer_.hp, localPlayer_.maxHp);
+    batch.drawText(healthText, static_cast<float>(barX + barWidth + 10),
+                   static_cast<float>(barY + 2), 16, rf::Color::White());
+
+    // Team indicator
+    rf::Color teamColor = get_team_color(localPlayer_.team);
+    batch.drawRect(static_cast<float>(sw - 120), 20.0f, 100.0f, 30.0f, teamColor);
+
+    const char* teamName = "None";
+    switch (localPlayer_.team) {
+        case proto::Teams::Red: teamName = "RED"; break;
+        case proto::Teams::Blue: teamName = "BLUE"; break;
+        case proto::Teams::Green: teamName = "GREEN"; break;
+        case proto::Teams::Yellow: teamName = "YELLOW"; break;
+        default: break;
+    }
+    batch.drawText(teamName, static_cast<float>(sw - 110), 25.0f, 20, rf::Color::White());
 }
 
 void BedWarsClient::render_debug_info() {
-    // TODO(Phase 2): Restore debug info rendering with GLFW+OpenGL backend
-    // char buf[256];
-    // int y = 10;
-    //
-    // std::snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
-    // DrawText(buf, 10, y, 16, rf::Color::Green());
-    // y += 20;
-    //
-    // // Get position and camera from ECS
-    // if (playerEntity_ != entt::null) {
-    //     if (registry_.all_of<ecs::Transform>(playerEntity_)) {
-    //         auto& pos = registry_.get<ecs::Transform>(playerEntity_).position;
-    //         std::snprintf(buf, sizeof(buf), "Pos: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
-    //         DrawText(buf, 10, y, 16, rf::Color::White());
-    //         y += 20;
-    //     }
-    //     if (registry_.all_of<ecs::FirstPersonCamera>(playerEntity_)) {
-    //         auto& cam = registry_.get<ecs::FirstPersonCamera>(playerEntity_);
-    //         std::snprintf(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f", cam.yaw, cam.pitch);
-    //         DrawText(buf, 10, y, 16, rf::Color::White());
-    //         y += 20;
-    //     }
-    // }
-    //
-    // std::snprintf(buf, sizeof(buf), "Seed: %u", worldSeed_);
-    // DrawText(buf, 10, y, 16, rf::Color::White());
-    // y += 20;
-    //
-    // std::snprintf(buf, sizeof(buf), "Player ID: %u", localPlayerId_);
-    // DrawText(buf, 10, y, 16, rf::Color::White());
-    // y += 20;
-    //
-    // // Network info
-    // std::snprintf(buf, sizeof(buf), "Ping: %u ms", engine_->ping_ms());
-    // DrawText(buf, 10, y, 16, rf::Color::Yellow());
-    // y += 20;
-    //
-    // std::snprintf(buf, sizeof(buf), "Server Tick: %u", serverTick_);
-    // DrawText(buf, 10, y, 16, rf::Color::White());
-    // y += 20;
-    //
-    // std::snprintf(buf, sizeof(buf), "Tick Rate: %u Hz", tickRate_);
-    // DrawText(buf, 10, y, 16, rf::Color::White());
+    auto& batch = rf::Batch2D::instance();
+    char buf[256];
+    float y = 10.0f;
+
+    std::snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
+    batch.drawText(buf, 10, y, 16, rf::Color::Green());
+    y += 20;
+
+    // Get position and camera from ECS
+    if (playerEntity_ != entt::null) {
+        if (registry_.all_of<ecs::Transform>(playerEntity_)) {
+            auto& pos = registry_.get<ecs::Transform>(playerEntity_).position;
+            std::snprintf(buf, sizeof(buf), "Pos: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
+            batch.drawText(buf, 10, y, 16, rf::Color::White());
+            y += 20;
+        }
+        if (registry_.all_of<ecs::FirstPersonCamera>(playerEntity_)) {
+            auto& cam = registry_.get<ecs::FirstPersonCamera>(playerEntity_);
+            std::snprintf(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f", cam.yaw, cam.pitch);
+            batch.drawText(buf, 10, y, 16, rf::Color::White());
+            y += 20;
+        }
+    }
+
+    std::snprintf(buf, sizeof(buf), "Seed: %u", worldSeed_);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
+    y += 20;
+
+    std::snprintf(buf, sizeof(buf), "Player ID: %u", localPlayerId_);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
+    y += 20;
+
+    // Network info
+    std::snprintf(buf, sizeof(buf), "Ping: %u ms", engine_->ping_ms());
+    batch.drawText(buf, 10, y, 16, rf::Color::Yellow());
+    y += 20;
+
+    std::snprintf(buf, sizeof(buf), "Server Tick: %u", serverTick_);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
+    y += 20;
+
+    std::snprintf(buf, sizeof(buf), "Tick Rate: %u Hz", tickRate_);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
 }
 
 // ============================================================================

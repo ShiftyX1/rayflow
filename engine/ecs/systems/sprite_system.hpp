@@ -23,6 +23,7 @@
 #include "../components/rendering.hpp"
 
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/batch_2d.hpp"
 #include <vector>
 #include <algorithm>
 
@@ -160,10 +161,9 @@ private:
             tint = flash->color;
         }
         
-        // TODO(migration): Phase 3 will draw via Batch2D
-        // DrawTexturePro(sprite.texture, source, dest, sprite.origin,
-        //               transform.rotation * (180.0f / 3.14159265f), tint);
-        (void)dest; (void)tint;
+        rf::Batch2D::instance().drawTexture(
+            sprite.texture, source, dest, sprite.origin,
+            transform.rotation * (180.0f / 3.14159265f), tint);
     }
     
     void render_animated_sprite(entt::registry& registry, entt::entity entity) {
@@ -199,10 +199,9 @@ private:
             tint = flash->color;
         }
         
-        // TODO(migration): Phase 3 will draw via Batch2D
-        // DrawTexturePro(anim.spritesheet, source, dest, anim.origin,
-        //               transform.rotation * (180.0f / 3.14159265f), tint);
-        (void)dest; (void)tint;
+        rf::Batch2D::instance().drawTexture(
+            anim.spritesheet, source, dest, anim.origin,
+            transform.rotation * (180.0f / 3.14159265f), tint);
     }
 };
 

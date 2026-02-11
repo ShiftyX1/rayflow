@@ -1,8 +1,11 @@
 #include "render_system.hpp"
 #include "engine/modules/voxel/client/world.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/batch_2d.hpp"
+#include "engine/renderer/gl_font.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cstdio>
 
 namespace ecs {
 
@@ -51,17 +54,26 @@ void RenderSystem::render_crosshair(int screen_width, int screen_height) {
     int size = 10;
     int thickness = 2;
     
-    // NOTE(migration): Phase 3 - replace with OpenGL 2D quad rendering
-    // DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, rf::Color::White());
-    // DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, rf::Color::White());
-    // DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1,
-    //                    size * 2 + 2, thickness + 2, rf::Color::Black());
-    // DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1,
-    //                    thickness + 2, size * 2 + 2, rf::Color::Black());
-    (void)center_x;
-    (void)center_y;
-    (void)size;
-    (void)thickness;
+    auto& batch = rf::Batch2D::instance();
+    // Horizontal bar
+    batch.drawRect(static_cast<float>(center_x - size),
+                   static_cast<float>(center_y - thickness / 2),
+                   static_cast<float>(size * 2),
+                   static_cast<float>(thickness), rf::Color::White());
+    // Vertical bar
+    batch.drawRect(static_cast<float>(center_x - thickness / 2),
+                   static_cast<float>(center_y - size),
+                   static_cast<float>(thickness),
+                   static_cast<float>(size * 2), rf::Color::White());
+    // Outlines
+    batch.drawRectLines(static_cast<float>(center_x - size - 1),
+                        static_cast<float>(center_y - thickness / 2 - 1),
+                        static_cast<float>(size * 2 + 2),
+                        static_cast<float>(thickness + 2), rf::Color::Black());
+    batch.drawRectLines(static_cast<float>(center_x - thickness / 2 - 1),
+                        static_cast<float>(center_y - size - 1),
+                        static_cast<float>(thickness + 2),
+                        static_cast<float>(size * 2 + 2), rf::Color::Black());
 }
 
 void RenderSystem::render_player_info(entt::registry& registry) {
@@ -72,23 +84,24 @@ void RenderSystem::render_player_info(entt::registry& registry) {
         auto& velocity = view.get<Velocity>(entity);
         auto& player = view.get<PlayerController>(entity);
         
-        // NOTE(migration): Phase 3 - replace with engine text rendering
-        // DrawText("Voxel Engine - ECS Architecture", 10, 10, 20, rf::Color::Black());
-        // DrawText(TextFormat("Position: (%.1f, %.1f, %.1f)",
-        //     transform.position.x, transform.position.y, transform.position.z),
-        //     10, 40, 16, rf::Color{80,80,80,255});
-        // DrawText(TextFormat("Velocity: (%.1f, %.1f, %.1f)",
-        //     velocity.linear.x, velocity.linear.y, velocity.linear.z),
-        //     10, 60, 16, rf::Color{80,80,80,255});
-        // DrawText(TextFormat("On Ground: %s | Sprint: %s | Creative: %s",
-        //     player.on_ground ? "YES" : "NO",
-        //     player.is_sprinting ? "YES" : "NO",
-        //     player.in_creative_mode ? "YES" : "NO"),
-        //     10, 80, 16, rf::Color{80,80,80,255});
-        // DrawFPS(10, 110);
-        (void)transform;
-        (void)velocity;
-        (void)player;
+        auto& batch = rf::Batch2D::instance();
+        
+        batch.drawText("Voxel Engine - ECS Architecture", 10, 10, 20, rf::Color::Black());
+        
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "Position: (%.1f, %.1f, %.1f)",
+            transform.position.x, transform.position.y, transform.position.z);
+        batch.drawText(buf, 10, 40, 16, rf::Color{80,80,80,255});
+        
+        std::snprintf(buf, sizeof(buf), "Velocity: (%.1f, %.1f, %.1f)",
+            velocity.linear.x, velocity.linear.y, velocity.linear.z);
+        batch.drawText(buf, 10, 60, 16, rf::Color{80,80,80,255});
+        
+        std::snprintf(buf, sizeof(buf), "On Ground: %s | Sprint: %s | Creative: %s",
+            player.on_ground ? "YES" : "NO",
+            player.is_sprinting ? "YES" : "NO",
+            player.in_creative_mode ? "YES" : "NO");
+        batch.drawText(buf, 10, 80, 16, rf::Color{80,80,80,255});
     }
 }
 

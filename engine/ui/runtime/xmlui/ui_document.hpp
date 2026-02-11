@@ -8,6 +8,7 @@
 
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gl_font.hpp"
 
 #include "css_lite.hpp"
 
@@ -76,12 +77,11 @@ private:
         rf::GLTexture tex{};
     };
 
-    // NOTE(migration): Font placeholder remains until Phase 3 (text rendering).
-    struct FontPlaceholder {};
+    // Font cache — stores loaded fonts by pixel size
+    rf::GLFont* load_font_cached(int size);
 
     /// Load a texture (or return cached). Returns the GL texture ID (0 if failed).
     GLuint load_texture_cached(const std::string& path);
-    FontPlaceholder load_font_cached(int size);
 
     Node parse_node_rec(tinyxml2::XMLElement* el);
     void apply_styles_rec(Node& n);
@@ -103,7 +103,7 @@ private:
 
     bool loaded_{false};
     std::unordered_map<std::string, TextureRef> texture_cache_{};
-    std::unordered_map<int, FontPlaceholder> font_cache_{};
+    std::unordered_map<int, std::unique_ptr<rf::GLFont>> font_cache_{};
 
     OnClickCallback on_click_{};
     
