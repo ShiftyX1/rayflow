@@ -138,7 +138,7 @@ target_include_directories(engine_client PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(engine_client PUBLIC engine_core raylib EnTT::EnTT)
+target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT)
 
 # Set PAK mode compile definition
 if(ENGINE_USE_PAK)
@@ -164,7 +164,7 @@ target_include_directories(engine_ui PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(engine_ui PUBLIC engine_client tinyxml2)
+target_link_libraries(engine_ui PUBLIC engine_client tinyxml2 imgui)
 
 # Debug UI (raygui) - available in all builds
 target_sources(engine_ui PRIVATE
@@ -214,7 +214,8 @@ add_library(engine_lib ALIAS engine_core)
 # =============================================================================
 # Tools
 # =============================================================================
-add_subdirectory(modules/voxel/tools/map_editor)
+# Map editor temporarily disabled during GLFW/OpenGL migration
+# add_subdirectory(modules/voxel/tools/map_editor)
 
 # Asset packer tool (no raylib dependency)
 if(RAYFLOW_BUILD_PACK_ASSETS)

@@ -2,8 +2,9 @@
 #include "block_registry.hpp"
 #include "engine/client/core/resources.hpp"
 #include "../shared/block_state.hpp"
+#include "engine/core/logging.hpp"
+#include "engine/core/math_types.hpp"
 #include <cmath>
-#include <rlgl.h>
 #include <cstdio>
 
 namespace voxel {
@@ -14,7 +15,8 @@ bool BlockInteraction::init() {
     for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
         char path[128];
         snprintf(path, sizeof(path), "textures/destroy_stages/destroy_stage_%d.png", i);
-        destroy_textures_[i] = resources::load_texture(path);
+        auto tex = resources::load_texture(path);
+        destroy_textures_[i].id = tex.id;
         if (destroy_textures_[i].id == 0) {
             TraceLog(LOG_ERROR, "Failed to load destroy texture: %s", path);
             return false;
@@ -28,9 +30,10 @@ bool BlockInteraction::init() {
 
 void BlockInteraction::destroy() {
     if (textures_loaded_) {
-        for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
-            UnloadTexture(destroy_textures_[i]);
-        }
+        // TODO(Phase 4): Unload GPU textures via OpenGL
+        // for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
+        //     UnloadTexture(destroy_textures_[i]);
+        // }
         textures_loaded_ = false;
     }
 }
@@ -70,7 +73,7 @@ void BlockInteraction::on_action_rejected() {
     was_placing_ = false;
 }
 
-void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vector3& camera_dir,
+void BlockInteraction::update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir,
                                const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time) {
     target_ = raycast(world, camera_pos, camera_dir, MAX_REACH_DISTANCE);
 
@@ -168,14 +171,14 @@ void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vec
     was_placing_ = is_placing;
 }
 
-BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& origin,
-                                              const Vector3& direction, float max_distance) const {
+BlockRaycastResult BlockInteraction::raycast(const World& world, const rf::Vec3& origin,
+                                              const rf::Vec3& direction, float max_distance) const {
     BlockRaycastResult result;
     
     float len = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
     if (len < 0.0001f) return result;
     
-    Vector3 dir = {direction.x / len, direction.y / len, direction.z / len};
+    rf::Vec3 dir = {direction.x / len, direction.y / len, direction.z / len};
     
     int x = static_cast<int>(std::floor(origin.x));
     int y = static_cast<int>(std::floor(origin.y));
@@ -208,7 +211,7 @@ BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& 
             result.distance = distance;
             result.block_type = static_cast<BlockType>(block);
             
-            Vector3 hitPos = {
+            rf::Vec3 hitPos = {
                 origin.x + dir.x * distance,
                 origin.y + dir.y * distance,
                 origin.z + dir.z * distance
@@ -258,106 +261,46 @@ float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::To
     return base_time / mining_speed;
 }
 
-void BlockInteraction::render_highlight(const Camera3D& camera) const {
-    if (!target_.hit) return;
-    
-    Vector3 pos = {
-        static_cast<float>(target_.block_x) + 0.5f,
-        static_cast<float>(target_.block_y) + 0.5f,
-        static_cast<float>(target_.block_z) + 0.5f
-    };
-    
-    DrawCubeWires(pos, 1.02f, 1.02f, 1.02f, BLACK);
-}
+// NOTE(migration): render_highlight commented out — declaration removed from header.
+// TODO(Phase 4): Reimplement with OpenGL wireframe cube drawing.
+// void BlockInteraction::render_highlight(const Camera3D& camera) const {
+//     if (!target_.hit) return;
+//     rf::Vec3 pos = {
+//         static_cast<float>(target_.block_x) + 0.5f,
+//         static_cast<float>(target_.block_y) + 0.5f,
+//         static_cast<float>(target_.block_z) + 0.5f
+//     };
+//     DrawCubeWires(pos, 1.02f, 1.02f, 1.02f, rf::Color::Black());
+// }
 
-void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
-    if (!target_.hit || break_progress_ <= 0.0f) return;
-    if (!textures_loaded_) return;
-
-    (void)camera;
-
-    int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
-    if (stage < 0) stage = 0;
-    if (stage > 9) stage = 9;
-
-    const Texture2D& tex = destroy_textures_[stage];
-    
-    Vector3 pos = {
-        static_cast<float>(target_.block_x) + 0.5f,
-        static_cast<float>(target_.block_y) + 0.5f,
-        static_cast<float>(target_.block_z) + 0.5f
-    };
-
-    constexpr float size = 1.002f;
-    
-    float x = pos.x;
-    float y = pos.y;
-    float z = pos.z;
-    float width = size;
-    float height = size;
-    float length = size;
-
-    float texWidth = static_cast<float>(tex.width);
-    float texHeight = static_cast<float>(tex.height);
-
-    rlSetTexture(tex.id);
-
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    
-    rlNormal3f(0.0f, 0.0f, 1.0f);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
-    
-    rlNormal3f(0.0f, 0.0f, -1.0f);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
-    
-    rlNormal3f(0.0f, 1.0f, 0.0f);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
-    
-    rlNormal3f(0.0f, -1.0f, 0.0f);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
-    
-    rlNormal3f(1.0f, 0.0f, 0.0f);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
-    
-    rlNormal3f(-1.0f, 0.0f, 0.0f);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
-    
-    rlEnd();
-    rlSetTexture(0);
-}
+// NOTE(migration): render_break_overlay commented out — declaration removed from header.
+// TODO(Phase 4): Reimplement with OpenGL textured overlay drawing.
+// void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
+//     if (!target_.hit || break_progress_ <= 0.0f) return;
+//     if (!textures_loaded_) return;
+//     (void)camera;
+//     int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
+//     if (stage < 0) stage = 0;
+//     if (stage > 9) stage = 9;
+//     const Tex2DPlaceholder& tex = destroy_textures_[stage];
+//     rf::Vec3 pos = { ... };
+//     // ... rlgl drawing code omitted ...
+// }
 
 void BlockInteraction::render_crosshair(int screen_width, int screen_height) {
-    int center_x = screen_width / 2;
-    int center_y = screen_height / 2;
-    int size = 10;
-    int thickness = 2;
-    
-    DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, WHITE);
-    DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, WHITE);
-    
-    DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1, 
-                       size * 2 + 2, thickness + 2, BLACK);
-    DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1, 
-                       thickness + 2, size * 2 + 2, BLACK);
+    (void)screen_width;
+    (void)screen_height;
+    // TODO(Phase 3): Reimplement crosshair with OpenGL 2D quad drawing.
+    // int center_x = screen_width / 2;
+    // int center_y = screen_height / 2;
+    // int size = 10;
+    // int thickness = 2;
+    // DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, rf::Color::White());
+    // DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, rf::Color::White());
+    // DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1,
+    //                    size * 2 + 2, thickness + 2, rf::Color::Black());
+    // DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1,
+    //                    thickness + 2, size * 2 + 2, rf::Color::Black());
 }
 
 } // namespace voxel

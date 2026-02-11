@@ -22,7 +22,7 @@
 #include "../components/common.hpp"
 #include "../components/rendering.hpp"
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <vector>
 #include <algorithm>
 
@@ -137,31 +137,33 @@ private:
         
         if (sprite.texture.id == 0) return;  // no texture
         
-        Rectangle source = sprite.source;
-        if (source.width == 0 || source.height == 0) {
+        rf::Rect source = sprite.source;
+        if (source.w == 0 || source.h == 0) {
             source = {0, 0, 
                 static_cast<float>(sprite.texture.width),
                 static_cast<float>(sprite.texture.height)};
         }
         
-        if (sprite.flip_x) source.width = -source.width;
-        if (sprite.flip_y) source.height = -source.height;
+        if (sprite.flip_x) source.w = -source.w;
+        if (sprite.flip_y) source.h = -source.h;
         
-        Rectangle dest = {
+        rf::Rect dest = {
             transform.x,
             transform.y,
-            std::abs(source.width) * sprite.scale,
-            std::abs(source.height) * sprite.scale
+            std::abs(source.w) * sprite.scale,
+            std::abs(source.h) * sprite.scale
         };
         
-        Color tint = sprite.tint;
+        rf::Color tint = sprite.tint;
         auto* flash = registry.try_get<FlashEffect>(entity);
         if (flash && flash->active) {
             tint = flash->color;
         }
         
-        DrawTexturePro(sprite.texture, source, dest, sprite.origin,
-                      transform.rotation * RAD2DEG, tint);
+        // TODO(migration): Phase 3 will draw via Batch2D
+        // DrawTexturePro(sprite.texture, source, dest, sprite.origin,
+        //               transform.rotation * (180.0f / 3.14159265f), tint);
+        (void)dest; (void)tint;
     }
     
     void render_animated_sprite(entt::registry& registry, entt::entity entity) {
@@ -174,31 +176,33 @@ private:
         int col = anim.frame % anim.frames_per_row;
         int row = anim.frame / anim.frames_per_row;
         
-        Rectangle source = {
+        rf::Rect source = {
             static_cast<float>(col * anim.frame_width),
             static_cast<float>(row * anim.frame_height),
             static_cast<float>(anim.frame_width),
             static_cast<float>(anim.frame_height)
         };
         
-        if (anim.flip_x) source.width = -source.width;
-        if (anim.flip_y) source.height = -source.height;
+        if (anim.flip_x) source.w = -source.w;
+        if (anim.flip_y) source.h = -source.h;
         
-        Rectangle dest = {
+        rf::Rect dest = {
             transform.x,
             transform.y,
-            std::abs(source.width) * anim.scale,
-            std::abs(source.height) * anim.scale
+            std::abs(source.w) * anim.scale,
+            std::abs(source.h) * anim.scale
         };
         
-        Color tint = anim.tint;
+        rf::Color tint = anim.tint;
         auto* flash = registry.try_get<FlashEffect>(entity);
         if (flash && flash->active) {
             tint = flash->color;
         }
         
-        DrawTexturePro(anim.spritesheet, source, dest, anim.origin,
-                      transform.rotation * RAD2DEG, tint);
+        // TODO(migration): Phase 3 will draw via Batch2D
+        // DrawTexturePro(anim.spritesheet, source, dest, anim.origin,
+        //               transform.rotation * (180.0f / 3.14159265f), tint);
+        (void)dest; (void)tint;
     }
 };
 
@@ -222,7 +226,7 @@ inline void play_animation(AnimatedSprite& sprite, AnimationSet& set, int animat
 }
 
 /// Trigger a flash effect
-inline void trigger_flash(FlashEffect& flash, Color color, float duration) {
+inline void trigger_flash(FlashEffect& flash, rf::Color color, float duration) {
     flash.color = color;
     flash.duration = duration;
     flash.timer = duration;

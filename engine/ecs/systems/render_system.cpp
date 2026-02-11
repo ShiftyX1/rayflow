@@ -1,6 +1,8 @@
 #include "render_system.hpp"
 #include "engine/modules/voxel/client/world.hpp"
-#include <raymath.h>
+#include "engine/core/math_types.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace ecs {
 
@@ -9,6 +11,9 @@ void RenderSystem::update(entt::registry& registry, float delta_time) {
     (void)delta_time;
 }
 
+// NOTE(migration): render() commented out — Camera3D not yet defined.
+// Phase 2 will reintroduce this with the new camera type.
+#if 0
 void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
     if (world_) {
         world_->render(camera);
@@ -19,8 +24,11 @@ void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
         auto& transform = mesh_view.get<Transform>(entity);
         auto& mesh_comp = mesh_view.get<MeshComponent>(entity);
         
-        DrawMesh(mesh_comp.mesh, mesh_comp.material, 
-                 MatrixTranslate(transform.position.x, transform.position.y, transform.position.z));
+        auto model_matrix = glm::translate(glm::mat4(1.0f), glm::vec3(transform.position.x, transform.position.y, transform.position.z));
+        // NOTE(migration): Phase 2 - replace with OpenGL mesh rendering
+        // DrawMesh(mesh_comp.mesh, mesh_comp.material, model_matrix);
+        (void)mesh_comp;
+        (void)model_matrix;
     }
     
     auto model_view = registry.view<Transform, ModelComponent>();
@@ -29,10 +37,13 @@ void RenderSystem::render(entt::registry& registry, const Camera3D& camera) {
         auto& model_comp = model_view.get<ModelComponent>(entity);
         
         if (model_comp.visible) {
-            DrawModel(model_comp.model, transform.position, 1.0f, WHITE);
+            // NOTE(migration): Phase 2 - replace with OpenGL model rendering
+            // DrawModel(model_comp.model, transform.position, 1.0f, rf::Color::White());
+            (void)transform;
         }
     }
 }
+#endif
 
 void RenderSystem::render_ui(entt::registry& registry, int screen_width, int screen_height) {
     (void)registry;
@@ -45,13 +56,17 @@ void RenderSystem::render_crosshair(int screen_width, int screen_height) {
     int size = 10;
     int thickness = 2;
     
-    DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, WHITE);
-    DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, WHITE);
-    
-    DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1, 
-                       size * 2 + 2, thickness + 2, BLACK);
-    DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1, 
-                       thickness + 2, size * 2 + 2, BLACK);
+    // NOTE(migration): Phase 3 - replace with OpenGL 2D quad rendering
+    // DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, rf::Color::White());
+    // DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, rf::Color::White());
+    // DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1,
+    //                    size * 2 + 2, thickness + 2, rf::Color::Black());
+    // DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1,
+    //                    thickness + 2, size * 2 + 2, rf::Color::Black());
+    (void)center_x;
+    (void)center_y;
+    (void)size;
+    (void)thickness;
 }
 
 void RenderSystem::render_player_info(entt::registry& registry) {
@@ -62,23 +77,23 @@ void RenderSystem::render_player_info(entt::registry& registry) {
         auto& velocity = view.get<Velocity>(entity);
         auto& player = view.get<PlayerController>(entity);
         
-        DrawText("Voxel Engine - ECS Architecture", 10, 10, 20, BLACK);
-        
-        DrawText(TextFormat("Position: (%.1f, %.1f, %.1f)", 
-            transform.position.x, transform.position.y, transform.position.z), 
-            10, 40, 16, DARKGRAY);
-        
-        DrawText(TextFormat("Velocity: (%.1f, %.1f, %.1f)", 
-            velocity.linear.x, velocity.linear.y, velocity.linear.z), 
-            10, 60, 16, DARKGRAY);
-        
-        DrawText(TextFormat("On Ground: %s | Sprint: %s | Creative: %s", 
-            player.on_ground ? "YES" : "NO",
-            player.is_sprinting ? "YES" : "NO",
-            player.in_creative_mode ? "YES" : "NO"), 
-            10, 80, 16, DARKGRAY);
-        
-        DrawFPS(10, 110);
+        // NOTE(migration): Phase 3 - replace with engine text rendering
+        // DrawText("Voxel Engine - ECS Architecture", 10, 10, 20, rf::Color::Black());
+        // DrawText(TextFormat("Position: (%.1f, %.1f, %.1f)",
+        //     transform.position.x, transform.position.y, transform.position.z),
+        //     10, 40, 16, rf::Color{80,80,80,255});
+        // DrawText(TextFormat("Velocity: (%.1f, %.1f, %.1f)",
+        //     velocity.linear.x, velocity.linear.y, velocity.linear.z),
+        //     10, 60, 16, rf::Color{80,80,80,255});
+        // DrawText(TextFormat("On Ground: %s | Sprint: %s | Creative: %s",
+        //     player.on_ground ? "YES" : "NO",
+        //     player.is_sprinting ? "YES" : "NO",
+        //     player.in_creative_mode ? "YES" : "NO"),
+        //     10, 80, 16, rf::Color{80,80,80,255});
+        // DrawFPS(10, 110);
+        (void)transform;
+        (void)velocity;
+        (void)player;
     }
 }
 

@@ -1,7 +1,7 @@
 #include "world.hpp"
 #include "engine/client/core/resources.hpp"
-#include <raylib.h>
-#include <raymath.h>
+#include "engine/core/logging.hpp"
+#include "engine/core/math_types.hpp"
 #include <cmath>
 #include <cstdio>
 #include <chrono>
@@ -550,7 +550,7 @@ void World::generate_chunk_terrain(Chunk& chunk) {
     }
 }
 
-void World::update(const Vector3& player_position) {
+void World::update(const rf::Vec3& player_position) {
     load_chunks_around_player(player_position);
     unload_distant_chunks(player_position);
     
@@ -591,7 +591,7 @@ void World::update(const Vector3& player_position) {
     last_player_position_ = player_position;
 }
 
-void World::load_chunks_around_player(const Vector3& player_position) {
+void World::load_chunks_around_player(const rf::Vec3& player_position) {
     int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
     int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
     
@@ -604,7 +604,7 @@ void World::load_chunks_around_player(const Vector3& player_position) {
     }
 }
 
-void World::unload_distant_chunks(const Vector3& player_position) {
+void World::unload_distant_chunks(const rf::Vec3& player_position) {
     int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
     int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
     
@@ -626,98 +626,20 @@ void World::unload_distant_chunks(const Vector3& player_position) {
     }
 }
 
-void World::render(const Camera3D& camera) const {
-    (void)camera; // May be used for frustum culling later
-    
-    if (voxel_shader_loaded_) {
-        // Merge static lights from map + dynamic scene lights
-        std::vector<PointLight> all_lights;
-        all_lights.reserve(static_lights_.size() + scene_lights_.size());
-        
-        // Add static lights first
-        all_lights.insert(all_lights.end(), static_lights_.begin(), static_lights_.end());
-        // Add dynamic lights (players, etc.)
-        all_lights.insert(all_lights.end(), scene_lights_.begin(), scene_lights_.end());
-        
-        // Limit to shader maximum
-        int count = static_cast<int>(all_lights.size());
-        if (count > 32) count = 32;
-        
-        // theta = (time - 12) / 24 * 2PI
-        float theta = (time_of_day_ - 12.0f) / 24.0f * 2.0f * PI;
-        
-        // TODO: Rotate (0,1,0) around Z axis by theta?
-        // x = sin(theta), y = cos(theta)
-        // Noon (0): x=0, y=1. Correct.
-        // TODO: 18:00 (6): theta=PI/2. x=1, y=0. (West?)
-        // TODO: 6:00 (-6): theta=-PI/2. x=-1, y=0. (East?)
-        
-        Vector3 sunDirVec = { -std::sin(theta), std::cos(theta), 0.2f }; // Slight Z tilt
-        sunDirVec = Vector3Normalize(sunDirVec);
-        
-        Vector3 sunColVec = {1.0f, 1.0f, 0.9f};
-        // Simple day/night color
-        if (time_of_day_ < 6.0f || time_of_day_ > 18.0f) {
-           // Night
-           sunColVec = {0.1f, 0.1f, 0.2f};
-        } else if (time_of_day_ < 7.0f || time_of_day_ > 17.0f) {
-           // Transition
-           sunColVec = {1.0f, 0.6f, 0.3f};
-        }
-
-        Vector3 ambColVec = {0.6f, 0.6f, 0.7f};
-        
-        sunColVec = Vector3Scale(sunColVec, sun_intensity_);
-        ambColVec = Vector3Scale(ambColVec, ambient_intensity_);
-
-        if (sun_dir_loc_ != -1) SetShaderValue(voxel_shader_, sun_dir_loc_, &sunDirVec, SHADER_UNIFORM_VEC3);
-        if (sun_col_loc_ != -1) SetShaderValue(voxel_shader_, sun_col_loc_, &sunColVec, SHADER_UNIFORM_VEC3);
-        if (amb_col_loc_ != -1) SetShaderValue(voxel_shader_, amb_col_loc_, &ambColVec, SHADER_UNIFORM_VEC3);
-        if (view_pos_loc_ != -1) SetShaderValue(voxel_shader_, view_pos_loc_, &camera.position, SHADER_UNIFORM_VEC3);
-
-        SetShaderValue(voxel_shader_, light_count_loc_, &count, SHADER_UNIFORM_INT);
-
-        for (int i = 0; i < count; i++) {
-             const auto& locs = light_locs_[i];
-             const auto& light = all_lights[i];
-             
-             if (locs.position != -1) SetShaderValue(voxel_shader_, locs.position, &light.position, SHADER_UNIFORM_VEC3);
-             if (locs.color != -1) SetShaderValue(voxel_shader_, locs.color, &light.color, SHADER_UNIFORM_VEC3);
-             if (locs.radius != -1) SetShaderValue(voxel_shader_, locs.radius, &light.radius, SHADER_UNIFORM_FLOAT);
-             if (locs.intensity != -1) SetShaderValue(voxel_shader_, locs.intensity, &light.intensity, SHADER_UNIFORM_FLOAT);
-        }
-    }
-
-    const Vector3& cam_pos = camera.position;
-    const float max_render_dist_sq = static_cast<float>(render_distance_ * CHUNK_WIDTH * render_distance_ * CHUNK_WIDTH);
-    
-    for (const auto& [key, chunk] : chunks_) {
-        if (chunk->is_empty()) continue;
-        
-        const Vector3 chunk_center = {
-            chunk->get_world_position().x + CHUNK_WIDTH * 0.5f,
-            CHUNK_HEIGHT * 0.5f,
-            chunk->get_world_position().z + CHUNK_DEPTH * 0.5f
-        };
-        
-        const float dx = chunk_center.x - cam_pos.x;
-        const float dz = chunk_center.z - cam_pos.z;
-        const float dist_sq = dx * dx + dz * dz;
-        
-        if (dist_sq > max_render_dist_sq) continue;
-        
-        // Render with voxel shader (AO) if available, otherwise use default
-        if (voxel_shader_loaded_) {
-            chunk->render(voxel_shader_);
-        } else {
-            chunk->render();
-        }
-    }
+// NOTE(migration): render() commented out — depends on Camera3D, SetShaderValue, raylib Shader.
+// Phase 2 will reimplement with rf::Camera and OpenGL uniform calls.
+#if 0
+void World::render(/* const Camera3D& camera */) const {
+    // ... raylib rendering code removed during Phase 0 migration ...
 }
+#endif
 
 void World::load_voxel_shader() {
     if (voxel_shader_loaded_) return;
 
+    // NOTE(migration): Shader loading commented out — raylib Shader API removed.
+    // Phase 2 will use OpenGL shader compilation directly.
+#if 0
     const char* vs_path = "shaders/voxel.vs";
     const char* fs_path = "shaders/voxel.fs";
 
@@ -725,14 +647,12 @@ void World::load_voxel_shader() {
     if (voxel_shader_.id != 0) {
         voxel_shader_loaded_ = true;
         
-        // Cache all shader locations once
         light_count_loc_ = GetShaderLocation(voxel_shader_, "lightCount");
         sun_dir_loc_ = GetShaderLocation(voxel_shader_, "sunDir");
         sun_col_loc_ = GetShaderLocation(voxel_shader_, "sunColor");
         amb_col_loc_ = GetShaderLocation(voxel_shader_, "ambientColor");
         view_pos_loc_ = GetShaderLocation(voxel_shader_, "viewPos");
         
-        // Cache light array locations (max 32)
         light_locs_.clear();
         light_locs_.reserve(32);
         for (int i = 0; i < 32; i++) {
@@ -750,11 +670,15 @@ void World::load_voxel_shader() {
         TraceLog(LOG_WARNING, "Voxel shader not found, using default shader");
         voxel_shader_loaded_ = false;
     }
+#endif
+    TraceLog(LOG_INFO, "Voxel shader loading skipped (Phase 0 migration)");
 }
 
 void World::unload_voxel_shader() {
     if (voxel_shader_loaded_) {
-        UnloadShader(voxel_shader_);
+        // NOTE(migration): UnloadShader() removed — raylib API.
+        // Phase 2 will use glDeleteProgram() directly.
+        // UnloadShader(voxel_shader_);
         voxel_shader_loaded_ = false;
         TraceLog(LOG_INFO, "Voxel shader unloaded");
     }
@@ -768,12 +692,12 @@ float World::sample_skylight01(int x, int y, int z) const {
     return 1.0f;
 }
 
-void World::set_static_lights(const std::vector<Vector3>& positions) {
+void World::set_static_lights(const std::vector<rf::Vec3>& positions) {
     static_lights_.clear();
     static_lights_.reserve(positions.size());
     
     // Default light properties for map lights
-    const Vector3 default_color = {1.0f, 0.95f, 0.85f};
+    const rf::Vec3 default_color = {1.0f, 0.95f, 0.85f};
     const float default_radius = 12.0f;
     const float default_intensity = 1.2f;
     
@@ -796,7 +720,7 @@ void World::extract_lights_from_map() {
         return;
     }
     
-    std::vector<Vector3> light_positions;
+    std::vector<rf::Vec3> light_positions;
     
     // Scan all chunks in the map template for Light blocks
     for (const auto& [chunk_coord, chunk_data] : map_template_->chunks) {
@@ -815,7 +739,7 @@ void World::extract_lights_from_map() {
                     const auto block_type = chunk_data.blocks[idx];
                     
                     if (block_type == BlockType::Light) {
-                        Vector3 pos = {
+                        rf::Vec3 pos = {
                             static_cast<float>(base_x + x) + 0.5f,
                             static_cast<float>(y) + 0.5f,
                             static_cast<float>(base_z + z) + 0.5f

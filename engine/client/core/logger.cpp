@@ -3,7 +3,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-#include <raylib.h>
+#include "engine/core/logging.hpp"
 
 namespace core {
 

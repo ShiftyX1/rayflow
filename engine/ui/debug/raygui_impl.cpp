@@ -1,3 +1,2 @@
-#define RAYGUI_IMPLEMENTATION
-
-#include "../raygui.h"
+// NOTE(migration): raygui disabled during Phase 0.
+// Phase 3 will replace debug UI with Dear ImGui.

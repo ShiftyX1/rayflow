@@ -13,12 +13,20 @@
 #include "engine/maps/rfmap_io.hpp"
 #include "engine/maps/runtime_paths.hpp"
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
 #include <filesystem>
-#include <raymath.h>
 
 #include <cstdio>
 #include <cmath>
+
+// NOTE(migration): Phase 1 will provide InputFacade wrapping GLFW callbacks.
+static bool IsKeyPressed(int /*key*/) { return false; }
+static bool IsCursorHidden() { return false; }
+static void EnableCursor() {}
+static void DisableCursor() {}
+static int GetFPS() { return 0; }
 
 namespace bedwars {
 
@@ -28,10 +36,10 @@ namespace bedwars {
 
 BedWarsClient::BedWarsClient() {
     // Initialize team colors
-    teams_[0] = {proto::Teams::Red, true, RED};
-    teams_[1] = {proto::Teams::Blue, true, BLUE};
-    teams_[2] = {proto::Teams::Green, true, GREEN};
-    teams_[3] = {proto::Teams::Yellow, true, YELLOW};
+    teams_[0] = {proto::Teams::Red, true, rf::Color::Red()};
+    teams_[1] = {proto::Teams::Blue, true, rf::Color::Blue()};
+    teams_[2] = {proto::Teams::Green, true, rf::Color::Green()};
+    teams_[3] = {proto::Teams::Yellow, true, rf::Color::Yellow()};
 }
 
 BedWarsClient::~BedWarsClient() = default;
@@ -47,7 +55,7 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
     playerSystem_->set_client_replica_mode(true);  // Server-authoritative
     
     // Create player entity with all required components
-    Vector3 spawnPos = {0.0f, 80.0f, 0.0f};
+    rf::Vec3 spawnPos = {0.0f, 80.0f, 0.0f};
     playerEntity_ = ecs::PlayerSystem::create_player(registry_, spawnPos);
     
     // Start in main menu with cursor enabled
@@ -151,8 +159,10 @@ void BedWarsClient::on_update(float dt) {
                 // Update block interaction
                 auto& blockInteraction = engine_->block_interaction();
                 if (!uiCapturesInput_) {
-                    Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
-                    Vector3 camDir = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+                    ecs::Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+                    rf::Vec3 camDiff = camera.target - camera.position;
+                    float camLen = std::sqrt(camDiff.x*camDiff.x + camDiff.y*camDiff.y + camDiff.z*camDiff.z);
+                    rf::Vec3 camDir = (camLen > 0.0001f) ? camDiff / camLen : rf::Vec3{0,0,1};
                     
                     auto& input = registry_.get<ecs::InputState>(playerEntity_);
                     auto& tool = registry_.get<ecs::ToolHolder>(playerEntity_);
@@ -195,30 +205,31 @@ void BedWarsClient::clear_player_input() {
 // ============================================================================
 
 void BedWarsClient::on_render() {
+    // TODO(Phase 2): Restore rendering with GLFW+OpenGL backend.
+    // All raylib draw calls are commented out until the renderer migration.
+
     // Render based on game screen
     if (gameScreen_ == ui::GameScreen::MainMenu || 
         gameScreen_ == ui::GameScreen::ConnectMenu ||
         gameScreen_ == ui::GameScreen::Paused) {
-        // Clear and render UI only
-        ClearBackground(DARKGRAY);
+        // ClearBackground(DARKGRAY);  // TODO(Phase 2)
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
     if (gameScreen_ == ui::GameScreen::Connecting) {
-        // Show connecting screen
-        ClearBackground(BLACK);
-        DrawText("Connecting to server...", 100, 100, 30, WHITE);
-        
-        if (sessionState_ == SessionState::WaitingServerHello) {
-            DrawText("Waiting for ServerHello...", 100, 140, 20, GRAY);
-        } else if (sessionState_ == SessionState::WaitingJoinAck) {
-            DrawText("Joining match...", 100, 140, 20, GRAY);
-        }
-        
-        if (!connectionError_.empty()) {
-            DrawText(connectionError_.c_str(), 100, 200, 20, RED);
-        }
+        // ClearBackground(BLACK);  // TODO(Phase 2)
+        // DrawText("Connecting to server...", 100, 100, 30, rf::Color::White());  // TODO(Phase 2)
+        //
+        // if (sessionState_ == SessionState::WaitingServerHello) {
+        //     DrawText("Waiting for ServerHello...", 100, 140, 20, rf::Color{130,130,130,255});
+        // } else if (sessionState_ == SessionState::WaitingJoinAck) {
+        //     DrawText("Joining match...", 100, 140, 20, rf::Color{130,130,130,255});
+        // }
+        //
+        // if (!connectionError_.empty()) {
+        //     DrawText(connectionError_.c_str(), 100, 200, 20, rf::Color::Red());
+        // }
         
         engine_->ui_manager().render(uiViewModel_);
         return;
@@ -226,33 +237,33 @@ void BedWarsClient::on_render() {
     
     // Playing - render 3D world
     if (playerEntity_ == entt::null) {
-        ClearBackground(BLACK);
+        // ClearBackground(BLACK);  // TODO(Phase 2)
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
-    // Get camera from ECS (same as rayflow)
-    Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
-    
-    BeginMode3D(camera);
-    
-    // Draw skybox first (before world)
-    renderer::Skybox::instance().draw(camera);
-    
-    render_world(camera);
-    render_players();
-    render_items();
-    
-    // Block interaction highlight
-    try {
-        auto& blockInteraction = engine_->block_interaction();
-        blockInteraction.render_highlight(camera);
-        blockInteraction.render_break_overlay(camera);
-    } catch (const std::runtime_error&) {
-        // Not initialized yet
-    }
-    
-    EndMode3D();
+    // // Get camera from ECS (same as rayflow)
+    // Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    //
+    // BeginMode3D(camera);
+    //
+    // // Draw skybox first (before world)
+    // renderer::Skybox::instance().draw(camera);
+    //
+    // render_world(camera);
+    // render_players();
+    // render_items();
+    //
+    // // Block interaction highlight
+    // try {
+    //     auto& blockInteraction = engine_->block_interaction();
+    //     blockInteraction.render_highlight(camera);
+    //     blockInteraction.render_break_overlay(camera);
+    // } catch (const std::runtime_error&) {
+    //     // Not initialized yet
+    // }
+    //
+    // EndMode3D();
     
     // 2D overlay
     // render_hud();
@@ -264,128 +275,134 @@ void BedWarsClient::on_render() {
     }
 #endif
     
-    // Crosshair (show when playing and UI not capturing input)
-    if (!uiCapturesInput_) {
-        voxel::BlockInteraction::render_crosshair(GetScreenWidth(), GetScreenHeight());
-    }
+    // // Crosshair (show when playing and UI not capturing input)
+    // if (!uiCapturesInput_) {
+    //     voxel::BlockInteraction::render_crosshair(GetScreenWidth(), GetScreenHeight());
+    // }
     
     // Render UI (HUD, debug overlays handled by engine's UI manager)
     engine_->ui_manager().render(uiViewModel_);
 }
 
-void BedWarsClient::render_world(const Camera3D& camera) {
-    try {
-        engine_->world().render(camera);
-    } catch (const std::runtime_error&) {
-        // World not initialized
-    }
+#if 0 // TODO(migration): Phase 2 — restore render_world
+void BedWarsClient::render_world(const ecs::Camera3D& camera) {
+    (void)camera;
 }
+#endif
 
 void BedWarsClient::render_players() {
+    // TODO(Phase 2): Restore player rendering with GLFW+OpenGL backend
     // Render other players as simple colored cubes
     for (const auto& [id, player] : players_) {
         if (id == localPlayerId_) continue;  // Don't render self
         
-        Color color = get_team_color(player.team);
+        rf::Color color = get_team_color(player.team);
         if (!player.alive) {
             color.a = 100;  // Semi-transparent when dead
         }
         
-        Vector3 pos = {player.px, player.py + 0.9f, player.pz};  // Center of player
-        DrawCube(pos, 0.6f, 1.8f, 0.6f, color);
-        DrawCubeWires(pos, 0.6f, 1.8f, 0.6f, BLACK);
+        rf::Vec3 pos = {player.px, player.py + 0.9f, player.pz};  // Center of player
+        // DrawCube(pos, 0.6f, 1.8f, 0.6f, color);      // TODO(Phase 2)
+        // DrawCubeWires(pos, 0.6f, 1.8f, 0.6f, BLACK);  // TODO(Phase 2)
+        (void)pos;
+        (void)color;
     }
 }
 
 void BedWarsClient::render_items() {
+    // TODO(Phase 2): Restore item rendering with GLFW+OpenGL backend
     // Render dropped items as small floating cubes
     for (const auto& [id, item] : items_) {
-        Color color = GOLD;  // Different colors for different item types could be added
+        rf::Color color = rf::Color{255, 203, 0, 255};  // GOLD
         
-        Vector3 pos = {item.x, item.y + 0.2f, item.z};
-        DrawCube(pos, 0.3f, 0.3f, 0.3f, color);
+        rf::Vec3 pos = {item.x, item.y + 0.2f, item.z};
+        // DrawCube(pos, 0.3f, 0.3f, 0.3f, color);  // TODO(Phase 2)
+        (void)pos;
+        (void)color;
     }
 }
 
 void BedWarsClient::render_hud() {
-    int sw = GetScreenWidth();
-    int sh = GetScreenHeight();
-    
-    // Health bar
-    int barWidth = 200;
-    int barHeight = 20;
-    int barX = 20;
-    int barY = sh - 40;
-    
-    float healthPercent = static_cast<float>(localPlayer_.hp) / static_cast<float>(localPlayer_.maxHp);
-    
-    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
-    DrawRectangle(barX, barY, static_cast<int>(barWidth * healthPercent), barHeight, RED);
-    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
-    
-    // Health text
-    char healthText[32];
-    std::snprintf(healthText, sizeof(healthText), "%d / %d HP", localPlayer_.hp, localPlayer_.maxHp);
-    DrawText(healthText, barX + barWidth + 10, barY + 2, 16, WHITE);
-    
-    // Team indicator
-    Color teamColor = get_team_color(localPlayer_.team);
-    DrawRectangle(sw - 120, 20, 100, 30, teamColor);
-    
-    const char* teamName = "None";
-    switch (localPlayer_.team) {
-        case proto::Teams::Red: teamName = "RED"; break;
-        case proto::Teams::Blue: teamName = "BLUE"; break;
-        case proto::Teams::Green: teamName = "GREEN"; break;
-        case proto::Teams::Yellow: teamName = "YELLOW"; break;
-        default: break;
-    }
-    DrawText(teamName, sw - 110, 25, 20, WHITE);
+    // TODO(Phase 2): Restore HUD rendering with GLFW+OpenGL backend
+    // int sw = GetScreenWidth();
+    // int sh = GetScreenHeight();
+    //
+    // // Health bar
+    // int barWidth = 200;
+    // int barHeight = 20;
+    // int barX = 20;
+    // int barY = sh - 40;
+    //
+    // float healthPercent = static_cast<float>(localPlayer_.hp) / static_cast<float>(localPlayer_.maxHp);
+    //
+    // DrawRectangle(barX, barY, barWidth, barHeight, rf::Color{80, 80, 80, 255});
+    // DrawRectangle(barX, barY, static_cast<int>(barWidth * healthPercent), barHeight, rf::Color::Red());
+    // DrawRectangleLines(barX, barY, barWidth, barHeight, rf::Color::White());
+    //
+    // // Health text
+    // char healthText[32];
+    // std::snprintf(healthText, sizeof(healthText), "%d / %d HP", localPlayer_.hp, localPlayer_.maxHp);
+    // DrawText(healthText, barX + barWidth + 10, barY + 2, 16, rf::Color::White());
+    //
+    // // Team indicator
+    // rf::Color teamColor = get_team_color(localPlayer_.team);
+    // DrawRectangle(sw - 120, 20, 100, 30, teamColor);
+    //
+    // const char* teamName = "None";
+    // switch (localPlayer_.team) {
+    //     case proto::Teams::Red: teamName = "RED"; break;
+    //     case proto::Teams::Blue: teamName = "BLUE"; break;
+    //     case proto::Teams::Green: teamName = "GREEN"; break;
+    //     case proto::Teams::Yellow: teamName = "YELLOW"; break;
+    //     default: break;
+    // }
+    // DrawText(teamName, sw - 110, 25, 20, rf::Color::White());
 }
 
 void BedWarsClient::render_debug_info() {
-    char buf[256];
-    int y = 10;
-    
-    std::snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
-    DrawText(buf, 10, y, 16, GREEN);
-    y += 20;
-    
-    // Get position and camera from ECS
-    if (playerEntity_ != entt::null) {
-        if (registry_.all_of<ecs::Transform>(playerEntity_)) {
-            auto& pos = registry_.get<ecs::Transform>(playerEntity_).position;
-            std::snprintf(buf, sizeof(buf), "Pos: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
-            DrawText(buf, 10, y, 16, WHITE);
-            y += 20;
-        }
-        if (registry_.all_of<ecs::FirstPersonCamera>(playerEntity_)) {
-            auto& cam = registry_.get<ecs::FirstPersonCamera>(playerEntity_);
-            std::snprintf(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f", cam.yaw, cam.pitch);
-            DrawText(buf, 10, y, 16, WHITE);
-            y += 20;
-        }
-    }
-    
-    std::snprintf(buf, sizeof(buf), "Seed: %u", worldSeed_);
-    DrawText(buf, 10, y, 16, WHITE);
-    y += 20;
-    
-    std::snprintf(buf, sizeof(buf), "Player ID: %u", localPlayerId_);
-    DrawText(buf, 10, y, 16, WHITE);
-    y += 20;
-    
-    // Network info
-    std::snprintf(buf, sizeof(buf), "Ping: %u ms", engine_->ping_ms());
-    DrawText(buf, 10, y, 16, YELLOW);
-    y += 20;
-    
-    std::snprintf(buf, sizeof(buf), "Server Tick: %u", serverTick_);
-    DrawText(buf, 10, y, 16, WHITE);
-    y += 20;
-    
-    std::snprintf(buf, sizeof(buf), "Tick Rate: %u Hz", tickRate_);
-    DrawText(buf, 10, y, 16, WHITE);
+    // TODO(Phase 2): Restore debug info rendering with GLFW+OpenGL backend
+    // char buf[256];
+    // int y = 10;
+    //
+    // std::snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
+    // DrawText(buf, 10, y, 16, rf::Color::Green());
+    // y += 20;
+    //
+    // // Get position and camera from ECS
+    // if (playerEntity_ != entt::null) {
+    //     if (registry_.all_of<ecs::Transform>(playerEntity_)) {
+    //         auto& pos = registry_.get<ecs::Transform>(playerEntity_).position;
+    //         std::snprintf(buf, sizeof(buf), "Pos: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
+    //         DrawText(buf, 10, y, 16, rf::Color::White());
+    //         y += 20;
+    //     }
+    //     if (registry_.all_of<ecs::FirstPersonCamera>(playerEntity_)) {
+    //         auto& cam = registry_.get<ecs::FirstPersonCamera>(playerEntity_);
+    //         std::snprintf(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f", cam.yaw, cam.pitch);
+    //         DrawText(buf, 10, y, 16, rf::Color::White());
+    //         y += 20;
+    //     }
+    // }
+    //
+    // std::snprintf(buf, sizeof(buf), "Seed: %u", worldSeed_);
+    // DrawText(buf, 10, y, 16, rf::Color::White());
+    // y += 20;
+    //
+    // std::snprintf(buf, sizeof(buf), "Player ID: %u", localPlayerId_);
+    // DrawText(buf, 10, y, 16, rf::Color::White());
+    // y += 20;
+    //
+    // // Network info
+    // std::snprintf(buf, sizeof(buf), "Ping: %u ms", engine_->ping_ms());
+    // DrawText(buf, 10, y, 16, rf::Color::Yellow());
+    // y += 20;
+    //
+    // std::snprintf(buf, sizeof(buf), "Server Tick: %u", serverTick_);
+    // DrawText(buf, 10, y, 16, rf::Color::White());
+    // y += 20;
+    //
+    // std::snprintf(buf, sizeof(buf), "Tick Rate: %u Hz", tickRate_);
+    // DrawText(buf, 10, y, 16, rf::Color::White());
 }
 
 // ============================================================================
@@ -877,13 +894,13 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
 // Helpers
 // ============================================================================
 
-Color BedWarsClient::get_team_color(proto::TeamId team) const {
+rf::Color BedWarsClient::get_team_color(proto::TeamId team) const {
     switch (team) {
-        case proto::Teams::Red: return RED;
-        case proto::Teams::Blue: return BLUE;
-        case proto::Teams::Green: return GREEN;
-        case proto::Teams::Yellow: return YELLOW;
-        default: return WHITE;
+        case proto::Teams::Red: return rf::Color::Red();
+        case proto::Teams::Blue: return rf::Color::Blue();
+        case proto::Teams::Green: return rf::Color::Green();
+        case proto::Teams::Yellow: return rf::Color::Yellow();
+        default: return rf::Color::White();
     }
 }
 

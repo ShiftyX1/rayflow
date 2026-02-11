@@ -1,15 +1,18 @@
 #pragma once
 
 // =============================================================================
-// Rendering ECS Components - Visual components (requires raylib)
+// Rendering ECS Components - Visual components
 // =============================================================================
 //
-// These components require raylib and are part of engine_client.
+// These components are part of engine_client.
 // For headless/server code, use components/common.hpp instead.
 //
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <cstdint>
+
+// NOTE(migration): Placeholder texture type until Phase 2 GL renderer
+struct RaylibTexture2D { unsigned int id{0}; int width{0}; int height{0}; };
 
 namespace ecs {
 
@@ -19,10 +22,10 @@ namespace ecs {
 
 /// Static sprite component
 struct Sprite {
-    Texture2D texture{};
-    Rectangle source{0, 0, 0, 0};  // source rect in texture (0,0,0,0 = full texture)
-    Vector2 origin{0, 0};          // pivot point (0,0 = top-left)
-    Color tint{WHITE};
+    RaylibTexture2D texture{};
+    rf::Rect source{0, 0, 0, 0};   // source rect in texture (0,0,0,0 = full texture)
+    rf::Vec2 origin{0, 0};         // pivot point (0,0 = top-left)
+    rf::Color tint{rf::Color::White()};
     float scale{1.0f};
     int z_order{0};                // draw order (higher = on top)
     bool flip_x{false};
@@ -31,7 +34,7 @@ struct Sprite {
 
 /// Animated sprite component
 struct AnimatedSprite {
-    Texture2D spritesheet{};
+    RaylibTexture2D spritesheet{};
     int frame_width{0};            // width of single frame
     int frame_height{0};           // height of single frame
     int frame{0};                  // current frame
@@ -41,8 +44,8 @@ struct AnimatedSprite {
     float timer{0.0f};             // current timer
     bool loop{true};
     bool playing{true};
-    Vector2 origin{0, 0};
-    Color tint{WHITE};
+    rf::Vec2 origin{0, 0};
+    rf::Color tint{rf::Color::White()};
     float scale{1.0f};
     int z_order{0};
     bool flip_x{false};
@@ -71,7 +74,7 @@ struct AnimationSet {
 
 /// 2D camera controller component
 struct Camera2DController {
-    Vector2 offset{0, 0};          // camera offset from target
+    rf::Vec2 offset{0, 0};         // camera offset from target
     float zoom{1.0f};
     float rotation{0.0f};          // degrees
     float smoothing{5.0f};         // interpolation speed (0 = instant)
@@ -96,7 +99,7 @@ struct CameraBounds {
 struct CameraTarget {
     std::uint32_t entity_id{0};    // entity to follow
     bool has_target{false};
-    Vector2 look_ahead{0, 0};      // offset in direction of movement
+    rf::Vec2 look_ahead{0, 0};      // offset in direction of movement
     float look_ahead_factor{0.0f}; // how much to look ahead (0-1)
 };
 
@@ -113,8 +116,8 @@ struct Particle {
     float size{4.0f};
     float rotation{0.0f};
     float angular_velocity{0.0f};
-    Color color{WHITE};
-    Color end_color{WHITE};
+    rf::Color color{rf::Color::White()};
+    rf::Color end_color{rf::Color::White()};
     bool active{false};
 };
 
@@ -143,10 +146,8 @@ struct ParticleEmitter {
     float size_max{8.0f};
     float size_end{0.0f};          // size at end of life
     float gravity{0.0f};           // downward acceleration
-    Color color_start{WHITE};
-    Color color_end{WHITE};
-    
-    // Offset from entity position
+    rf::Color color_start{rf::Color::White()};
+    rf::Color color_end{rf::Color::White()};
     float offset_x{0.0f};
     float offset_y{0.0f};
 };
@@ -157,7 +158,7 @@ struct ParticleEmitter {
 
 /// Flash effect (e.g., damage flash)
 struct FlashEffect {
-    Color color{WHITE};
+    rf::Color color{rf::Color::White()};
     float duration{0.1f};
     float timer{0.0f};
     bool active{false};
@@ -167,15 +168,15 @@ struct FlashEffect {
 struct TrailEffect {
     static constexpr int kMaxPoints = 32;
     
-    Vector2 points[kMaxPoints]{};
+    rf::Vec2 points[kMaxPoints]{};
     int point_count{0};
     int head{0};
     float point_interval{0.02f};   // seconds between points
     float timer{0.0f};
     float width_start{8.0f};
     float width_end{1.0f};
-    Color color_start{WHITE};
-    Color color_end{WHITE};
+    rf::Color color_start{rf::Color::White()};
+    rf::Color color_end{rf::Color::White()};
     bool enabled{true};
 };
 
@@ -188,9 +189,9 @@ struct HealthBar {
     float width{32.0f};
     float height{4.0f};
     float offset_y{-20.0f};        // offset above entity
-    Color background{DARKGRAY};
-    Color foreground{RED};
-    Color border{BLACK};
+    rf::Color background{rf::Color::DarkGray()};
+    rf::Color foreground{rf::Color::Red()};
+    rf::Color border{rf::Color::Black()};
     bool visible{true};
     bool show_when_full{false};    // hide when health is full
 };
@@ -200,7 +201,7 @@ struct WorldLabel {
     const char* text{nullptr};
     float offset_y{-30.0f};
     int font_size{10};
-    Color color{WHITE};
+    rf::Color color{rf::Color::White()};
     bool visible{true};
 };
 

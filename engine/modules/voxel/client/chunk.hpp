@@ -2,7 +2,7 @@
 
 #include "block.hpp"
 #include "../shared/block_state.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <array>
 #include <memory>
 #include <vector>
@@ -39,11 +39,12 @@ public:
 
     void generate_mesh(const World& world);
     void render() const;
-    void render(Shader shader) const;
+    // NOTE(migration): Shader is a raylib type. Phase 2 will replace.
+    // void render(Shader shader) const;
     
     int get_chunk_x() const { return chunk_x_; }
     int get_chunk_z() const { return chunk_z_; }
-    Vector3 get_world_position() const { return world_position_; }
+    rf::Vec3 get_world_position() const { return world_position_; }
     bool needs_mesh_update() const { return needs_mesh_update_; }
     bool is_generated() const { return is_generated_; }
     bool is_empty() const { return is_empty_; }
@@ -67,7 +68,7 @@ private:
     std::array<std::uint8_t, CHUNK_SIZE> light_map_{};
     std::unordered_map<int, shared::voxel::BlockRuntimeState> block_states_{};
     
-    Vector3 world_position_{0, 0, 0};
+    rf::Vec3 world_position_{0, 0, 0};
     int chunk_x_{0};
     int chunk_z_{0};
     
@@ -76,10 +77,13 @@ private:
     bool has_mesh_{false};
     bool is_empty_{false};
     
-    Mesh mesh_{};
-    Model model_{};
+    // NOTE(migration): Mesh/Model are raylib types. Phase 2 will replace with GLMesh.
+    struct MeshPlaceholder {};
+    struct ModelPlaceholder {};
+    MeshPlaceholder mesh_{};
+    ModelPlaceholder model_{};
 
-    std::vector<Vector3> light_markers_ws_{};
+    std::vector<rf::Vec3> light_markers_ws_{};
 };
 
 } // namespace voxel

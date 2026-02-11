@@ -1,9 +1,15 @@
 #include "input_system.hpp"
 #include "engine/client/core/config.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <cmath>
 
 namespace ecs {
+
+// NOTE(migration): Phase 1 will provide InputFacade wrapping GLFW callbacks.
+// For now, input returns zero/false so the code compiles but is inert.
+static bool IsKeyDown(int /*key*/) { return false; }
+static bool IsMouseButtonDown(int /*btn*/) { return false; }
+static rf::Vec2 GetMouseDelta() { return {0.0f, 0.0f}; }
 
 void InputSystem::update(entt::registry& registry, float delta_time) {
     update_player_input(registry);
@@ -31,7 +37,7 @@ void InputSystem::update_player_input(entt::registry& registry) {
             input.move_input.y /= length;
         }
         
-        Vector2 mouse_delta = GetMouseDelta();
+        rf::Vec2 mouse_delta = GetMouseDelta();
         input.look_input = {mouse_delta.x, mouse_delta.y};
         
         input.jump_pressed = IsKeyDown(controls.jump);

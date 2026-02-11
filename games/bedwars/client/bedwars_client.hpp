@@ -12,7 +12,7 @@
 #include "../shared/protocol/messages.hpp"
 
 #include <entt/entt.hpp>
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -74,7 +74,7 @@ struct ClientPlayerState {
 struct ClientTeamState {
     proto::TeamId id{proto::Teams::None};
     bool hasBed{true};
-    Color color{WHITE};
+    rf::Color color{rf::Color::White()};
 };
 
 /// Dropped item on client
@@ -160,7 +160,8 @@ private:
     void clear_player_input();
     
     // --- Rendering ---
-    void render_world(const Camera3D& camera);
+    // NOTE(migration): Camera3D placeholder. Phase 2 will define rf::Camera.
+    // void render_world(const Camera3D& camera);
     void render_players();
     void render_items();
     void render_hud();
@@ -171,7 +172,7 @@ private:
     void update_ui_view_model();
 
     // --- Helpers ---
-    Color get_team_color(proto::TeamId team) const;
+    rf::Color get_team_color(proto::TeamId team) const;
     void update_lights();
 
 private:

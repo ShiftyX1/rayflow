@@ -2,11 +2,17 @@
 #include "engine/modules/voxel/client/world.hpp"
 #include "engine/client/core/config.hpp"
 #include "engine/core/player_constants.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
 #include <cmath>
 #include <cstdio>
 
 namespace ecs {
+
+// NOTE(migration): Phase 1 will provide InputFacade wrapping GLFW callbacks.
+static bool IsKeyDown(int /*key*/) { return false; }
+static bool IsKeyPressed(int /*key*/) { return false; }
 
 constexpr float DEG_TO_RAD = 0.017453292519943295f;
 
@@ -22,7 +28,7 @@ void PlayerSystem::update(entt::registry& registry, float delta_time) {
     handle_jumping(registry);
 }
 
-entt::entity PlayerSystem::create_player(entt::registry& registry, const Vector3& spawn_position) {
+entt::entity PlayerSystem::create_player(entt::registry& registry, const rf::Vec3& spawn_position) {
     auto entity = registry.create();
     
     registry.emplace<PlayerTag>(entity);
@@ -69,7 +75,7 @@ Camera3D PlayerSystem::get_camera(entt::registry& registry, entt::entity player)
     float yaw_rad = fps_camera.yaw * DEG_TO_RAD;
     float pitch_rad = fps_camera.pitch * DEG_TO_RAD;
     
-    Vector3 direction;
+    rf::Vec3 direction;
     direction.x = std::cos(pitch_rad) * std::sin(yaw_rad);
     direction.y = std::sin(pitch_rad);
     direction.z = std::cos(pitch_rad) * std::cos(yaw_rad);
@@ -82,7 +88,7 @@ Camera3D PlayerSystem::get_camera(entt::registry& registry, entt::entity player)
     
     camera.up = {0.0f, 1.0f, 0.0f};
     camera.fovy = fps_camera.fov;
-    camera.projection = CAMERA_PERSPECTIVE;
+    camera.projection = 0; // was CAMERA_PERSPECTIVE
     
     return camera;
 }
@@ -103,8 +109,8 @@ void PlayerSystem::handle_movement(entt::registry& registry, float delta_time) {
         
         float yaw_rad = camera.yaw * DEG_TO_RAD;
         
-        Vector3 forward = {std::sin(yaw_rad), 0.0f, std::cos(yaw_rad)};
-        Vector3 right = {std::cos(yaw_rad), 0.0f, -std::sin(yaw_rad)};
+        rf::Vec3 forward = {std::sin(yaw_rad), 0.0f, std::cos(yaw_rad)};
+        rf::Vec3 right = {std::cos(yaw_rad), 0.0f, -std::sin(yaw_rad)};
         
         float move_x = input.move_input.x * speed;
         float move_z = input.move_input.y * speed;

@@ -1,12 +1,17 @@
 #pragma once
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 
 namespace renderer {
 
+// NOTE(migration): MeshData still wraps raylib types.
+// Phase 2 will replace with GLMesh.
+struct RaylibMeshPlaceholder {};
+struct RaylibMaterialPlaceholder {};
+
 struct MeshData {
-    Mesh mesh{};
-    Material material{};
+    RaylibMeshPlaceholder mesh{};
+    RaylibMaterialPlaceholder material{};
     bool valid{false};
 };
 

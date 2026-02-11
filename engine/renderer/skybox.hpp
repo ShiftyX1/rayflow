@@ -1,6 +1,6 @@
 #pragma once
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 
 #include "engine/maps/rfmap_io.hpp"
 
@@ -19,7 +19,9 @@ public:
     void set_kind(shared::maps::MapTemplate::SkyboxKind kind);
     shared::maps::MapTemplate::SkyboxKind kind() const { return kind_; }
 
-    void draw(const Camera3D& camera);
+    // NOTE(migration): draw() needs a camera. Phase 2 will define rf::Camera.
+    // void draw(const Camera3D& camera);
+    void draw_stub() {} // placeholder until Phase 2
 
     bool ready() const { return ready_; }
 
@@ -38,12 +40,18 @@ private:
     std::string pano_path_;
     std::string cube_path_;
 
-    Shader shader_{};
+    // NOTE(migration): Shader/Model/Texture2D are raylib types.
+    // Phase 2 will replace with GLShader/GLMesh/GLTexture.
+    struct ShaderPlaceholder {};
+    struct ModelPlaceholder {};
+    struct Texture2DPlaceholder {};
 
-    Model model_{};
+    ShaderPlaceholder shader_{};
+
+    ModelPlaceholder model_{};
     bool has_model_{false};
 
-    Texture2D cubemap_{};
+    Texture2DPlaceholder cubemap_{};
 };
 
 } // namespace renderer

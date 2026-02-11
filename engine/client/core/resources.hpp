@@ -1,9 +1,16 @@
 #pragma once
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <string>
 
 namespace resources {
+
+// NOTE(migration): Return types are placeholders.
+// Phase 2/3 will replace with GLTexture, GLShader, GLFont.
+struct TexturePlaceholder { unsigned int id{0}; };
+struct ImagePlaceholder {};
+struct ShaderPlaceholder {};
+struct FontPlaceholder {};
 
 void init();
 
@@ -11,13 +18,13 @@ void shutdown();
 
 bool is_pak_mode();
 
-Texture2D load_texture(const std::string& path);
+TexturePlaceholder load_texture(const std::string& path);
 
-Image load_image(const std::string& path);
+ImagePlaceholder load_image(const std::string& path);
 
-Shader load_shader(const char* vsPath, const char* fsPath);
+ShaderPlaceholder load_shader(const char* vsPath, const char* fsPath);
 
-Font load_font(const std::string& path, int fontSize = 20);
+FontPlaceholder load_font(const std::string& path, int fontSize = 20);
 
 std::string load_text(const std::string& path);
 

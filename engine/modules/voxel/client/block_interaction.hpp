@@ -3,7 +3,7 @@
 #include "world.hpp"
 #include "engine/ecs/components.hpp"
 #include "engine/core/player_constants.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 
 #include <optional>
 #include <array>
@@ -44,11 +44,12 @@ public:
     bool init();
     void destroy();
     
-    void update(World& world, const Vector3& camera_pos, const Vector3& camera_dir, 
+    void update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir, 
                 const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time);
     
-    void render_highlight(const Camera3D& camera) const;
-    void render_break_overlay(const Camera3D& camera) const;
+    // NOTE(migration): render methods need Camera. Phase 2 will define rf::Camera.
+    // void render_highlight(const Camera3D& camera) const;
+    // void render_break_overlay(const Camera3D& camera) const;
     static void render_crosshair(int screen_width, int screen_height);
     
     const BlockRaycastResult& get_target() const { return target_; }
@@ -60,8 +61,8 @@ public:
     void on_action_rejected();
     
 private:
-    BlockRaycastResult raycast(const World& world, const Vector3& origin, 
-                                const Vector3& direction, float max_distance) const;
+    BlockRaycastResult raycast(const World& world, const rf::Vec3& origin, 
+                                const rf::Vec3& direction, float max_distance) const;
     float calculate_break_time(BlockType block_type, const ecs::ToolHolder& tool) const;
     
     BlockRaycastResult target_;
@@ -76,7 +77,9 @@ private:
     std::optional<BreakRequest> outgoing_break_;
     std::optional<PlaceRequest> outgoing_place_;
 
-    std::array<Texture2D, DESTROY_STAGE_COUNT> destroy_textures_{};
+    // NOTE(migration): Texture2D array placeholder. Phase 2 will replace.
+    struct Tex2DPlaceholder { unsigned int id{0}; };
+    std::array<Tex2DPlaceholder, DESTROY_STAGE_COUNT> destroy_textures_{};
     bool textures_loaded_{false};
 };
 

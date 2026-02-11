@@ -1,7 +1,6 @@
 #include "skybox.hpp"
 #include "engine/client/core/resources.hpp"
-
-#include <rlgl.h>
+#include "engine/core/logging.hpp"
 
 #include <cstdio>
 
@@ -13,45 +12,50 @@ Skybox& Skybox::instance() {
 }
 
 bool Skybox::init() {
-    if (ready_) return true;
+    // TODO(Phase 2): Re-implement with GLFW+OpenGL shader/mesh loading.
+    // if (ready_) return true;
+    //
+    // shader_ = resources::load_shader("shaders/skybox.vs", "shaders/skybox.fs");
+    // if (shader_.id == 0) {
+    //     TraceLog(LOG_ERROR, "Skybox: failed to load shaders (shaders/skybox.*)");
+    //     return false;
+    // }
+    //
+    // shader_.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader_, "mvp");
+    // shader_.locs[SHADER_LOC_MAP_CUBEMAP] = GetShaderLocation(shader_, "environmentMap");
+    //
+    // Mesh cube = GenMeshCube(1.0f, 1.0f, 1.0f);
+    // model_ = LoadModelFromMesh(cube);
+    // model_.materials[0].shader = shader_;
+    // has_model_ = (model_.meshCount > 0);
 
-    shader_ = resources::load_shader("shaders/skybox.vs", "shaders/skybox.fs");
-    if (shader_.id == 0) {
-        TraceLog(LOG_ERROR, "Skybox: failed to load shaders (shaders/skybox.*)");
-        return false;
-    }
-
-    shader_.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(shader_, "mvp");
-    shader_.locs[SHADER_LOC_MAP_CUBEMAP] = GetShaderLocation(shader_, "environmentMap");
-
-    Mesh cube = GenMeshCube(1.0f, 1.0f, 1.0f);
-    model_ = LoadModelFromMesh(cube);
-    model_.materials[0].shader = shader_;
-    has_model_ = (model_.meshCount > 0);
-
-    ready_ = true;
+    ready_ = false;
     loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
 
-    return true;
+    return false;
 }
 
 void Skybox::shutdown() {
-    if (cubemap_.id != 0) {
-        UnloadTexture(cubemap_);
-        cubemap_ = {};
-    }
+    // TODO(Phase 2): Re-implement resource cleanup with OpenGL.
+    // if (cubemap_.id != 0) {
+    //     UnloadTexture(cubemap_);
+    //     cubemap_ = {};
+    // }
+    //
+    // if (has_model_) {
+    //     UnloadModel(model_);
+    //     model_ = {};
+    // }
+    //
+    // if (shader_.id != 0) {
+    //     UnloadShader(shader_);
+    //     shader_ = {};
+    // }
 
-    if (has_model_) {
-        UnloadModel(model_);
-        model_ = {};
-        has_model_ = false;
-    }
-
-    if (shader_.id != 0) {
-        UnloadShader(shader_);
-        shader_ = {};
-    }
-
+    has_model_ = false;
+    shader_ = {};
+    model_ = {};
+    cubemap_ = {};
     ready_ = false;
     loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
 }
@@ -85,84 +89,49 @@ const char* Skybox::cubemap_path_for_kind_(shared::maps::MapTemplate::SkyboxKind
 }
 
 void Skybox::ensure_cubemap_loaded_() {
+    // TODO(Phase 2): Re-implement cubemap loading with OpenGL.
     if (!ready_) return;
+    if (kind_ == loaded_kind_) return;
 
-    if (kind_ == loaded_kind_) {
-        return;
-    }
-
-    if (cubemap_.id != 0) {
-        UnloadTexture(cubemap_);
-        cubemap_ = {};
-    }
+    // const char* pano_path = panorama_path_for_kind_(kind_);
+    // #ifdef CUBEMAP_LAYOUT_PANORAMA
+    //     if (pano_path) {
+    //         Image img = resources::load_image(pano_path);
+    //         ...
+    //         cubemap_ = LoadTextureCubemap(img, CUBEMAP_LAYOUT_PANORAMA);
+    //         UnloadImage(img);
+    //         SetTextureFilter(cubemap_, TEXTURE_FILTER_BILINEAR);
+    //         model_.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = cubemap_;
+    //     }
+    // #endif
+    //
+    // const char* cube_path = cubemap_path_for_kind_(kind_);
+    // Image cube_img = resources::load_image(cube_path);
+    // cubemap_ = LoadTextureCubemap(cube_img, CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE);
+    // UnloadImage(cube_img);
+    // SetTextureFilter(cubemap_, TEXTURE_FILTER_BILINEAR);
+    // model_.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = cubemap_;
 
     loaded_kind_ = kind_;
-
-    const char* pano_path = panorama_path_for_kind_(kind_);
-#ifdef CUBEMAP_LAYOUT_PANORAMA
-    if (pano_path) {
-        Image img = resources::load_image(pano_path);
-        if (img.data == nullptr) {
-            TraceLog(LOG_WARNING, "Skybox: failed to load panorama image: %s", pano_path);
-        } else {
-            cubemap_ = LoadTextureCubemap(img, CUBEMAP_LAYOUT_PANORAMA);
-            UnloadImage(img);
-
-            if (cubemap_.id != 0) {
-                SetTextureFilter(cubemap_, TEXTURE_FILTER_BILINEAR);
-                model_.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = cubemap_;
-                return;
-            }
-
-            TraceLog(LOG_WARNING, "Skybox: failed to create cubemap from panorama %s", pano_path);
-        }
-    }
-#endif
-
-    const char* cube_path = cubemap_path_for_kind_(kind_);
-    if (!cube_path) {
-        loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
-        return;
-    }
-
-    Image cube_img = resources::load_image(cube_path);
-    if (cube_img.data == nullptr) {
-        TraceLog(LOG_WARNING, "Skybox: failed to load cubemap image: %s", cube_path);
-        if (pano_path) {
-            TraceLog(LOG_WARNING, "Skybox: also could not use panorama %s (raylib lacks panorama cubemap support)", pano_path);
-        }
-        loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
-        return;
-    }
-
-    cubemap_ = LoadTextureCubemap(cube_img, CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE);
-    UnloadImage(cube_img);
-
-    if (cubemap_.id == 0) {
-        TraceLog(LOG_WARNING, "Skybox: failed to create cubemap from %s", cube_path);
-        loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
-        return;
-    }
-
-    SetTextureFilter(cubemap_, TEXTURE_FILTER_BILINEAR);
-    model_.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = cubemap_;
 }
 
-void Skybox::draw(const Camera3D& camera) {
-    if (!ready_) return;
-    if (!has_model_) return;
-    if (kind_ == shared::maps::MapTemplate::SkyboxKind::None) return;
-
-    ensure_cubemap_loaded_();
-    if (cubemap_.id == 0) return;
-
-    rlDisableBackfaceCulling();
-    rlDisableDepthMask();
-
-    DrawModel(model_, camera.position, 50.0f, WHITE);
-
-    rlEnableDepthMask();
-    rlEnableBackfaceCulling();
-}
+// NOTE(migration): draw(const Camera3D&) removed — header now exposes draw_stub().
+// TODO(Phase 4): Re-implement skybox rendering with raw OpenGL draw calls.
+// void Skybox::draw(const Camera3D& camera) {
+//     if (!ready_) return;
+//     if (!has_model_) return;
+//     if (kind_ == shared::maps::MapTemplate::SkyboxKind::None) return;
+//
+//     ensure_cubemap_loaded_();
+//     if (cubemap_.id == 0) return;
+//
+//     rlDisableBackfaceCulling();
+//     rlDisableDepthMask();
+//
+//     DrawModel(model_, camera.position, 50.0f, WHITE);
+//
+//     rlEnableDepthMask();
+//     rlEnableBackfaceCulling();
+// }
 
 } // namespace renderer

@@ -10,7 +10,11 @@
 #include "engine/renderer/skybox.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
+
+#include <chrono>
 #include <cstdio>
 
 namespace engine {
@@ -206,23 +210,26 @@ void ClientEngine::log(LogLevel level, std::string_view msg) {
 // ============================================================================
 
 void ClientEngine::init_window() {
-    unsigned int flags = FLAG_WINDOW_RESIZABLE;
-    if (config_.vsync) {
-        flags |= FLAG_VSYNC_HINT;
-    }
-    SetConfigFlags(flags);
-    
-    InitWindow(config_.windowWidth, config_.windowHeight, config_.windowTitle.c_str());
-    SetExitKey(KEY_NULL);  // Don't exit on ESC
-    
-    // Set target FPS (works even with vsync as a fallback limiter)
-    if (config_.targetFps > 0) {
-        SetTargetFPS(config_.targetFps);
-    }
+    // TODO(Phase 1): Create GLFW window
+    // unsigned int flags = FLAG_WINDOW_RESIZABLE;
+    // if (config_.vsync) {
+    //     flags |= FLAG_VSYNC_HINT;
+    // }
+    // SetConfigFlags(flags);
+    //
+    // InitWindow(config_.windowWidth, config_.windowHeight, config_.windowTitle.c_str());
+    // SetExitKey(KEY_NULL);  // Don't exit on ESC
+    //
+    // // Set target FPS (works even with vsync as a fallback limiter)
+    // if (config_.targetFps > 0) {
+    //     SetTargetFPS(config_.targetFps);
+    // }
+    log(LogLevel::Info, "Window initialization stubbed (Phase 0)");
 }
 
 void ClientEngine::close_window() {
-    CloseWindow();
+    // TODO(Phase 1): glfwDestroyWindow / glfwTerminate
+    // CloseWindow();
 }
 
 // ============================================================================
@@ -295,9 +302,13 @@ void ClientEngine::shutdown_subsystems() {
 // ============================================================================
 
 void ClientEngine::main_loop(IGameClient& game) {
-    while (running_ && !WindowShouldClose()) {
-        // Update frame delta time
-        frameDt_ = GetFrameTime();
+    auto lastFrameTime = std::chrono::steady_clock::now();
+
+    while (running_) {  // TODO(Phase 1): add glfwWindowShouldClose check
+        // Update frame delta time (chrono-based, replaces GetFrameTime)
+        auto now = std::chrono::steady_clock::now();
+        frameDt_ = std::chrono::duration<float>(now - lastFrameTime).count();
+        lastFrameTime = now;
         
         // Poll network
         if (transport_) {
@@ -307,19 +318,19 @@ void ClientEngine::main_loop(IGameClient& game) {
         // Update game logic
         game.on_update(frameDt_);
         
-        // Render
-        BeginDrawing();
-        ClearBackground(BLACK);
+        // TODO(Phase 1): Render via GLFW/OpenGL
+        // BeginDrawing();
+        // ClearBackground(rf::Color::Black());
         
         game.on_render();
         
-        EndDrawing();
+        // EndDrawing();
         
-        // Update window size if resized
-        if (IsWindowResized()) {
-            config_.windowWidth = GetScreenWidth();
-            config_.windowHeight = GetScreenHeight();
-        }
+        // TODO(Phase 1): Handle window resize via GLFW callback
+        // if (IsWindowResized()) {
+        //     config_.windowWidth = GetScreenWidth();
+        //     config_.windowHeight = GetScreenHeight();
+        // }
     }
 }
 

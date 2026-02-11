@@ -1,5 +1,7 @@
 #include "texture_atlas.hpp"
 #include "engine/client/core/resources.hpp"
+#include "engine/core/logging.hpp"
+#include "engine/core/math_types.hpp"
 
 namespace voxel {
 
@@ -8,7 +10,10 @@ bool TextureAtlas::load(const char* path) {
         unload();
     }
     
-    texture_ = resources::load_texture(path);
+    // NOTE(migration): resources::load_texture returns TexturePlaceholder (id only);
+    // copy id into Tex2DPlaceholder which also carries width/height.
+    auto tex = resources::load_texture(path);
+    texture_.id = tex.id;
     if (texture_.id == 0) {
         return false;
     }
@@ -22,16 +27,18 @@ bool TextureAtlas::load(const char* path) {
 
 void TextureAtlas::unload() {
     if (loaded_) {
-        UnloadTexture(texture_);
+        // NOTE(migration): UnloadTexture is a raylib call — stubbed for Phase 0
+        // UnloadTexture(texture_);
+        texture_ = {};
         loaded_ = false;
     }
 }
 
-Rectangle TextureAtlas::get_tile_rect(int tile_index) const {
+rf::Rect TextureAtlas::get_tile_rect(int tile_index) const {
     int x = tile_index % tiles_per_row_;
     int y = tile_index / tiles_per_row_;
     
-    return Rectangle{
+    return rf::Rect{
         static_cast<float>(x * tile_size_),
         static_cast<float>(y * tile_size_),
         static_cast<float>(tile_size_),

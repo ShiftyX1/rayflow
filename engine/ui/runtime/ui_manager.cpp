@@ -1,10 +1,23 @@
 #include "ui_manager.hpp"
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
 
 #ifdef DEBUG_UI
 #include "../debug/debug_ui.hpp"
 #endif
+
+// NOTE(migration): Phase 1 input facade will provide these
+static rf::Vec2 GetMousePosition() { return {0, 0}; }
+static bool IsMouseButtonDown(int) { return false; }
+static bool IsMouseButtonPressed(int) { return false; }
+static bool IsKeyPressed(int) { return false; }
+static int GetCharPressed() { return 0; }
+static int GetScreenWidth() { return 800; }
+static int GetScreenHeight() { return 600; }
+static int MeasureText(const char*, int) { return 0; }
+static double GetTime() { return 0.0; }
 
 namespace ui {
 
@@ -107,7 +120,7 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
     (void)in;
 #endif
 
-    const Vector2 mouse_pos = GetMousePosition();
+    const rf::Vec2 mouse_pos = GetMousePosition();
     const bool mouse_down = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     const bool mouse_pressed = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
@@ -223,49 +236,40 @@ void UIManager::render(const UIViewModel& vm) {
 #endif
 
     if (vm.game_screen == GameScreen::MainMenu) {
-        DrawRectangle(0, 0, vm.screen_width, vm.screen_height, Color{1, 4, 9, 255});
+        // TODO(Phase 3): DrawRectangle(0, 0, vm.screen_width, vm.screen_height, rf::Color{1, 4, 9, 255});
         
         if (main_menu_loaded_) {
             main_menu_.render(vm);
         }
     } else if (vm.game_screen == GameScreen::ConnectMenu) {
-        DrawRectangle(0, 0, vm.screen_width, vm.screen_height, Color{1, 4, 9, 255});
+        // TODO(Phase 3): DrawRectangle(0, 0, vm.screen_width, vm.screen_height, rf::Color{1, 4, 9, 255});
         
         if (connect_menu_loaded_) {
             connect_menu_.render(vm);
         }
         
-        // Draw text input content over the hint
-        // Calculate input box position (centered, below title)
-        const int inputX = (vm.screen_width - 340) / 2;
-        const int inputY = (vm.screen_height - 380) / 2 + 160;
-        
-        // Draw address text
-        DrawText(server_address_.c_str(), inputX + 12, inputY + 14, 16, Color{201, 209, 217, 255});
-        
-        // Draw cursor
-        const int cursorX = inputX + 12 + MeasureText(server_address_.c_str(), 16);
-        if ((static_cast<int>(GetTime() * 2) % 2) == 0) {
-            DrawRectangle(cursorX, inputY + 12, 2, 20, Color{88, 166, 255, 255});
-        }
+        // TODO(Phase 3): text input rendering
+        // const int inputX = (vm.screen_width - 340) / 2;
+        // const int inputY = (vm.screen_height - 380) / 2 + 160;
+        // DrawText(server_address_.c_str(), inputX + 12, inputY + 14, 16, rf::Color{201, 209, 217, 255});
+        // const int cursorX = inputX + 12 + MeasureText(server_address_.c_str(), 16);
+        // if ((static_cast<int>(GetTime() * 2) % 2) == 0) {
+        //     DrawRectangle(cursorX, inputY + 12, 2, 20, rf::Color{88, 166, 255, 255});
+        // }
     } else if (vm.game_screen == GameScreen::Connecting) {
-        DrawRectangle(0, 0, vm.screen_width, vm.screen_height, Color{1, 4, 9, 255});
+        // TODO(Phase 3): DrawRectangle(0, 0, vm.screen_width, vm.screen_height, rf::Color{1, 4, 9, 255});
         
-        // Draw connecting message
-        const char* text = "Connecting...";
-        const int textW = MeasureText(text, 32);
-        DrawText(text, (vm.screen_width - textW) / 2, vm.screen_height / 2 - 40, 32, Color{88, 166, 255, 255});
-        
-        // Draw cancel hint
-        const char* hint = "Press ESC to cancel";
-        const int hintW = MeasureText(hint, 16);
-        DrawText(hint, (vm.screen_width - hintW) / 2, vm.screen_height / 2 + 20, 16, Color{139, 148, 158, 255});
-        
-        // Show error if any
-        if (vm.net.connection_failed && !vm.net.connection_error.empty()) {
-            const int errW = MeasureText(vm.net.connection_error.c_str(), 18);
-            DrawText(vm.net.connection_error.c_str(), (vm.screen_width - errW) / 2, vm.screen_height / 2 + 60, 18, Color{248, 81, 73, 255});
-        }
+        // TODO(Phase 3): connecting message rendering
+        // const char* text = "Connecting...";
+        // const int textW = MeasureText(text, 32);
+        // DrawText(text, (vm.screen_width - textW) / 2, vm.screen_height / 2 - 40, 32, rf::Color{88, 166, 255, 255});
+        // const char* hint = "Press ESC to cancel";
+        // const int hintW = MeasureText(hint, 16);
+        // DrawText(hint, (vm.screen_width - hintW) / 2, vm.screen_height / 2 + 20, 16, rf::Color{139, 148, 158, 255});
+        // if (vm.net.connection_failed && !vm.net.connection_error.empty()) {
+        //     const int errW = MeasureText(vm.net.connection_error.c_str(), 18);
+        //     DrawText(vm.net.connection_error.c_str(), (vm.screen_width - errW) / 2, vm.screen_height / 2 + 60, 18, rf::Color{248, 81, 73, 255});
+        // }
     } else if (vm.game_screen == GameScreen::Paused) {
         // Note: world is still rendered in game.cpp, we just overlay pause menu
         if (pause_menu_loaded_) {

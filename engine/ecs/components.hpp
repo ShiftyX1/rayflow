@@ -1,6 +1,6 @@
 #pragma once
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <entt/entt.hpp>
 
 #include "engine/core/player_constants.hpp"
@@ -8,24 +8,24 @@
 namespace ecs {
 
 struct Transform {
-    Vector3 position{0.0f, 0.0f, 0.0f};
-    Vector3 rotation{0.0f, 0.0f, 0.0f};  // Euler angles (pitch, yaw, roll)
-    Vector3 scale{1.0f, 1.0f, 1.0f};
+    rf::Vec3 position{0.0f, 0.0f, 0.0f};
+    rf::Vec3 rotation{0.0f, 0.0f, 0.0f};  // Euler angles (pitch, yaw, roll)
+    rf::Vec3 scale{1.0f, 1.0f, 1.0f};
 };
 
 struct Velocity {
-    Vector3 linear{0.0f, 0.0f, 0.0f};
-    Vector3 angular{0.0f, 0.0f, 0.0f};
+    rf::Vec3 linear{0.0f, 0.0f, 0.0f};
+    rf::Vec3 angular{0.0f, 0.0f, 0.0f};
 };
 
 struct PreviousPosition {
-    Vector3 value{0.0f, 0.0f, 0.0f};
+    rf::Vec3 value{0.0f, 0.0f, 0.0f};
     bool initialized{false};
 };
 
 struct BoxCollider {
-    Vector3 size{1.0f, 1.0f, 1.0f};
-    Vector3 offset{0.0f, 0.0f, 0.0f};
+    rf::Vec3 size{1.0f, 1.0f, 1.0f};
+    rf::Vec3 offset{0.0f, 0.0f, 0.0f};
     bool is_trigger{false};
 };
 
@@ -65,14 +65,21 @@ struct RigidBody {
     bool is_kinematic{false};
 };
 
+// NOTE(migration): MeshComponent/ModelComponent still use raylib Mesh/Model/Material.
+// These will be replaced with GLMesh*/rf::Material in Phase 2/5.
+// For now we forward-declare placeholder types to keep compilation.
+struct RaylibMesh {};      // placeholder — Phase 2 will replace
+struct RaylibMaterial {};  // placeholder — Phase 2 will replace
+struct RaylibModel {};     // placeholder — Phase 2 will replace
+
 struct MeshComponent {
-    Mesh mesh{};
-    Material material{};
+    RaylibMesh mesh{};
+    RaylibMaterial material{};
     bool cast_shadow{true};
 };
 
 struct ModelComponent {
-    Model model{};
+    RaylibModel model{};
     bool visible{true};
 };
 
@@ -110,8 +117,8 @@ struct BlockBreaker {
 };
 
 struct InputState {
-    Vector2 move_input{0.0f, 0.0f};
-    Vector2 look_input{0.0f, 0.0f};
+    rf::Vec2 move_input{0.0f, 0.0f};
+    rf::Vec2 look_input{0.0f, 0.0f};
     bool jump_pressed{false};
     bool sprint_pressed{false};
     bool primary_action{false};   // Left mouse

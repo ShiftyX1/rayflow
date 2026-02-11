@@ -2,7 +2,7 @@
 #include "engine/client/core/resources.hpp"
 #include "engine/vfs/vfs.hpp"
 #include <cstdio>
-#include <raylib.h>
+#include "engine/core/logging.hpp"
 
 namespace voxel {
 

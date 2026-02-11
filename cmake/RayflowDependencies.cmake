@@ -1,6 +1,6 @@
 # =============================================================================
 # RayflowDependencies.cmake
-# External dependencies: raylib, EnTT, tinyxml2, LuaJIT, sol2
+# External dependencies: GLFW, glm, glad, stb, Dear ImGui, EnTT, tinyxml2, LuaJIT, sol2
 # =============================================================================
 
 include(FetchContent)
@@ -12,7 +12,9 @@ set(FETCHCONTENT_QUIET OFF)
 # -----------------------------------------------------------------------------
 # Dependency versions (centralized)
 # -----------------------------------------------------------------------------
-set(RAYFLOW_RAYLIB_VERSION "5.5" CACHE STRING "raylib version to use")
+set(RAYFLOW_GLFW_VERSION "3.4" CACHE STRING "GLFW version to use")
+set(RAYFLOW_GLM_VERSION "1.0.1" CACHE STRING "glm version to use")
+set(RAYFLOW_IMGUI_VERSION "v1.91.8" CACHE STRING "Dear ImGui version to use")
 set(RAYFLOW_ENTT_VERSION "v3.13.2" CACHE STRING "EnTT version to use")
 set(RAYFLOW_TINYXML2_VERSION "10.0.0" CACHE STRING "tinyxml2 version to use")
 # Note: v3.3.1 has a bug with optional_implementation.hpp on some compilers
@@ -51,6 +53,96 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(enet)
+
+# -----------------------------------------------------------------------------
+# GLFW (Window management + input)
+# -----------------------------------------------------------------------------
+message(STATUS "Fetching GLFW ${RAYFLOW_GLFW_VERSION}...")
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG ${RAYFLOW_GLFW_VERSION}
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(glfw)
+
+# -----------------------------------------------------------------------------
+# glm (Mathematics library, header-only)
+# -----------------------------------------------------------------------------
+message(STATUS "Fetching glm ${RAYFLOW_GLM_VERSION}...")
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG ${RAYFLOW_GLM_VERSION}
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(glm)
+
+# -----------------------------------------------------------------------------
+# glad (OpenGL loader, generated for GL 4.1 core — max on macOS)
+# We embed glad sources directly; download once, commit to repo.
+# -----------------------------------------------------------------------------
+set(RAYFLOW_GLAD_DIR "${CMAKE_SOURCE_DIR}/engine/renderer/glad")
+if(NOT EXISTS "${RAYFLOW_GLAD_DIR}/src/gl.c")
+    message(FATAL_ERROR
+        "glad sources not found at ${RAYFLOW_GLAD_DIR}. "
+        "Run: python -m glad --api gl:core=4.1 --out-path engine/renderer/glad c")
+endif()
+
+add_library(glad STATIC "${RAYFLOW_GLAD_DIR}/src/gl.c")
+target_include_directories(glad PUBLIC "${RAYFLOW_GLAD_DIR}/include")
+
+# -----------------------------------------------------------------------------
+# stb (image + truetype, header-only — implementation compiled in engine)
+# -----------------------------------------------------------------------------
+message(STATUS "Fetching stb...")
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG master
+    GIT_SHALLOW TRUE
+)
+FetchContent_GetProperties(stb)
+if(NOT stb_POPULATED)
+    FetchContent_Populate(stb)
+endif()
+add_library(stb_headers INTERFACE)
+target_include_directories(stb_headers INTERFACE ${stb_SOURCE_DIR})
+
+# -----------------------------------------------------------------------------
+# Dear ImGui (debug UI)
+# We build it as a static library with GLFW+OpenGL3 backends.
+# -----------------------------------------------------------------------------
+message(STATUS "Fetching Dear ImGui ${RAYFLOW_IMGUI_VERSION}...")
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG ${RAYFLOW_IMGUI_VERSION}
+    GIT_SHALLOW TRUE
+)
+FetchContent_GetProperties(imgui)
+if(NOT imgui_POPULATED)
+    FetchContent_Populate(imgui)
+endif()
+
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+target_link_libraries(imgui PUBLIC glfw glad)
 
 # -----------------------------------------------------------------------------
 # LuaJIT (Lua scripting with JIT compilation)
@@ -238,193 +330,11 @@ function(rayflow_link_lua TARGET_NAME)
 endfunction()
 
 # -----------------------------------------------------------------------------
-# raylib
-# Strategy:
-#   1. Check RAYFLOW_FETCH_RAYLIB option (force FetchContent)
-#   2. Try find_package(raylib)
-#   3. Fallback to manual path search
-#   4. Last resort: FetchContent
-# -----------------------------------------------------------------------------
-option(RAYFLOW_FETCH_RAYLIB "Force fetch raylib via FetchContent (skip system search)" OFF)
-
-# Track how raylib was found for later use
-set(RAYLIB_FOUND_VIA "" CACHE INTERNAL "How raylib was found")
-
-if(NOT RAYFLOW_FETCH_RAYLIB)
-    # Attempt 1: Standard find_package
-    find_package(raylib ${RAYFLOW_RAYLIB_VERSION} QUIET CONFIG)
-    
-    if(raylib_FOUND)
-        set(RAYLIB_FOUND_VIA "find_package" CACHE INTERNAL "")
-        message(STATUS "Found raylib via find_package: ${raylib_VERSION}")
-    else()
-        # Attempt 2: Manual search for common installation paths
-        message(STATUS "raylib not found via find_package, searching common paths...")
-        
-        if(WIN32)
-            # Windows: MSYS2 UCRT64/MinGW64, vcpkg, manual install
-            find_path(RAYLIB_INCLUDE_DIR 
-                NAMES raylib.h 
-                PATHS 
-                    # MSYS2 UCRT64 (recommended)
-                    C:/msys64/ucrt64/include
-                    # MSYS2 MinGW64
-                    C:/msys64/mingw64/include
-                    # vcpkg default
-                    $ENV{VCPKG_ROOT}/installed/x64-windows/include
-                    # User-specified
-                    $ENV{RAYLIB_PATH}/include
-                    # Common manual install locations
-                    C:/raylib/include
-                    "C:/Program Files/raylib/include"
-                NO_DEFAULT_PATH
-            )
-            find_library(RAYLIB_LIBRARY 
-                NAMES raylib raylibdll
-                PATHS 
-                    C:/msys64/ucrt64/lib
-                    C:/msys64/mingw64/lib
-                    $ENV{VCPKG_ROOT}/installed/x64-windows/lib
-                    $ENV{RAYLIB_PATH}/lib
-                    C:/raylib/lib
-                    "C:/Program Files/raylib/lib"
-                NO_DEFAULT_PATH
-            )
-        elseif(APPLE)
-            # macOS: Homebrew (ARM64 and x86_64), MacPorts
-            find_path(RAYLIB_INCLUDE_DIR 
-                NAMES raylib.h 
-                PATHS 
-                    # Homebrew ARM64 (Apple Silicon)
-                    /opt/homebrew/opt/raylib/include
-                    /opt/homebrew/include
-                    # Homebrew x86_64 (Intel)
-                    /usr/local/opt/raylib/include
-                    /usr/local/include
-                    # MacPorts
-                    /opt/local/include
-                NO_DEFAULT_PATH
-            )
-            find_library(RAYLIB_LIBRARY 
-                NAMES raylib
-                PATHS 
-                    /opt/homebrew/opt/raylib/lib
-                    /opt/homebrew/lib
-                    /usr/local/opt/raylib/lib
-                    /usr/local/lib
-                    /opt/local/lib
-                NO_DEFAULT_PATH
-            )
-        else()
-            # Linux: system packages, manual install
-            find_path(RAYLIB_INCLUDE_DIR 
-                NAMES raylib.h 
-                PATHS 
-                    # Standard system paths
-                    /usr/include
-                    /usr/local/include
-                    # Arch Linux / AUR
-                    /usr/include/raylib
-                    # Fedora COPR
-                    /usr/include/raylib
-                    # Manual install
-                    $ENV{HOME}/.local/include
-                    $ENV{RAYLIB_PATH}/include
-                NO_DEFAULT_PATH
-            )
-            find_library(RAYLIB_LIBRARY 
-                NAMES raylib
-                PATHS 
-                    /usr/lib
-                    /usr/lib64
-                    /usr/lib/x86_64-linux-gnu
-                    /usr/lib/aarch64-linux-gnu
-                    /usr/local/lib
-                    /usr/local/lib64
-                    $ENV{HOME}/.local/lib
-                    $ENV{RAYLIB_PATH}/lib
-                NO_DEFAULT_PATH
-            )
-        endif()
-        
-        if(RAYLIB_INCLUDE_DIR AND RAYLIB_LIBRARY)
-            set(RAYLIB_FOUND_VIA "manual" CACHE INTERNAL "")
-            message(STATUS "Found raylib (manual search):")
-            message(STATUS "  Include: ${RAYLIB_INCLUDE_DIR}")
-            message(STATUS "  Library: ${RAYLIB_LIBRARY}")
-            
-            # Create imported target for consistent interface
-            if(NOT TARGET raylib_manual)
-                add_library(raylib_manual UNKNOWN IMPORTED)
-                set_target_properties(raylib_manual PROPERTIES
-                    IMPORTED_LOCATION "${RAYLIB_LIBRARY}"
-                    INTERFACE_INCLUDE_DIRECTORIES "${RAYLIB_INCLUDE_DIR}"
-                )
-            endif()
-        endif()
-    endif()
-endif()
-
-# Attempt 3: FetchContent as last resort
-if(NOT raylib_FOUND AND NOT RAYLIB_FOUND_VIA STREQUAL "manual")
-    if(RAYFLOW_FETCH_RAYLIB)
-        message(STATUS "RAYFLOW_FETCH_RAYLIB=ON, fetching raylib via FetchContent...")
-    else()
-        message(STATUS "raylib not found on system, fetching via FetchContent...")
-    endif()
-    
-    # raylib build options for static linking
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build raylib as static library" FORCE)
-    set(BUILD_EXAMPLES OFF CACHE BOOL "Don't build raylib examples" FORCE)
-    set(BUILD_GAMES OFF CACHE BOOL "Don't build raylib games" FORCE)
-    set(CUSTOMIZE_BUILD OFF CACHE BOOL "Use default raylib build" FORCE)
-    
-    # Platform-specific raylib options
-    if(UNIX AND NOT APPLE)
-        # Linux: prefer X11 for broader compatibility
-        set(USE_WAYLAND OFF CACHE BOOL "Use X11 instead of Wayland" FORCE)
-    endif()
-    
-    FetchContent_Declare(
-        raylib
-        GIT_REPOSITORY https://github.com/raysan5/raylib.git
-        GIT_TAG ${RAYFLOW_RAYLIB_VERSION}
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-    )
-    FetchContent_MakeAvailable(raylib)
-    
-    set(RAYLIB_FOUND_VIA "FetchContent" CACHE INTERNAL "")
-    message(STATUS "raylib ${RAYFLOW_RAYLIB_VERSION} fetched and built successfully")
-endif()
-
-# Summary
-message(STATUS "=== raylib configuration ===")
-message(STATUS "  Method: ${RAYLIB_FOUND_VIA}")
-message(STATUS "  Version: ${RAYFLOW_RAYLIB_VERSION}")
-message(STATUS "============================")
-
-# -----------------------------------------------------------------------------
-# Helper function to link raylib to a target
-# Handles all three discovery methods uniformly
+# raylib — REMOVED (migration/glfw-opengl)
+# The engine now uses GLFW + raw OpenGL instead of raylib.
+# The following helper is kept as a no-op for any stray call sites during migration.
 # -----------------------------------------------------------------------------
 function(rayflow_link_raylib TARGET_NAME)
-    if(RAYLIB_FOUND_VIA STREQUAL "find_package" OR RAYLIB_FOUND_VIA STREQUAL "FetchContent")
-        # Modern CMake target available
-        target_link_libraries(${TARGET_NAME} PUBLIC raylib)
-        
-        # For static linking with vcpkg on Windows, we need to link glfw3 explicitly
-        if(WIN32)
-            find_package(glfw3 CONFIG QUIET)
-            if(glfw3_FOUND)
-                target_link_libraries(${TARGET_NAME} PUBLIC glfw)
-            endif()
-        endif()
-    elseif(RAYLIB_FOUND_VIA STREQUAL "manual")
-        # Use our imported target
-        target_link_libraries(${TARGET_NAME} PUBLIC raylib_manual)
-    else()
-        message(FATAL_ERROR "raylib not available for target ${TARGET_NAME}. "
-                           "Set RAYFLOW_FETCH_RAYLIB=ON to download raylib automatically.")
-    endif()
+    message(WARNING "rayflow_link_raylib(${TARGET_NAME}) called but raylib has been removed. "
+                    "Link against glfw, glad, glm, stb_headers, imgui instead.")
 endfunction()

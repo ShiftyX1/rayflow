@@ -1,7 +1,5 @@
 #pragma once
 
-#include <raylib.h>
-
 #include "../shared/block.hpp"
 
 namespace voxel {

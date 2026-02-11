@@ -25,9 +25,18 @@
 #include "../components/common.hpp"
 #include "../components/rendering.hpp"
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <cmath>
 #include <random>
+
+// NOTE(migration): Camera2D replacement using rf types.
+// Phase 2 will provide a proper 2D camera with projection.
+struct Camera2DState {
+    rf::Vec2 target{0, 0};
+    rf::Vec2 offset{0, 0};
+    float rotation{0.0f};
+    float zoom{1.0f};
+};
 
 namespace ecs {
 
@@ -43,7 +52,7 @@ public:
     void set_screen_size(int width, int height) {
         screen_width_ = width;
         screen_height_ = height;
-        camera_.offset = {
+        camera_.offset = rf::Vec2{
             static_cast<float>(width) / 2.0f,
             static_cast<float>(height) / 2.0f
         };
@@ -55,9 +64,9 @@ public:
         apply_bounds(registry);
     }
     
-    /// Get the raylib camera for rendering
-    Camera2D get_camera() const {
-        Camera2D result = camera_;
+    /// Get the camera state for rendering
+    Camera2DState get_camera() const {
+        Camera2DState result = camera_;
         
         // Apply shake offset
         result.target.x += shake_offset_x_;
@@ -78,7 +87,7 @@ public:
     
     /// Set camera position directly (no smoothing)
     void set_position(float x, float y) {
-        camera_.target = {x, y};
+        camera_.target = rf::Vec2{x, y};
     }
     
     /// Set camera zoom
@@ -94,20 +103,27 @@ public:
     }
     
     /// Convert screen position to world position
-    Vector2 screen_to_world(Vector2 screen_pos) const {
-        return GetScreenToWorld2D(screen_pos, camera_);
+    rf::Vec2 screen_to_world(rf::Vec2 screen_pos) const {
+        // TODO(migration): Phase 2 — proper 2D camera inverse transform
+        return rf::Vec2{
+            (screen_pos.x - camera_.offset.x) / camera_.zoom + camera_.target.x,
+            (screen_pos.y - camera_.offset.y) / camera_.zoom + camera_.target.y
+        };
     }
     
     /// Convert world position to screen position
-    Vector2 world_to_screen(Vector2 world_pos) const {
-        return GetWorldToScreen2D(world_pos, camera_);
+    rf::Vec2 world_to_screen(rf::Vec2 world_pos) const {
+        return rf::Vec2{
+            (world_pos.x - camera_.target.x) * camera_.zoom + camera_.offset.x,
+            (world_pos.y - camera_.target.y) * camera_.zoom + camera_.offset.y
+        };
     }
     
     /// Get camera target position
-    Vector2 get_target() const { return camera_.target; }
+    rf::Vec2 get_target() const { return camera_.target; }
 
 private:
-    Camera2D camera_{};
+    Camera2DState camera_{};
     int screen_width_{1280};
     int screen_height_{720};
     
@@ -127,7 +143,7 @@ private:
     std::mt19937 rng_{std::random_device{}()};
     
     void update_target(entt::registry& registry, float dt) {
-        Vector2 target_pos = camera_.target;
+        rf::Vec2 target_pos = camera_.target;
         float current_smoothing = smoothing_;
         float look_ahead_x = 0.0f;
         float look_ahead_y = 0.0f;
