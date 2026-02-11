@@ -229,27 +229,13 @@ void BedWarsClient::on_render() {
     if (gameScreen_ == ui::GameScreen::MainMenu || 
         gameScreen_ == ui::GameScreen::ConnectMenu ||
         gameScreen_ == ui::GameScreen::Paused) {
-        batch.begin(sw, sh);
-        batch.end();
+        // UI manager handles its own Batch2D frame internally
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
     if (gameScreen_ == ui::GameScreen::Connecting) {
-        batch.begin(sw, sh);
-        batch.drawText("Connecting to server...", 100, 100, 30, rf::Color::White());
-
-        if (sessionState_ == SessionState::WaitingServerHello) {
-            batch.drawText("Waiting for ServerHello...", 100, 140, 20, rf::Color{130,130,130,255});
-        } else if (sessionState_ == SessionState::WaitingJoinAck) {
-            batch.drawText("Joining match...", 100, 140, 20, rf::Color{130,130,130,255});
-        }
-
-        if (!connectionError_.empty()) {
-            batch.drawText(connectionError_, 100, 200, 20, rf::Color::Red());
-        }
-        batch.end();
-        
+        // UI manager handles background + connecting message + its own Batch2D frame
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
@@ -337,28 +323,25 @@ void BedWarsClient::on_render() {
         glDisable(GL_DEPTH_TEST);
     }
     
-    // 2D overlay
+    // 2D overlay: crosshair + debug info (game-specific)
     batch.begin(sw, sh);
-    render_hud();
-    
+
 #ifdef NDEBUG
-    // BedWars-specific debug info (F3 toggle, Release only)
     if (showDebug_) {
         render_debug_info();
     }
 #endif
-    
+
     // Crosshair (show when playing and UI not capturing input)
     if (!uiCapturesInput_) {
-        // Simple crosshair
         int cx = sw / 2, cy = sh / 2;
         batch.drawRect(static_cast<float>(cx - 10), static_cast<float>(cy - 1), 20.0f, 2.0f, rf::Color::White());
         batch.drawRect(static_cast<float>(cx - 1), static_cast<float>(cy - 10), 2.0f, 20.0f, rf::Color::White());
     }
-    
+
     batch.end();
-    
-    // Render UI (HUD, debug overlays handled by engine's UI manager)
+
+    // Rayflow UI Render (HUD (XML + CSS + lua), debug overlays)
     engine_->ui_manager().render(uiViewModel_);
 }
 
@@ -398,53 +381,6 @@ void BedWarsClient::render_items() {
         (void)pos;
         (void)color;
     }
-}
-
-void BedWarsClient::render_hud() {
-    auto& win = rf::Window::instance();
-    int sw = win.width();
-    int sh = win.height();
-    auto& batch = rf::Batch2D::instance();
-
-    // Health bar
-    int barWidth = 200;
-    int barHeight = 20;
-    int barX = 20;
-    int barY = sh - 40;
-
-    float healthPercent = (localPlayer_.maxHp > 0)
-        ? static_cast<float>(localPlayer_.hp) / static_cast<float>(localPlayer_.maxHp)
-        : 0.0f;
-
-    batch.drawRect(static_cast<float>(barX), static_cast<float>(barY),
-                   static_cast<float>(barWidth), static_cast<float>(barHeight),
-                   rf::Color{80, 80, 80, 255});
-    batch.drawRect(static_cast<float>(barX), static_cast<float>(barY),
-                   static_cast<float>(static_cast<int>(barWidth * healthPercent)),
-                   static_cast<float>(barHeight), rf::Color::Red());
-    batch.drawRectLines(static_cast<float>(barX), static_cast<float>(barY),
-                        static_cast<float>(barWidth), static_cast<float>(barHeight),
-                        rf::Color::White());
-
-    // Health text
-    char healthText[32];
-    std::snprintf(healthText, sizeof(healthText), "%d / %d HP", localPlayer_.hp, localPlayer_.maxHp);
-    batch.drawText(healthText, static_cast<float>(barX + barWidth + 10),
-                   static_cast<float>(barY + 2), 16, rf::Color::White());
-
-    // Team indicator
-    rf::Color teamColor = get_team_color(localPlayer_.team);
-    batch.drawRect(static_cast<float>(sw - 120), 20.0f, 100.0f, 30.0f, teamColor);
-
-    const char* teamName = "None";
-    switch (localPlayer_.team) {
-        case proto::Teams::Red: teamName = "RED"; break;
-        case proto::Teams::Blue: teamName = "BLUE"; break;
-        case proto::Teams::Green: teamName = "GREEN"; break;
-        case proto::Teams::Yellow: teamName = "YELLOW"; break;
-        default: break;
-    }
-    batch.drawText(teamName, static_cast<float>(sw - 110), 25.0f, 20, rf::Color::White());
 }
 
 void BedWarsClient::render_debug_info() {

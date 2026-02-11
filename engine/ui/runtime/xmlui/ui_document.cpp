@@ -527,7 +527,7 @@ bool UIDocument::update(const UIViewModel& vm, rf::Vec2 mouse_pos, bool mouse_do
 
     // Update script engine (for animations, timers, etc.)
     if (scriptEngine_ && scriptEngine_->has_scripts()) {
-        scriptEngine_->update(0.016f); // TODO(migration): Phase 1 — pass actual dt
+        scriptEngine_->update(vm.dt > 0.0f ? vm.dt : 0.016f);
         process_script_commands();
     }
 

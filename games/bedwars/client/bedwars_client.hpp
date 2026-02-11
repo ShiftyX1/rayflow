@@ -165,7 +165,6 @@ private:
     // void render_world(const Camera3D& camera);
     void render_players();
     void render_items();
-    void render_hud();
     void render_debug_info();
     
     // --- UI ---
