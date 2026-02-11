@@ -20,11 +20,11 @@ uniform float exposure;
 // Derived from: hdrMax=8.0, midIn=0.25, midOut=0.25
 
 vec3 lottesTonemap(vec3 color) {
-    const float a = 1.6;  // contrast
+    const float a = 1.4;  // contrast (reduced from 1.6 for natural look)
     const float d = 0.977;
     const float hdrMax = 8.0;
-    const float midIn = 0.25;
-    const float midOut = 0.25;
+    const float midIn = 0.18;
+    const float midOut = 0.18;
 
     // Compute b and c from constraints
     float b = (-pow(midIn, a) + pow(hdrMax, a) * midOut)

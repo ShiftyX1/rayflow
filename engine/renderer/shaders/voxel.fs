@@ -112,6 +112,11 @@ void main() {
         discard;
     }
 
+    // sRGB → linear conversion.
+    // Atlas textures are sRGB-encoded PNGs loaded as GL_RGBA8 (no HW decode).
+    // The HDR pipeline expects linear-space inputs, so we degamma here.
+    texelColor.rgb = pow(texelColor.rgb, vec3(2.2));
+
     // Apply vertex color tint (foliage/grass recolor or white)
     vec3 tintedColor = texelColor.rgb * fragTint;
 

@@ -289,6 +289,7 @@ void BedWarsClient::on_render() {
         // ===== PIPELINE PATH: Shadow → HDR Scene → Tone Map =====
 
         // 1. Shadow pass
+        glDisable(GL_BLEND);  // No blending during shadow depth
         renderPipeline_.beginShadowPass(camera, sunDir);
         try {
             auto& world = engine_->world();
@@ -301,20 +302,25 @@ void BedWarsClient::on_render() {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
 
-        // Skybox
+        // Skybox (alpha blending OK for skybox)
+        glEnable(GL_BLEND);
         renderer::Skybox::instance().draw(camera);
 
-        // Voxel world (with shadows + fog)
+        // Voxel world — disable blending, rely on alpha-test (discard)
+        // This prevents transparent texture edges from causing
+        // order-dependent blending artifacts when camera moves.
+        glDisable(GL_BLEND);
         try {
             auto& world = engine_->world();
             world.render(camera, renderPipeline_);
         } catch (const std::runtime_error&) {}
 
+        glEnable(GL_BLEND);  // Restore for subsequent passes
         glDisable(GL_DEPTH_TEST);
         renderPipeline_.endScene();
 
         // 3. Tone mapping (HDR → LDR)
-        renderPipeline_.postProcess(1.2f);
+        renderPipeline_.postProcess(1.0f);
 
     } else {
         // ===== FALLBACK: Legacy forward rendering =====

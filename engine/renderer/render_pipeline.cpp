@@ -119,29 +119,29 @@ void RenderPipeline::resize(int width, int height) {
 void RenderPipeline::beginShadowPass(const Camera& camera, const Vec3& sunDir) {
     if (!shadowShader_.isValid()) return;
 
-    // Compute light-space matrix
-    // Center the shadow frustum around the camera position
+
+    Vec3 lightDir = glm::normalize(sunDir);
+    Vec3 lightUp  = (std::abs(lightDir.y) > 0.99f) ? Vec3(0, 0, 1) : Vec3(0, 1, 0);
+
+    Mat4 lightView = glm::lookAt(Vec3(0.0f), -lightDir, lightUp);
+
+    // Shadow frustum follows the camera (offset slightly forward)
     Vec3 center = camera.position() + camera.forward() * (shadowDistance_ * 0.4f);
 
-    // Snap center to shadow texel grid to reduce shadow swimming
-    float texelSize = (shadowDistance_ * 2.0f) / static_cast<float>(shadowMapSize_);
-    Vec3 lightDir = glm::normalize(sunDir);
-    Vec3 lightUp = (std::abs(lightDir.y) > 0.99f) ? Vec3(0, 0, 1) : Vec3(0, 1, 0);
-    Mat4 lightView = glm::lookAt(center + lightDir * shadowDistance_, center, lightUp);
-
-    // Snap to texel grid
-    Vec4 centerLS = lightView * Vec4(center, 1.0f);
+    // Project center into light-space and snap to texel grid
+    float halfDist  = shadowDistance_;
+    float texelSize = (halfDist * 2.0f) / static_cast<float>(shadowMapSize_);
+    Vec4 centerLS   = lightView * Vec4(center, 1.0f);
     centerLS.x = std::floor(centerLS.x / texelSize) * texelSize;
     centerLS.y = std::floor(centerLS.y / texelSize) * texelSize;
-    Mat4 snapOffset = glm::translate(Mat4(1.0f),
-        Vec3(centerLS.x - (lightView * Vec4(center, 1.0f)).x,
-             centerLS.y - (lightView * Vec4(center, 1.0f)).y,
-             0.0f));
-    lightView = snapOffset * lightView;
 
-    float halfDist = shadowDistance_;
-    Mat4 lightProj = glm::ortho(-halfDist, halfDist, -halfDist, halfDist,
-                                 0.1f, shadowDistance_ * 3.0f);
+    // Build ortho projection centered on the snapped light-space position
+    float nearPlane = -shadowDistance_ * 2.0f;
+    float farPlane  =  shadowDistance_ * 2.0f;
+    Mat4 lightProj = glm::ortho(
+        centerLS.x - halfDist, centerLS.x + halfDist,
+        centerLS.y - halfDist, centerLS.y + halfDist,
+        nearPlane, farPlane);
 
     lightSpaceMatrix_ = lightProj * lightView;
 
