@@ -177,10 +177,9 @@ target_include_directories(engine_ui PUBLIC
 
 target_link_libraries(engine_ui PUBLIC engine_client tinyxml2 imgui)
 
-# Debug UI (raygui) - available in all builds
+# Debug UI (Dear ImGui) - available in all builds
 target_sources(engine_ui PRIVATE
     ui/debug/debug_ui.cpp
-    ui/debug/raygui_impl.cpp
 )
 
 # Enable DEBUG_UI in Debug builds

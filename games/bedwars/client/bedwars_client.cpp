@@ -28,9 +28,6 @@
 #include <cstdio>
 #include <cmath>
 
-// NOTE(migration): GetFPS placeholder — will be replaced in Phase 2 (renderer frame stats).
-static int GetFPS() { return 0; }
-
 namespace bedwars {
 
 // ============================================================================
@@ -388,7 +385,7 @@ void BedWarsClient::render_debug_info() {
     char buf[256];
     float y = 10.0f;
 
-    std::snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
+    std::snprintf(buf, sizeof(buf), "FPS: %d", uiViewModel_.fps);
     batch.drawText(buf, 10, y, 16, rf::Color::Green());
     y += 20;
 
@@ -802,7 +799,10 @@ void BedWarsClient::send_message(const T& msg) {
 void BedWarsClient::update_ui_view_model() {
     uiViewModel_.screen_width = engine_->window_width();
     uiViewModel_.screen_height = engine_->window_height();
-    uiViewModel_.fps = GetFPS();
+    uiViewModel_.dt = engine_->frame_dt();
+    uiViewModel_.fps = (engine_->frame_dt() > 0.0f)
+                        ? static_cast<int>(1.0f / engine_->frame_dt())
+                        : 0;
     uiViewModel_.game_screen = gameScreen_;
     
     // Player info from ECS (same as rayflow)

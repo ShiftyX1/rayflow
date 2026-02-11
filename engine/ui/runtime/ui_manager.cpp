@@ -18,11 +18,15 @@ UIManager::~UIManager() {
     connect_menu_.unload();
     pause_menu_.unload();
     hud_.unload();
+
+#ifdef DEBUG_UI
+    debug::shutdown();
+#endif
 }
 
 void UIManager::init() {
 #ifdef DEBUG_UI
-    debug::init();
+    debug::init(rf::Window::instance().handle());
 #endif
 
     // Load main menu UI
@@ -205,6 +209,9 @@ void UIManager::render(const UIViewModel& vm) {
     batch.begin(vm.screen_width, vm.screen_height);
 
 #ifdef DEBUG_UI
+    // Begin ImGui frame (before any ImGui draw calls)
+    debug::new_frame();
+
     if (debug_mode_ == DebugMode::Interactive) {
         debug::DebugUIState state;
         state.show_player_info = show_player_info_;
@@ -220,6 +227,7 @@ void UIManager::render(const UIViewModel& vm) {
         camera_sensitivity_ = result.state.camera_sensitivity;
         queue_command_if_changed(prev_sens, camera_sensitivity_);
         batch.end();
+        debug::render_draw_data();
         return;
     }
 
@@ -230,6 +238,7 @@ void UIManager::render(const UIViewModel& vm) {
         state.camera_sensitivity = camera_sensitivity_;
         (void)debug::draw_overlay(state, vm);
         batch.end();
+        debug::render_draw_data();
         return;
     }
 #endif
@@ -289,6 +298,11 @@ void UIManager::render(const UIViewModel& vm) {
     }
 
     batch.end();
+
+#ifdef DEBUG_UI
+    // Render ImGui draw data (after all UI, before buffer swap)
+    debug::render_draw_data();
+#endif
 }
 
 } // namespace ui

@@ -271,7 +271,7 @@ void ClientEngine::init_subsystems() {
         log(LogLevel::Error, "Failed to initialize block interaction");
     }
     
-    // Initialize UI
+    // Initialize UI (UIManager owns Dear ImGui lifecycle)
     uiManager_ = std::make_unique<ui::UIManager>();
     uiManager_->init();
     
@@ -281,7 +281,7 @@ void ClientEngine::init_subsystems() {
 void ClientEngine::shutdown_subsystems() {
     log(LogLevel::Info, "Shutting down engine subsystems...");
     
-    // Shutdown UI
+    // Shutdown UI (UIManager shuts down Dear ImGui)
     uiManager_.reset();
     
     // Shutdown block interaction
