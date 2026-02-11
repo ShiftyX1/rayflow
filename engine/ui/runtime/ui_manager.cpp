@@ -1,5 +1,7 @@
 #include "ui_manager.hpp"
 
+#include "engine/client/core/input.hpp"
+#include "engine/client/core/window.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/core/key_codes.hpp"
 #include "engine/core/logging.hpp"
@@ -8,16 +10,8 @@
 #include "../debug/debug_ui.hpp"
 #endif
 
-// NOTE(migration): Phase 1 input facade will provide these
-static rf::Vec2 GetMousePosition() { return {0, 0}; }
-static bool IsMouseButtonDown(int) { return false; }
-static bool IsMouseButtonPressed(int) { return false; }
-static bool IsKeyPressed(int) { return false; }
-static int GetCharPressed() { return 0; }
-static int GetScreenWidth() { return 800; }
-static int GetScreenHeight() { return 600; }
+// NOTE(migration): MeasureText placeholder — will be replaced in Phase 3 (GLFont).
 static int MeasureText(const char*, int) { return 0; }
-static double GetTime() { return 0.0; }
 
 namespace ui {
 
@@ -120,9 +114,11 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
     (void)in;
 #endif
 
-    const rf::Vec2 mouse_pos = GetMousePosition();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-    const bool mouse_pressed = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    auto& rfInput = rf::Input::instance();
+
+    const rf::Vec2 mouse_pos = rfInput.getMousePosition();
+    const bool mouse_down = rfInput.isMouseButtonDown(MOUSE_LEFT_BUTTON);
+    const bool mouse_pressed = rfInput.isMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
     if (vm.game_screen == GameScreen::MainMenu) {
         // Main menu always captures input (cursor should be visible)
@@ -138,15 +134,15 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
         out.capture.wants_keyboard = true;
 
         // Handle text input for server address
-        int key = GetCharPressed();
+        int key = rfInput.getCharPressed();
         while (key > 0) {
             if ((key >= 32) && (key <= 125) && server_address_.length() < 64) {
                 server_address_ += static_cast<char>(key);
             }
-            key = GetCharPressed();
+            key = rfInput.getCharPressed();
         }
         
-        if (IsKeyPressed(KEY_BACKSPACE) && !server_address_.empty()) {
+        if (rfInput.isKeyPressed(KEY_BACKSPACE) && !server_address_.empty()) {
             server_address_.pop_back();
         }
         
@@ -156,7 +152,7 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
         }
         
         // Enter to connect
-        if (IsKeyPressed(KEY_ENTER)) {
+        if (rfInput.isKeyPressed(KEY_ENTER)) {
             handle_ui_click("connect_to_server");
         }
 

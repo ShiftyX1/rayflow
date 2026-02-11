@@ -13,6 +13,7 @@
 #include "engine/maps/rfmap_io.hpp"
 #include "engine/maps/runtime_paths.hpp"
 
+#include "engine/client/core/input.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/core/key_codes.hpp"
 #include "engine/core/logging.hpp"
@@ -21,11 +22,7 @@
 #include <cstdio>
 #include <cmath>
 
-// NOTE(migration): Phase 1 will provide InputFacade wrapping GLFW callbacks.
-static bool IsKeyPressed(int /*key*/) { return false; }
-static bool IsCursorHidden() { return false; }
-static void EnableCursor() {}
-static void DisableCursor() {}
+// NOTE(migration): GetFPS placeholder — will be replaced in Phase 2 (renderer frame stats).
 static int GetFPS() { return 0; }
 
 namespace bedwars {
@@ -60,7 +57,7 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
     
     // Start in main menu with cursor enabled
     gameScreen_ = ui::GameScreen::MainMenu;
-    EnableCursor();
+    rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
     
     engine_->log(engine::LogLevel::Info, "Starting in main menu");
 }
@@ -71,7 +68,7 @@ void BedWarsClient::on_shutdown() {
     playerSystem_.reset();
     registry_.clear();
     playerEntity_ = entt::null;
-    EnableCursor();
+    rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
 }
 
 // ============================================================================
@@ -85,9 +82,10 @@ void BedWarsClient::on_update(float dt) {
     // Process UI (F1 = debug UI, F2 = debug overlay, same as rayflow)
     ui::UIFrameInput uiInput;
     uiInput.dt = dt;
-    uiInput.toggle_pause = IsKeyPressed(KEY_ESCAPE);
-    uiInput.toggle_debug_ui = IsKeyPressed(KEY_F1);
-    uiInput.toggle_debug_overlay = IsKeyPressed(KEY_F2);
+    auto& rfInput = rf::Input::instance();
+    uiInput.toggle_pause = rfInput.isKeyPressed(KEY_ESCAPE);
+    uiInput.toggle_debug_ui = rfInput.isKeyPressed(KEY_F1);
+    uiInput.toggle_debug_overlay = rfInput.isKeyPressed(KEY_F2);
     
     ui::UIFrameOutput uiOutput = engine_->ui_manager().update(uiInput, uiViewModel_);
     uiCapturesInput_ = uiOutput.capture.captured();
@@ -98,18 +96,18 @@ void BedWarsClient::on_update(float dt) {
                             (sessionState_ == SessionState::InGame) && 
                             !uiCapturesInput_;
     if (shouldLockCursor) {
-        if (!IsCursorHidden()) {
-            DisableCursor();
+        if (!rfInput.isCursorHidden()) {
+            rfInput.setCursorMode(rf::CursorMode::Disabled);
         }
     } else {
-        if (IsCursorHidden()) {
-            EnableCursor();
+        if (rfInput.isCursorHidden()) {
+            rfInput.setCursorMode(rf::CursorMode::Normal);
         }
     }
     
 #ifdef NDEBUG
     // F3: Toggle BedWars-specific debug info (Release only)
-    if (IsKeyPressed(KEY_F3)) {
+    if (rfInput.isKeyPressed(KEY_F3)) {
         showDebug_ = !showDebug_;
     }
 #endif
@@ -550,7 +548,7 @@ void BedWarsClient::handle_join_ack(const proto::JoinAck& msg) {
     
     // Switch to playing mode
     gameScreen_ = ui::GameScreen::Playing;
-    DisableCursor();
+    rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
 }
 
 void BedWarsClient::handle_state_snapshot(const proto::StateSnapshot& msg) {
@@ -870,13 +868,13 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
         else if (std::get_if<ui::ResumeGame>(&cmd)) {
             if (sessionState_ == SessionState::InGame) {
                 gameScreen_ = ui::GameScreen::Playing;
-                DisableCursor();
+                rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
             }
         }
         else if (std::get_if<ui::OpenPauseMenu>(&cmd)) {
             if (sessionState_ == SessionState::InGame) {
                 gameScreen_ = ui::GameScreen::Paused;
-                EnableCursor();
+                rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
             }
         }
         else if (std::get_if<ui::ReturnToMainMenu>(&cmd)) {
@@ -885,7 +883,7 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
             }
             gameScreen_ = ui::GameScreen::MainMenu;
             sessionState_ = SessionState::Disconnected;
-            EnableCursor();
+            rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
         }
     }
 }

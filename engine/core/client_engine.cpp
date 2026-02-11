@@ -10,9 +10,14 @@
 #include "engine/renderer/skybox.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
 
+#include "engine/client/core/window.hpp"
+#include "engine/client/core/input.hpp"
+
 #include "engine/core/math_types.hpp"
 #include "engine/core/key_codes.hpp"
 #include "engine/core/logging.hpp"
+
+#include <glad/gl.h>
 
 #include <chrono>
 #include <cstdio>
@@ -210,26 +215,26 @@ void ClientEngine::log(LogLevel level, std::string_view msg) {
 // ============================================================================
 
 void ClientEngine::init_window() {
-    // TODO(Phase 1): Create GLFW window
-    // unsigned int flags = FLAG_WINDOW_RESIZABLE;
-    // if (config_.vsync) {
-    //     flags |= FLAG_VSYNC_HINT;
-    // }
-    // SetConfigFlags(flags);
-    //
-    // InitWindow(config_.windowWidth, config_.windowHeight, config_.windowTitle.c_str());
-    // SetExitKey(KEY_NULL);  // Don't exit on ESC
-    //
-    // // Set target FPS (works even with vsync as a fallback limiter)
-    // if (config_.targetFps > 0) {
-    //     SetTargetFPS(config_.targetFps);
-    // }
-    log(LogLevel::Info, "Window initialization stubbed (Phase 0)");
+    auto& win = rf::Window::instance();
+    if (!win.init(config_.windowWidth, config_.windowHeight, config_.windowTitle, config_.vsync)) {
+        log(LogLevel::Error, "Failed to create window");
+        running_ = false;
+        return;
+    }
+
+    // Initialize input system with the GLFW window
+    rf::Input::instance().init(win.handle());
+
+    // Set initial OpenGL state
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    log(LogLevel::Info, "Window initialized (GLFW + OpenGL)");
 }
 
 void ClientEngine::close_window() {
-    // TODO(Phase 1): glfwDestroyWindow / glfwTerminate
-    // CloseWindow();
+    rf::Window::instance().shutdown();
 }
 
 // ============================================================================
@@ -302,35 +307,39 @@ void ClientEngine::shutdown_subsystems() {
 // ============================================================================
 
 void ClientEngine::main_loop(IGameClient& game) {
-    auto lastFrameTime = std::chrono::steady_clock::now();
+    auto& win = rf::Window::instance();
+    auto& input = rf::Input::instance();
 
-    while (running_) {  // TODO(Phase 1): add glfwWindowShouldClose check
-        // Update frame delta time (chrono-based, replaces GetFrameTime)
-        auto now = std::chrono::steady_clock::now();
-        frameDt_ = std::chrono::duration<float>(now - lastFrameTime).count();
-        lastFrameTime = now;
-        
+    while (running_ && !win.shouldClose()) {
+        // Begin frame: snapshot previous input state, then poll new events
+        input.beginFrame();
+        win.pollEvents();
+
+        // Compute delta time via GLFW timer
+        frameDt_ = win.updateDeltaTime();
+
         // Poll network
         if (transport_) {
             transport_->poll(0);
         }
-        
+
         // Update game logic
         game.on_update(frameDt_);
-        
-        // TODO(Phase 1): Render via GLFW/OpenGL
-        // BeginDrawing();
-        // ClearBackground(rf::Color::Black());
-        
+
+        // --- Render frame ---
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
         game.on_render();
-        
-        // EndDrawing();
-        
-        // TODO(Phase 1): Handle window resize via GLFW callback
-        // if (IsWindowResized()) {
-        //     config_.windowWidth = GetScreenWidth();
-        //     config_.windowHeight = GetScreenHeight();
-        // }
+
+        win.swapBuffers();
+
+        // Handle window resize
+        if (win.isResized()) {
+            config_.windowWidth = win.width();
+            config_.windowHeight = win.height();
+            glViewport(0, 0, win.width(), win.height());
+        }
     }
 }
 

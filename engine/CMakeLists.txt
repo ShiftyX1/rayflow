@@ -97,7 +97,7 @@ if(WIN32)
 endif()
 
 # =============================================================================
-# Engine Client (with raylib - for graphical games)
+# Engine Client (GLFW + OpenGL — graphical games)
 # Base client without game-specific modules
 # =============================================================================
 add_library(engine_client STATIC
@@ -106,6 +106,8 @@ add_library(engine_client STATIC
     core/client_engine.cpp
     
     # Client core
+    client/core/window.cpp
+    client/core/input.cpp
     client/core/config.cpp
     client/core/logger.cpp
     client/core/resources.cpp
