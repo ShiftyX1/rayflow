@@ -3,6 +3,7 @@
 // =============================================================================
 // Game Interface - Engine <-> Game communication contracts
 // Defines IGameServer, IGameClient and engine service interfaces.
+// Engine is game-agnostic; modules like voxel are optional.
 // =============================================================================
 
 #include "types.hpp"
@@ -136,17 +137,18 @@ public:
 
     virtual void request_shutdown() = 0;
 
-    // --- Voxel World ---
+    // --- Voxel World (optional module) ---
     
-    /// Get the voxel world (engine owns it).
-    virtual voxel::World& world() = 0;
-    virtual const voxel::World& world() const = 0;
+    /// Get the voxel world. Returns nullptr if voxel module is not active.
+    virtual voxel::World* world() { return nullptr; }
+    virtual const voxel::World* world() const { return nullptr; }
     
-    /// Initialize/reset the world with a seed.
-    virtual void init_world(std::uint32_t seed) = 0;
+    /// Initialize/reset the voxel world with a seed.
+    /// Does nothing if voxel module is not available.
+    virtual void init_world(std::uint32_t seed) {}
     
-    /// Get block interaction system.
-    virtual voxel::BlockInteraction& block_interaction() = 0;
+    /// Get block interaction system. Returns nullptr if not available.
+    virtual voxel::BlockInteraction* block_interaction() { return nullptr; }
 
     // --- ECS ---
     

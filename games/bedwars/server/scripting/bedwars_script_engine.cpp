@@ -10,8 +10,24 @@ BedWarsScriptEngine::BedWarsScriptEngine() = default;
 BedWarsScriptEngine::~BedWarsScriptEngine() = default;
 
 bool BedWarsScriptEngine::init() {
-    // Use default map sandbox configuration
-    return ScriptEngineBase::init(engine::scripting::SandboxConfig::default_for_maps());
+    // Use game scripts sandbox configuration (more generous limits)
+    return ScriptEngineBase::init(engine::scripting::SandboxConfig::default_for_game_scripts());
+}
+
+bool BedWarsScriptEngine::init_game_scripts() {
+    auto result = load_game_scripts("scripts/server");
+    if (!result) {
+        if (log_callback()) {
+            log_callback()("[bedwars] Failed to load game scripts: " + result.error);
+        }
+        return false;
+    }
+    if (has_game_scripts()) {
+        if (log_callback()) {
+            log_callback()("[bedwars] Game scripts loaded from scripts/server/");
+        }
+    }
+    return true;
 }
 
 std::vector<ScriptCommand> BedWarsScriptEngine::take_commands() {

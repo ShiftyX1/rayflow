@@ -133,21 +133,15 @@ std::uint32_t ClientEngine::ping_ms() const {
 }
 
 // ============================================================================
-// IClientServices - World
+// IClientServices - World (optional voxel module)
 // ============================================================================
 
-voxel::World& ClientEngine::world() {
-    if (!world_) {
-        throw std::runtime_error("World not initialized - call init_world() first");
-    }
-    return *world_;
+voxel::World* ClientEngine::world() {
+    return world_.get();
 }
 
-const voxel::World& ClientEngine::world() const {
-    if (!world_) {
-        throw std::runtime_error("World not initialized - call init_world() first");
-    }
-    return *world_;
+const voxel::World* ClientEngine::world() const {
+    return world_.get();
 }
 
 void ClientEngine::init_world(std::uint32_t seed) {
@@ -163,14 +157,19 @@ void ClientEngine::init_world(std::uint32_t seed) {
     world_ = std::make_unique<voxel::World>(seed);
     world_->load_voxel_shader();
     
+    // Create block interaction if not yet created (lazy init)
+    if (!blockInteraction_) {
+        blockInteraction_ = std::make_unique<voxel::BlockInteraction>();
+        if (!blockInteraction_->init()) {
+            log(LogLevel::Error, "Failed to initialize block interaction");
+        }
+    }
+    
     log(LogLevel::Info, "World initialized");
 }
 
-voxel::BlockInteraction& ClientEngine::block_interaction() {
-    if (!blockInteraction_) {
-        throw std::runtime_error("BlockInteraction not initialized");
-    }
-    return *blockInteraction_;
+voxel::BlockInteraction* ClientEngine::block_interaction() {
+    return blockInteraction_.get();
 }
 
 // ============================================================================
@@ -252,24 +251,21 @@ void ClientEngine::init_subsystems() {
     core::Logger::instance().init(core::Config::instance().logging());
     log(LogLevel::Info, cfg_ok ? "Config loaded" : "Config not found, using defaults");
     
-    // Initialize block registry
+    // Voxel module: Initialize block registry and model loader eagerly
+    // (lightweight — just loads texture atlas and model defs)
     if (!voxel::BlockRegistry::instance().init("textures/terrain.png")) {
-        log(LogLevel::Error, "Failed to initialize block registry");
+        log(LogLevel::Warning, "Block registry not initialized (voxel textures may be missing)");
     }
     
-    // Initialize block model loader
     if (!voxel::BlockModelLoader::instance().init()) {
-        log(LogLevel::Warning, "Failed to initialize block model loader");
+        log(LogLevel::Warning, "Block model loader not initialized");
     }
     
     // Initialize skybox
     renderer::Skybox::instance().init();
     
-    // Initialize block interaction
-    blockInteraction_ = std::make_unique<voxel::BlockInteraction>();
-    if (!blockInteraction_->init()) {
-        log(LogLevel::Error, "Failed to initialize block interaction");
-    }
+    // Voxel: block interaction created lazily on init_world()
+    // (will be initialized when the game calls init_world())
     
     // Initialize UI (UIManager owns Dear ImGui lifecycle)
     uiManager_ = std::make_unique<ui::UIManager>();

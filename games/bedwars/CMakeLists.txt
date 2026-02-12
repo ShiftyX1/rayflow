@@ -72,6 +72,8 @@ target_link_libraries(bedwars_server_lib PUBLIC bedwars_shared engine_core)
 add_library(bedwars_client_lib STATIC
     client/bedwars_client.hpp
     client/bedwars_client.cpp
+    client/scripting/client_script_engine.hpp
+    client/scripting/client_script_engine.cpp
 )
 
 target_include_directories(bedwars_client_lib PUBLIC 
@@ -90,6 +92,13 @@ add_executable(bedwars_server
     app/server_main.cpp
 )
 target_link_libraries(bedwars_server PRIVATE bedwars_server_lib engine_core)
+
+# Server needs RAYFLOW_USE_PAK to decide how to initialize VFS
+if(ENGINE_USE_PAK)
+    target_compile_definitions(bedwars_server PRIVATE RAYFLOW_USE_PAK=1)
+else()
+    target_compile_definitions(bedwars_server PRIVATE RAYFLOW_USE_PAK=0)
+endif()
 
 set_target_properties(bedwars_server PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -141,6 +150,7 @@ set(BEDWARS_ASSET_DIRS
     ui
     models
     sounds
+    scripts
 )
 
 # In debug mode: copy loose files
@@ -201,18 +211,32 @@ if(ENGINE_USE_PAK)
         endif()
     endforeach()
     
-    # Pack assets after staging
+    # Pack assets after staging (excludes scripts — they go into scripts.pak)
     add_custom_target(bedwars_pack_assets_run
         DEPENDS bedwars_pack_assets bedwars_stage_assets
         COMMAND bedwars_pack_assets 
             --input "${BEDWARS_STAGING_DIR}"
             --output "${CMAKE_BINARY_DIR}/assets.pak"
+            --exclude "scripts"
             --verbose
         COMMENT "[BedWars] Packing assets into assets.pak"
     )
     
-    # Make client depend on packed assets
-    add_dependencies(bedwars bedwars_pack_assets_run)
+    # Pack scripts separately into scripts.pak
+    # This allows updating game logic without re-packing textures/models
+    set(BEDWARS_SCRIPTS_STAGING "${BEDWARS_STAGING_DIR}/scripts")
+    add_custom_target(bedwars_pack_scripts_run
+        DEPENDS bedwars_pack_assets bedwars_stage_assets
+        COMMAND bedwars_pack_assets
+            --input "${BEDWARS_SCRIPTS_STAGING}"
+            --output "${CMAKE_BINARY_DIR}/scripts.pak"
+            --prefix "scripts"
+            --verbose
+        COMMENT "[BedWars] Packing scripts into scripts.pak"
+    )
+    
+    # Make client depend on both packed assets
+    add_dependencies(bedwars bedwars_pack_assets_run bedwars_pack_scripts_run)
 endif()
 
 # =============================================================================
@@ -223,8 +247,12 @@ install(TARGETS bedwars bedwars_server
 )
 
 if(ENGINE_USE_PAK)
-    # Install PAK file
+    # Install PAK files
     install(FILES "${CMAKE_BINARY_DIR}/assets.pak"
+        DESTINATION bin
+        OPTIONAL
+    )
+    install(FILES "${CMAKE_BINARY_DIR}/scripts.pak"
         DESTINATION bin
         OPTIONAL
     )

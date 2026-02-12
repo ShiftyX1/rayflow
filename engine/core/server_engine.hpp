@@ -161,6 +161,7 @@ inline void ServerEngine::log(LogLevel level, std::string_view msg) {
     
     // Simple console logging
     std::printf("%s%.*s\n", prefix, static_cast<int>(msg.size()), msg.data());
+    std::fflush(stdout);
 }
 
 inline void ServerEngine::tick_loop(IGameServer& game) {

@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// ClientEngine - Full-featured voxel game client runner
+// ClientEngine - Game client runner with optional voxel module
 // Manages window, input, rendering, and runs IGameClient frame loop.
 // =============================================================================
 
@@ -34,7 +34,7 @@ namespace renderer {
 namespace engine {
 
 // ============================================================================
-// ClientEngine - Full-featured voxel game client engine
+// ClientEngine - Game client engine with optional voxel support
 // ============================================================================
 
 class ClientEngine : public IClientServices {
@@ -75,10 +75,10 @@ public:
     
     void request_shutdown() override { stop(); }
     
-    voxel::World& world() override;
-    const voxel::World& world() const override;
+    voxel::World* world() override;
+    const voxel::World* world() const override;
     void init_world(std::uint32_t seed) override;
-    voxel::BlockInteraction& block_interaction() override;
+    voxel::BlockInteraction* block_interaction() override;
     
     entt::registry& registry() override;
     

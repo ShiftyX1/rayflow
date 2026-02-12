@@ -40,10 +40,23 @@ public:
     // Initialize the engine with sandbox configuration
     bool init(const SandboxConfig& config = SandboxConfig::default_for_maps());
     
-    // Load scripts from MapScriptData
+    // Load scripts from MapScriptData (embedded in map files).
+    // Map scripts are layered on top of game scripts and unloaded on map change.
     ScriptResult load_map_scripts(const MapScriptData& scripts);
     
-    // Unload current scripts
+    // Load game-level scripts from VFS directory (e.g., "scripts/server").
+    // Game scripts persist across map changes. Reads main.lua + modules from VFS.
+    // Installs a custom VFS-based require() loader so scripts can use:
+    //   local utils = require("utils.math")
+    ScriptResult load_game_scripts(const std::string& vfsBasePath);
+    
+    // Check if game scripts are loaded
+    bool has_game_scripts() const { return gameScriptsLoaded_; }
+    
+    // Unload map scripts only (keeps game scripts alive)
+    void unload_map_scripts();
+    
+    // Unload all scripts (game + map)
     void unload();
     
     // Check if scripts are loaded
@@ -83,10 +96,13 @@ protected:
 
 private:
     void setup_base_api();
+    void install_vfs_require(const std::string& basePath);
     
     std::unique_ptr<LuaState> lua_;
     
     bool scriptsLoaded_{false};
+    bool gameScriptsLoaded_{false};
+    std::string gameScriptsBasePath_;
     std::string lastError_;
     
     std::vector<ScriptTimer> timers_;

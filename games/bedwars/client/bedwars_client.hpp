@@ -14,6 +14,11 @@
 
 #include "../shared/protocol/messages.hpp"
 
+// Forward declaration
+namespace bedwars::scripting {
+class ClientScriptEngine;
+}
+
 #include <entt/entt.hpp>
 #include "engine/core/math_types.hpp"
 
@@ -247,6 +252,9 @@ private:
     
     // Debug
     bool showDebug_{false};
+    
+    // Client script engine
+    std::unique_ptr<bedwars::scripting::ClientScriptEngine> clientScriptEngine_;
 };
 
 } // namespace bedwars

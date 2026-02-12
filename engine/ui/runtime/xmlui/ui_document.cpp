@@ -13,6 +13,7 @@
 #include "engine/renderer/batch_2d.hpp"
 #include "engine/renderer/gl_font.hpp"
 #include "engine/ui/scripting/ui_script_engine.hpp"
+#include "engine/vfs/vfs.hpp"
 
 namespace ui::xmlui {
 
@@ -790,25 +791,48 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
 }
 
 void UIDocument::parse_script_element(tinyxml2::XMLElement* el) {
-    // Get inline script content
+    // Create script engine if not exists
+    auto ensure_script_engine = [&]() -> bool {
+        if (!scriptEngine_) {
+            scriptEngine_ = std::make_unique<scripting::UIScriptEngine>();
+            if (!scriptEngine_->init()) {
+                TraceLog(LOG_ERROR, "[ui] Failed to initialize UI script engine");
+                scriptEngine_.reset();
+                return false;
+            }
+            if (scriptLogCallback_) {
+                scriptEngine_->set_log_callback(scriptLogCallback_);
+            }
+        }
+        return true;
+    };
+    
+    // Check for src attribute: <Script src="scripts/client/ui/button_logic.lua"/>
+    const char* srcAttr = el->Attribute("src");
+    if (srcAttr && std::string(srcAttr).length() > 0) {
+        // Load external script from VFS
+        auto content = engine::vfs::read_text_file(srcAttr);
+        if (!content) {
+            TraceLog(LOG_ERROR, "[ui] Script src not found: %s", srcAttr);
+            return;
+        }
+        
+        if (!ensure_script_engine()) return;
+        
+        auto result = scriptEngine_->load_script(*content, srcAttr);
+        if (!result) {
+            TraceLog(LOG_ERROR, "[ui] Failed to load UI script '%s': %s", srcAttr, result.error.c_str());
+        }
+        return;
+    }
+    
+    // Fall back to inline script content: <Script>...code...</Script>
     const char* text = el->GetText();
     if (!text || std::string(text).empty()) {
         return;
     }
     
-    // Create script engine if not exists
-    if (!scriptEngine_) {
-        scriptEngine_ = std::make_unique<scripting::UIScriptEngine>();
-        if (!scriptEngine_->init()) {
-            TraceLog(LOG_ERROR, "[ui] Failed to initialize UI script engine");
-            scriptEngine_.reset();
-            return;
-        }
-        
-        if (scriptLogCallback_) {
-            scriptEngine_->set_log_callback(scriptLogCallback_);
-        }
-    }
+    if (!ensure_script_engine()) return;
     
     // Load the script
     auto result = scriptEngine_->load_script(text, "inline_script");

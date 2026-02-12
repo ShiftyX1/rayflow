@@ -3,6 +3,7 @@
 #include <engine/core/game_interface.hpp>
 #include "../shared/protocol/messages.hpp"
 #include "physics_utils.hpp"
+#include "scripting/bedwars_script_engine.hpp"
 
 // Use shared voxel types from engine
 #include <engine/modules/voxel/shared/block.hpp>
@@ -262,6 +263,9 @@ private:
     std::uint32_t mapVersion_{0};
     float mapCenterX_{0.0f};
     float mapCenterZ_{0.0f};
+    
+    // Scripting engine (game scripts + map scripts)
+    std::unique_ptr<bedwars::scripting::BedWarsScriptEngine> scriptEngine_;
     
     // Track modified blocks (for sending delta to new clients)
     struct ModifiedBlock {

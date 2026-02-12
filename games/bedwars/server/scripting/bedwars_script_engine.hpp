@@ -37,14 +37,21 @@ struct ScriptCommand {
 class BedWarsAPI;
 
 // BedWars-specific script engine
-// Inherits from engine's base and adds BedWars game API
+// Inherits from engine's base and adds BedWars game API.
+// Supports two layers of scripts:
+//   1. Game scripts (scripts/server/) — persistent, loaded once
+//   2. Map scripts (embedded in .rfmap) — loaded/unloaded per map
 class BedWarsScriptEngine : public engine::scripting::ScriptEngineBase {
 public:
     BedWarsScriptEngine();
     ~BedWarsScriptEngine() override;
     
-    // Initialize with default BedWars configuration
+    // Initialize with BedWars sandbox configuration
     bool init();
+    
+    // Load game-level scripts from VFS (scripts/server/)
+    // Call this once after init(), before loading any map scripts.
+    bool init_game_scripts();
     
     // Get and clear pending commands
     std::vector<ScriptCommand> take_commands();

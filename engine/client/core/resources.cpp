@@ -70,6 +70,11 @@ void init() {
     } else {
         TraceLog(LOG_INFO, "[resources] Mounted assets.pak (Release mode)");
     }
+    
+    // Mount scripts.pak (separate archive for game scripts, allows independent updates)
+    if (engine::vfs::mount("scripts.pak", "/")) {
+        TraceLog(LOG_INFO, "[resources] Mounted scripts.pak");
+    }
 #else
     engine::vfs::init(gameDir, engine::vfs::InitFlags::LooseOnly);
     TraceLog(LOG_INFO, "[resources] Using loose files (Debug mode)");
