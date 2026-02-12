@@ -49,3 +49,9 @@ function on_game_init()
     log("[game scripts] Server game scripts initialized")
     test_function()
 end
+
+function on_player_join(playerId)
+    local pos = player.get_position(playerId)
+    log("[game scripts] Player joined: " .. playerId .. " at position (" .. pos.x .. ", " .. pos.y .. ", " .. pos.z .. ")")
+    game.send_message(playerId, "Welcome to BedWars, player " .. playerId .. "!")
+end

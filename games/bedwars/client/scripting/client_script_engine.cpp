@@ -1,5 +1,7 @@
 #include "client_script_engine.hpp"
 
+#include <engine/core/scripting/api/utils.hpp>
+
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
@@ -32,28 +34,15 @@ bool ClientScriptEngine::init_game_scripts() {
 void ClientScriptEngine::register_game_api(engine::scripting::LuaState& lua) {
     auto& state = lua.state();
     
-    // Client log function — uses the log callback set by BedWarsClient
-    state["log"] = [this](sol::variadic_args va, sol::this_state ts) {
-        sol::state_view L(ts);
-        std::ostringstream oss;
-        bool first = true;
-        for (auto v : va) {
-            if (!first) oss << "\t";
-            first = false;
-            sol::protected_function tostring = L["tostring"];
-            if (tostring.valid()) {
-                auto r = tostring(v);
-                if (r.valid()) {
-                    oss << r.get<std::string>();
-                }
-            }
-        }
+    // Client log function — uses the shared lua_args_to_string utility
+    auto logFn = [this](sol::variadic_args va, sol::this_state ts) {
         if (log_callback()) {
-            log_callback()("[script] " + oss.str());
+            log_callback()("[script] " + engine::scripting::api::lua_args_to_string(va, ts));
         }
     };
     
-    state["print"] = state["log"];
+    state["log"] = logFn;
+    state["print"] = logFn;
 }
 
 void ClientScriptEngine::register_constants(engine::scripting::LuaState& /*lua*/) {

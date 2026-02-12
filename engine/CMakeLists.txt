@@ -28,11 +28,25 @@ add_library(engine_core STATIC
     core/scripting/scripting.hpp
     core/scripting/lua_state.hpp
     core/scripting/lua_state.cpp
+    core/scripting/lua_state_call.hpp
     core/scripting/sandbox.hpp
     core/scripting/sandbox.cpp
     core/scripting/script_types.hpp
     core/scripting/script_engine_base.hpp
     core/scripting/script_engine_base.cpp
+    core/scripting/script_api_module.hpp
+    
+    # Scripting API modules (generic, game-agnostic)
+    core/scripting/api/utils.hpp
+    core/scripting/api/utils.cpp
+    core/scripting/api/engine_api.hpp
+    core/scripting/api/engine_api.cpp
+    core/scripting/api/math_api.hpp
+    core/scripting/api/math_api.cpp
+    core/scripting/api/timer_api.hpp
+    core/scripting/api/timer_api.cpp
+    core/scripting/api/events_api.hpp
+    core/scripting/api/events_api.cpp
     
     # VFS (Virtual File System)
     vfs/pak_format.hpp

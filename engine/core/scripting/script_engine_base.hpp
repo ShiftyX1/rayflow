@@ -8,11 +8,13 @@
 #include "lua_state.hpp"
 #include "sandbox.hpp"
 #include "script_types.hpp"
+#include "script_api_module.hpp"
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 namespace engine::scripting {
 
@@ -75,6 +77,48 @@ public:
     // Set logging callback for script print() calls
     void set_log_callback(std::function<void(const std::string&)> callback);
 
+    // --- Modular API registration ---
+
+    /// Register an API module by namespace name + registrar function.
+    /// This is the primary way for games to add Lua API.
+    void register_api_module(const std::string& namespaceName,
+                             std::function<void(sol::state&, sol::table&)> registrar);
+    
+    /// Register a ScriptAPIModule instance (alternative OOP approach).
+    /// The module is owned by the caller — must outlive the engine.
+    void register_api_module(ScriptAPIModule& module);
+    
+    /// Check if a module with the given namespace name is registered.
+    bool has_api_module(const std::string& name) const;
+    
+    /// List all registered module namespace names.
+    std::vector<std::string> list_api_modules() const;
+
+    // --- Mod loading ---
+    
+    /// Mod metadata parsed from mod.lua manifest.
+    struct ModInfo {
+        std::string name;
+        std::string version;
+        std::string author;
+        std::string path;       // VFS path
+        bool loaded{false};
+    };
+
+    /// Load a mod from a VFS directory. Expects modPath/mod.lua with manifest table.
+    /// The mod runs in its own environment with access only to registered API.
+    /// @param modPath VFS directory path (e.g. "mods/my_mod")
+    /// @param allowedModules Optional whitelist of API module names the mod can access.
+    ///                       Empty = all registered modules are accessible.
+    ScriptResult load_mod(const std::string& modPath,
+                          const std::vector<std::string>& allowedModules = {});
+    
+    /// Unload a mod by name.
+    void unload_mod(const std::string& modName);
+    
+    /// List currently loaded mods.
+    std::vector<ModInfo> list_mods() const;
+
 protected:
     // Override this to register game-specific API
     // Called after engine initialization
@@ -86,17 +130,22 @@ protected:
     // Call a Lua hook/callback by name (no args)
     void call_hook(const char* hookName);
     
-    // Timer management (can be exposed via API in derived class)
+    // Access for derived classes
+    std::function<void(const std::string&)>& log_callback() { return logCallback_; }
+
+public:
+    // Timer management — public so that api::register_timer_api() can access them.
+    // Also usable by derived classes directly.
     void add_timer(const std::string& name, double delaySec, 
                    double intervalSec, const std::string& callback);
     void cancel_timer(const std::string& name);
-    
-    // Access for derived classes
-    std::function<void(const std::string&)>& log_callback() { return logCallback_; }
 
 private:
     void setup_base_api();
     void install_vfs_require(const std::string& basePath);
+    void apply_registered_modules();
+    void create_map_environment();
+    void destroy_map_environment();
     
     std::unique_ptr<LuaState> lua_;
     
@@ -106,8 +155,24 @@ private:
     std::string lastError_;
     
     std::vector<ScriptTimer> timers_;
+    float currentDeltaTime_{0.0f};
     
     std::function<void(const std::string&)> logCallback_;
+    
+    // Opaque pointer to sol::environment for map script isolation.
+    // Map scripts run inside this environment; destroying it cleanly
+    // unloads all map-scope globals while keeping game scripts intact.
+    void* mapEnvironment_{nullptr};
+    
+    // Registered API modules (replayed on state reset)
+    struct RegisteredModule {
+        std::string name;
+        std::function<void(sol::state&, sol::table&)> registrar;
+    };
+    std::vector<RegisteredModule> registeredModules_;
+    
+    // Loaded mods
+    std::vector<ModInfo> loadedMods_;
 };
 
 } // namespace engine::scripting

@@ -6,14 +6,13 @@
 #include <functional>
 #include <optional>
 #include <vector>
+#include <utility>
 
 // Forward declare sol types to avoid header pollution
 struct lua_State;
 
-namespace sol {
-class state;
-struct protected_function_result;  // sol2 declares this as struct
-}
+#define SOL_ALL_SAFETIES_ON 1
+#include <sol/forward.hpp>
 
 namespace engine::scripting {
 
@@ -62,14 +61,12 @@ public:
     // Load a script without executing (for syntax checking)
     ScriptResult load(const std::string& script, const std::string& chunkName = "script");
     
-    // Call a global function by name (various overloads)
+    // Call a global function by name (no arguments)
     ScriptResult call(const std::string& funcName);
-    ScriptResult call(const std::string& funcName, int arg1);
-    ScriptResult call(const std::string& funcName, float arg1);
-    ScriptResult call(const std::string& funcName, const std::string& arg1);
-    ScriptResult call(const std::string& funcName, std::uint32_t arg1);
-    ScriptResult call(const std::string& funcName, std::uint32_t arg1, int arg2, int arg3, int arg4);
-    ScriptResult call(const std::string& funcName, std::uint32_t arg1, int arg2, int arg3, int arg4, int arg5);
+    
+    // Call a global function with arguments — defined in lua_state_call.hpp
+    template<typename... Args>
+    ScriptResult call(const std::string& funcName, Args&&... args);
     
     // Check if a global function exists
     bool has_function(const std::string& funcName) const;
@@ -100,6 +97,9 @@ public:
     
     // Reset the state (clear all globals, keep sandbox)
     void reset();
+    
+    // Reset the execution limiter (must be called before each script entry point)
+    void reset_limiter();
 
 private:
     struct Impl;

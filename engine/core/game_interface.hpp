@@ -27,6 +27,10 @@ namespace ui {
     struct UIFrameOutput;
 }
 
+namespace engine::scripting {
+    class ScriptEngineBase;
+}
+
 namespace engine {
 
 // ============================================================================
@@ -67,6 +71,13 @@ public:
     void log_info(std::string_view msg) { log(LogLevel::Info, msg); }
     void log_warning(std::string_view msg) { log(LogLevel::Warning, msg); }
     void log_error(std::string_view msg) { log(LogLevel::Error, msg); }
+
+    // --- Scripting ---
+    
+    /// Get the script engine (if any). Returns nullptr if scripting is not active.
+    /// Allows engine-level tools (dev console, hot reload) to interact with scripts
+    /// without knowing the concrete game type.
+    virtual scripting::ScriptEngineBase* script_engine() { return nullptr; }
 };
 
 // ============================================================================
@@ -168,6 +179,11 @@ public:
     void log_info(std::string_view msg) { log(LogLevel::Info, msg); }
     void log_warning(std::string_view msg) { log(LogLevel::Warning, msg); }
     void log_error(std::string_view msg) { log(LogLevel::Error, msg); }
+
+    // --- Scripting ---
+    
+    /// Get the client script engine (if any). Returns nullptr if scripting is not active.
+    virtual scripting::ScriptEngineBase* script_engine() { return nullptr; }
 };
 
 // ============================================================================
