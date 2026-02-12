@@ -329,12 +329,3 @@ function(rayflow_link_lua TARGET_NAME)
     add_dependencies(${TARGET_NAME} luajit_external)
 endfunction()
 
-# -----------------------------------------------------------------------------
-# raylib — REMOVED (migration/glfw-opengl)
-# The engine now uses GLFW + raw OpenGL instead of raylib.
-# The following helper is kept as a no-op for any stray call sites during migration.
-# -----------------------------------------------------------------------------
-function(rayflow_link_raylib TARGET_NAME)
-    message(WARNING "rayflow_link_raylib(${TARGET_NAME}) called but raylib has been removed. "
-                    "Link against glfw, glad, glm, stb_headers, imgui instead.")
-endfunction()

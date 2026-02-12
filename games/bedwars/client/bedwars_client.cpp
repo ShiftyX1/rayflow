@@ -198,17 +198,11 @@ void BedWarsClient::on_update(float dt) {
                     // Check for pending block operations
                     if (auto breakReq = blockInteraction.consume_break_request()) {
                         send_try_break_block(breakReq->x, breakReq->y, breakReq->z);
-                        // Client-side prediction: remove block immediately
-                        world.set_block(breakReq->x, breakReq->y, breakReq->z,
-                                        static_cast<voxel::Block>(shared::voxel::BlockType::Air));
                     }
                     if (auto placeReq = blockInteraction.consume_place_request()) {
                         send_try_place_block(placeReq->x, placeReq->y, placeReq->z,
                                              static_cast<proto::BlockType>(placeReq->block_type),
                                              placeReq->hitY, placeReq->face);
-                        // Client-side prediction: place block immediately
-                        world.set_block(placeReq->x, placeReq->y, placeReq->z,
-                                        static_cast<voxel::Block>(placeReq->block_type));
                     }
                 }
             } catch (const std::runtime_error&) {

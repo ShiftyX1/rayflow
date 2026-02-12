@@ -3,7 +3,7 @@
 [![Build](https://github.com/ShiftyX1/rayflow/actions/workflows/build.yml/badge.svg)](https://github.com/ShiftyX1/rayflow/actions/workflows/build.yml)
 [![Tests](https://github.com/ShiftyX1/rayflow/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiftyX1/rayflow/actions/workflows/tests.yml)
 
-Rayflow это внутренний инструмент команды Pulse Studio для разработки игр с использованием Raylib. Он предоставляет удобную среду для создания, тестирования и отладки игр, а также интеграцию с различными инструментами разработки.
+Rayflow — внутренний игровой движок команды Pulse Studio. Построен на GLFW (окно/ввод) + OpenGL 4.x (рендеринг) + glm (математика). Предоставляет ECS-архитектуру, воксельный рендерер, сетевой мультиплеер (клиент-сервер), UI-фреймворк и редактор карт.
 
 ## Статус проекта
 
@@ -17,85 +17,20 @@ Rayflow это внутренний инструмент команды Pulse St
 
 ## Зависимости
 
-Проект использует следующие библиотеки:
+Все зависимости загружаются автоматически через CMake FetchContent — проект собирается на чистой системе без предустановки.
 
 | Библиотека | Версия | Описание |
 |------------|--------|----------|
-| [raylib](https://www.raylib.com/) | 5.5 | Графическая библиотека |
+| [GLFW](https://www.glfw.org/) | 3.4 | Окно, ввод, контекст OpenGL |
+| [glad](https://github.com/Dav1dde/glad) | — | OpenGL 4.1 core loader |
+| [glm](https://github.com/g-truc/glm) | 1.0.1 | Математика (vec, mat, quat) |
+| [stb](https://github.com/nothings/stb) | — | Загрузка изображений и шрифтов |
+| [Dear ImGui](https://github.com/ocornut/imgui) | 1.91.8 | Debug UI |
 | [EnTT](https://github.com/skypjack/entt) | 3.13.2 | Entity Component System |
 | [tinyxml2](https://github.com/leethomason/tinyxml2) | 10.0.0 | XML парсер |
-
-### Автоматическая загрузка зависимостей
-
-EnTT и tinyxml2 загружаются автоматически через CMake FetchContent.
-
-raylib ищется в следующем порядке:
-1. Через `find_package(raylib)` (если установлен системный пакет)
-2. Через поиск в стандартных путях установки
-3. **Автоматическая загрузка через FetchContent** (если не найден)
-
-Это означает, что проект соберётся на чистой системе без предустановленного raylib.
-
-### Установка raylib (опционально, ускоряет сборку)
-
-<details>
-<summary><b>macOS (Homebrew)</b></summary>
-
-```bash
-brew install raylib
-```
-</details>
-
-<details>
-<summary><b>Ubuntu / Debian</b></summary>
-
-```bash
-sudo apt install libraylib-dev
-```
-
-Если пакет недоступен или устаревший:
-```bash
-# Сборка произойдёт автоматически через FetchContent
-```
-</details>
-
-<details>
-<summary><b>Arch Linux</b></summary>
-
-```bash
-sudo pacman -S raylib
-# или из AUR:
-yay -S raylib
-```
-</details>
-
-<details>
-<summary><b>Fedora</b></summary>
-
-```bash
-sudo dnf install raylib-devel
-```
-</details>
-
-<details>
-<summary><b>Windows (MSYS2)</b></summary>
-
-```bash
-# UCRT64 (рекомендуется)
-pacman -S mingw-w64-ucrt-x86_64-raylib
-
-# или MinGW64
-pacman -S mingw-w64-x86_64-raylib
-```
-</details>
-
-### Принудительная загрузка raylib
-
-Если хотите использовать FetchContent вместо системного raylib:
-
-```bash
-cmake --preset debug -DRAYFLOW_FETCH_RAYLIB=ON
-```
+| [ENet](https://github.com/lsalzman/enet) | 1.3.18 | Сетевой транспорт (UDP) |
+| [LuaJIT](https://luajit.org/) | 2.1 | Скриптинг |
+| [sol2](https://github.com/ThePhD/sol2) | — | C++ биндинги для Lua |
 
 ## Сборка
 
