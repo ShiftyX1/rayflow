@@ -1,6 +1,8 @@
 #include "bedwars_script_engine.hpp"
 #include "bedwars_api.hpp"
 
+#include <engine/core/scripting/lua_state_call.hpp>
+
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
@@ -10,8 +12,24 @@ BedWarsScriptEngine::BedWarsScriptEngine() = default;
 BedWarsScriptEngine::~BedWarsScriptEngine() = default;
 
 bool BedWarsScriptEngine::init() {
-    // Use default map sandbox configuration
-    return ScriptEngineBase::init(engine::scripting::SandboxConfig::default_for_maps());
+    // Use game scripts sandbox configuration (more generous limits)
+    return ScriptEngineBase::init(engine::scripting::SandboxConfig::default_for_game_scripts());
+}
+
+bool BedWarsScriptEngine::init_game_scripts() {
+    auto result = load_game_scripts("scripts/server");
+    if (!result) {
+        if (log_callback()) {
+            log_callback()("[bedwars] Failed to load game scripts: " + result.error);
+        }
+        return false;
+    }
+    if (has_game_scripts()) {
+        if (log_callback()) {
+            log_callback()("[bedwars] Game scripts loaded from scripts/server/");
+        }
+    }
+    return true;
 }
 
 std::vector<ScriptCommand> BedWarsScriptEngine::take_commands() {
@@ -61,7 +79,10 @@ void BedWarsScriptEngine::on_player_spawn(std::uint32_t playerId, float x, float
     if (!has_scripts() || !lua_state()) return;
     
     if (lua_state()->has_function("on_player_spawn")) {
-        lua_state()->state()["on_player_spawn"](playerId, x, y, z);
+        auto result = lua_state()->call("on_player_spawn", playerId, x, y, z);
+        if (!result && log_callback()) {
+            log_callback()("[script error] on_player_spawn: " + result.error);
+        }
     }
 }
 
@@ -69,7 +90,10 @@ void BedWarsScriptEngine::on_player_death(std::uint32_t playerId, std::uint32_t 
     if (!has_scripts() || !lua_state()) return;
     
     if (lua_state()->has_function("on_player_death")) {
-        lua_state()->state()["on_player_death"](playerId, killerId);
+        auto result = lua_state()->call("on_player_death", playerId, killerId);
+        if (!result && log_callback()) {
+            log_callback()("[script error] on_player_death: " + result.error);
+        }
     }
 }
 
@@ -136,7 +160,10 @@ void BedWarsScriptEngine::on_custom_event(const std::string& eventName, const st
     if (!has_scripts() || !lua_state()) return;
     
     if (lua_state()->has_function("on_custom")) {
-        lua_state()->state()["on_custom"](eventName, data);
+        auto result = lua_state()->call("on_custom", eventName, data);
+        if (!result && log_callback()) {
+            log_callback()("[script error] on_custom: " + result.error);
+        }
     }
 }
 

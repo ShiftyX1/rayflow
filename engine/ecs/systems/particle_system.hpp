@@ -22,7 +22,8 @@
 #include "../components/common.hpp"
 #include "../components/rendering.hpp"
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/renderer/batch_2d.hpp"
 #include <cmath>
 #include <random>
 
@@ -213,11 +214,12 @@ private:
     }
     
     void render_emitter(const ParticleEmitter& emitter) {
+        auto& batch = rf::Batch2D::instance();
         for (int i = 0; i < ParticleEmitter::kMaxParticles; ++i) {
             const auto& p = emitter.particles[i];
             if (!p.active) continue;
             
-            DrawCircleV({p.x, p.y}, p.size, p.color);
+            batch.drawCircle(p.x, p.y, p.size, p.color);
         }
     }
     
@@ -243,15 +245,18 @@ private:
     void render_trail(const TrailEffect& trail) {
         if (trail.point_count < 2) return;
         
+        auto& batch = rf::Batch2D::instance();
         for (int i = 0; i < trail.point_count - 1; ++i) {
             int idx1 = (trail.head - trail.point_count + i + TrailEffect::kMaxPoints) % TrailEffect::kMaxPoints;
             int idx2 = (idx1 + 1) % TrailEffect::kMaxPoints;
             
             float t = static_cast<float>(i) / static_cast<float>(trail.point_count - 1);
             float width = lerp(trail.width_end, trail.width_start, t);
-            Color color = lerp_color(trail.color_end, trail.color_start, t);
+            rf::Color color = lerp_color(trail.color_end, trail.color_start, t);
             
-            DrawLineEx(trail.points[idx1], trail.points[idx2], width, color);
+            batch.drawLine(trail.points[idx1].x, trail.points[idx1].y,
+                           trail.points[idx2].x, trail.points[idx2].y,
+                           width, color);
         }
     }
     
@@ -264,12 +269,12 @@ private:
         return a + (b - a) * t;
     }
     
-    static Color lerp_color(Color a, Color b, float t) {
+    static rf::Color lerp_color(rf::Color a, rf::Color b, float t) {
         return {
-            static_cast<unsigned char>(a.r + (b.r - a.r) * t),
-            static_cast<unsigned char>(a.g + (b.g - a.g) * t),
-            static_cast<unsigned char>(a.b + (b.b - a.b) * t),
-            static_cast<unsigned char>(a.a + (b.a - a.a) * t)
+            static_cast<uint8_t>(a.r + (b.r - a.r) * t),
+            static_cast<uint8_t>(a.g + (b.g - a.g) * t),
+            static_cast<uint8_t>(a.b + (b.b - a.b) * t),
+            static_cast<uint8_t>(a.a + (b.a - a.a) * t)
         };
     }
 };

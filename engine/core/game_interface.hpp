@@ -3,6 +3,7 @@
 // =============================================================================
 // Game Interface - Engine <-> Game communication contracts
 // Defines IGameServer, IGameClient and engine service interfaces.
+// Engine is game-agnostic; modules like voxel are optional.
 // =============================================================================
 
 #include "types.hpp"
@@ -24,6 +25,10 @@ namespace ui {
     struct UIViewModel;
     struct UIFrameInput;
     struct UIFrameOutput;
+}
+
+namespace engine::scripting {
+    class ScriptEngineBase;
 }
 
 namespace engine {
@@ -66,6 +71,13 @@ public:
     void log_info(std::string_view msg) { log(LogLevel::Info, msg); }
     void log_warning(std::string_view msg) { log(LogLevel::Warning, msg); }
     void log_error(std::string_view msg) { log(LogLevel::Error, msg); }
+
+    // --- Scripting ---
+    
+    /// Get the script engine (if any). Returns nullptr if scripting is not active.
+    /// Allows engine-level tools (dev console, hot reload) to interact with scripts
+    /// without knowing the concrete game type.
+    virtual scripting::ScriptEngineBase* script_engine() { return nullptr; }
 };
 
 // ============================================================================
@@ -136,17 +148,18 @@ public:
 
     virtual void request_shutdown() = 0;
 
-    // --- Voxel World ---
+    // --- Voxel World (optional module) ---
     
-    /// Get the voxel world (engine owns it).
-    virtual voxel::World& world() = 0;
-    virtual const voxel::World& world() const = 0;
+    /// Get the voxel world. Returns nullptr if voxel module is not active.
+    virtual voxel::World* world() { return nullptr; }
+    virtual const voxel::World* world() const { return nullptr; }
     
-    /// Initialize/reset the world with a seed.
-    virtual void init_world(std::uint32_t seed) = 0;
+    /// Initialize/reset the voxel world with a seed.
+    /// Does nothing if voxel module is not available.
+    virtual void init_world(std::uint32_t seed) {}
     
-    /// Get block interaction system.
-    virtual voxel::BlockInteraction& block_interaction() = 0;
+    /// Get block interaction system. Returns nullptr if not available.
+    virtual voxel::BlockInteraction* block_interaction() { return nullptr; }
 
     // --- ECS ---
     
@@ -166,6 +179,11 @@ public:
     void log_info(std::string_view msg) { log(LogLevel::Info, msg); }
     void log_warning(std::string_view msg) { log(LogLevel::Warning, msg); }
     void log_error(std::string_view msg) { log(LogLevel::Error, msg); }
+
+    // --- Scripting ---
+    
+    /// Get the client script engine (if any). Returns nullptr if scripting is not active.
+    virtual scripting::ScriptEngineBase* script_engine() { return nullptr; }
 };
 
 // ============================================================================

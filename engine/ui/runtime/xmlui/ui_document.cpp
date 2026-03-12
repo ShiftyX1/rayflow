@@ -3,11 +3,17 @@
 #include <algorithm>
 #include <cstdio>
 
+#include <glad/gl.h>
 #include <tinyxml2.h>
 
 #include "../ui_view_model.hpp"
 #include "engine/client/core/resources.hpp"
+#include "engine/core/logging.hpp"
+#include "engine/core/math_types.hpp"
+#include "engine/renderer/batch_2d.hpp"
+#include "engine/renderer/gl_font.hpp"
 #include "engine/ui/scripting/ui_script_engine.hpp"
+#include "engine/vfs/vfs.hpp"
 
 namespace ui::xmlui {
 
@@ -19,7 +25,7 @@ static std::string read_file_to_string(const char* path) {
     return resources::load_text(path);
 }
 
-static Rectangle anchor_rect(const UIStyle& style, int content_w, int content_h, int screen_w, int screen_h) {
+static rf::Rect anchor_rect(const UIStyle& style, int content_w, int content_h, int screen_w, int screen_h) {
     const int mL = style.margin.left;
     const int mT = style.margin.top;
     const int mR = style.margin.right;
@@ -67,15 +73,15 @@ static Rectangle anchor_rect(const UIStyle& style, int content_w, int content_h,
             break;
     }
 
-    return Rectangle{static_cast<float>(x), static_cast<float>(y), static_cast<float>(content_w), static_cast<float>(content_h)};
+    return rf::Rect{static_cast<float>(x), static_cast<float>(y), static_cast<float>(content_w), static_cast<float>(content_h)};
 }
 
-static Color to_raylib_color(const UIColor& c) {
-    return Color{c.r, c.g, c.b, c.a};
+static rf::Color to_rf_color(const UIColor& c) {
+    return rf::Color{c.r, c.g, c.b, c.a};
 }
 
-static Color apply_opacity(const UIColor& c, float opacity) {
-    return Color{
+static rf::Color apply_opacity(const UIColor& c, float opacity) {
+    return rf::Color{
         c.r,
         c.g,
         c.b,
@@ -83,7 +89,7 @@ static Color apply_opacity(const UIColor& c, float opacity) {
     };
 }
 
-static void draw_box_shadow(const Rectangle& r, const UIStyle& style) {
+static void draw_box_shadow(const rf::Rect& r, const UIStyle& style) {
     if (!style.has_shadow) return;
     
     const float blur = static_cast<float>(style.shadow_blur);
@@ -95,26 +101,27 @@ static void draw_box_shadow(const Rectangle& r, const UIStyle& style) {
         const float alpha = (1.0f - (static_cast<float>(i) / layers)) * (style.shadow_color.a / 255.0f);
         const float spread = (static_cast<float>(i) / layers) * blur;
         
-        Rectangle shadowRect = {
+        rf::Rect shadowRect = {
             r.x + offsetX - spread,
             r.y + offsetY - spread,
-            r.width + spread * 2,
-            r.height + spread * 2
+            r.w + spread * 2,
+            r.h + spread * 2
         };
         
-        Color shadowColor = {
+        rf::Color shadowColor = {
             style.shadow_color.r,
             style.shadow_color.g,
             style.shadow_color.b,
             static_cast<unsigned char>(alpha * 255)
         };
         
+        auto& batch = rf::Batch2D::instance();
         if (style.border_radius > 0) {
-            DrawRectangleRounded(shadowRect, 
-                static_cast<float>(style.border_radius) / std::min(r.width, r.height), 
+            batch.drawRectRounded(shadowRect.x, shadowRect.y, shadowRect.w, shadowRect.h,
+                static_cast<float>(style.border_radius) / std::min(shadowRect.w, shadowRect.h),
                 8, shadowColor);
         } else {
-            DrawRectangleRec(shadowRect, shadowColor);
+            batch.drawRect(shadowRect.x, shadowRect.y, shadowRect.w, shadowRect.h, shadowColor);
         }
     }
 }
@@ -218,45 +225,50 @@ void UIDocument::unload() {
     }
 
     for (auto& [_, ref] : texture_cache_) {
-        if (ref.tex.id != 0) {
-            UnloadTexture(ref.tex);
-        }
+        ref.tex.destroy();
     }
     texture_cache_.clear();
 
     for (auto& [_, font] : font_cache_) {
-        if (font.texture.id != 0) {
-            UnloadFont(font);
-        }
+        font.reset();
     }
     font_cache_.clear();
 }
 
-Texture2D UIDocument::load_texture_cached(const std::string& path) {
+GLuint UIDocument::load_texture_cached(const std::string& path) {
     if (path.empty()) {
-        return Texture2D{};
+        return 0;
     }
     auto it = texture_cache_.find(path);
     if (it != texture_cache_.end()) {
-        return it->second.tex;
+        return it->second.tex.id();
     }
 
     TextureRef ref;
     ref.tex = resources::load_texture(path);
-    texture_cache_.emplace(path, ref);
-    return ref.tex;
+    GLuint id = ref.tex.id();
+    texture_cache_.emplace(path, std::move(ref));
+    return id;
 }
 
-Font UIDocument::load_font_cached(int size) {
+rf::GLFont* UIDocument::load_font_cached(int size) {
     auto it = font_cache_.find(size);
     if (it != font_cache_.end()) {
-        return it->second;
+        return it->second.get();
     }
 
-    // Use default raylib font scaled (or load a custom font)
-    Font f = GetFontDefault();
-    font_cache_.emplace(size, f);
-    return f;
+    auto font = std::make_unique<rf::GLFont>();
+    // Try to use the default system font at the requested size
+    rf::GLFont* def = rf::GLFont::defaultFont();
+    if (def && def->isValid()) {
+        // For now, all sizes share the default font (it scales via drawText size parameter)
+        // To get per-size atlases, we'd bake a new atlas per size.
+        // Just return default font for now.
+        font_cache_.emplace(size, nullptr);
+        return def;
+    }
+    font_cache_.emplace(size, std::move(font));
+    return font_cache_[size].get();
 }
 
 int UIDocument::measure_content_width(const Node& node) {
@@ -267,13 +279,13 @@ int UIDocument::measure_content_width(const Node& node) {
     // For Text, measure text width
     if (node.type == "Text" && !node.text.empty()) {
         const int fontSize = node.style.font_size;
-        return MeasureText(node.text.c_str(), fontSize);
+        return static_cast<int>(rf::Batch2D::instance().measureText(node.text, static_cast<float>(fontSize)));
     }
 
     // For Button, measure text width + padding
     if (node.type == "Button" && !node.text.empty()) {
         const int fontSize = node.style.font_size;
-        return MeasureText(node.text.c_str(), fontSize) + node.style.padding.left + node.style.padding.right;
+        return static_cast<int>(rf::Batch2D::instance().measureText(node.text, static_cast<float>(fontSize))) + node.style.padding.left + node.style.padding.right;
     }
 
     // For containers (Panel, Row, Column), sum children
@@ -334,15 +346,15 @@ int UIDocument::measure_content_height(const Node& node) {
     return 50; // Default fallback
 }
 
-void UIDocument::layout(Node& node, Rectangle available, const UIViewModel& vm) {
+void UIDocument::layout(Node& node, rf::Rect available, const UIViewModel& vm) {
     // Determine actual dimensions
     int w = node.style.width.has_value() ? *node.style.width : measure_content_width(node);
     int h = node.style.height.has_value() ? *node.style.height : measure_content_height(node);
 
     // Handle grow: expand to available size if grow is set
     if (node.style.grow) {
-        w = static_cast<int>(available.width);
-        h = static_cast<int>(available.height);
+        w = static_cast<int>(available.w);
+        h = static_cast<int>(available.h);
     }
 
     // Top-level nodes use anchor positioning
@@ -350,15 +362,15 @@ void UIDocument::layout(Node& node, Rectangle available, const UIViewModel& vm) 
         node.computed_rect = anchor_rect(node.style, w, h, vm.screen_width, vm.screen_height);
     } else {
         // Position at available rect origin
-        node.computed_rect = Rectangle{available.x, available.y, static_cast<float>(w), static_cast<float>(h)};
+        node.computed_rect = rf::Rect{available.x, available.y, static_cast<float>(w), static_cast<float>(h)};
     }
 
     // Layout children based on direction
     if (!node.children.empty()) {
         const float px = static_cast<float>(node.style.padding.left);
         const float py = static_cast<float>(node.style.padding.top);
-        const float pw = node.computed_rect.width - node.style.padding.left - node.style.padding.right;
-        const float ph = node.computed_rect.height - node.style.padding.top - node.style.padding.bottom;
+        const float pw = node.computed_rect.w - node.style.padding.left - node.style.padding.right;
+        const float ph = node.computed_rect.h - node.style.padding.top - node.style.padding.bottom;
 
         // Calculate total children size for justify-content
         float totalChildrenSize = 0;
@@ -435,23 +447,26 @@ void UIDocument::layout(Node& node, Rectangle available, const UIViewModel& vm) 
                 }
             }
 
-            Rectangle childAvail{alignedX, alignedY, childW, childH};
+            rf::Rect childAvail{alignedX, alignedY, childW, childH};
             layout(child, childAvail, vm);
 
             if (node.style.direction == UIDirection::Column) {
-                curY += child.computed_rect.height + node.style.gap;
+                curY += child.computed_rect.h + node.style.gap;
             } else {
-                curX += child.computed_rect.width + node.style.gap;
+                curX += child.computed_rect.w + node.style.gap;
             }
         }
     }
 }
 
-bool UIDocument::update_node_rec(Node& node, Vector2 mouse_pos, bool mouse_down, bool mouse_pressed) {
+bool UIDocument::update_node_rec(Node& node, rf::Vec2 mouse_pos, bool mouse_down, bool mouse_pressed) {
     bool captured = false;
 
     // Check if mouse is over this node
-    const bool over = CheckCollisionPointRec(mouse_pos, node.computed_rect);
+    const bool over = (mouse_pos.x >= node.computed_rect.x && 
+                       mouse_pos.x <= node.computed_rect.x + node.computed_rect.w &&
+                       mouse_pos.y >= node.computed_rect.y && 
+                       mouse_pos.y <= node.computed_rect.y + node.computed_rect.h);
     
     // Notify script about hover state changes
     if (over != node.hovered && !node.id.empty()) {
@@ -488,18 +503,18 @@ bool UIDocument::update_node_rec(Node& node, Vector2 mouse_pos, bool mouse_down,
     return captured;
 }
 
-bool UIDocument::update(const UIViewModel& vm, Vector2 mouse_pos, bool mouse_down, bool mouse_pressed) {
+bool UIDocument::update(const UIViewModel& vm, rf::Vec2 mouse_pos, bool mouse_down, bool mouse_pressed) {
     if (!loaded_) {
         return false;
     }
 
     // Run layout pass
-    Rectangle full_screen{0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height)};
+    rf::Rect full_screen{0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height)};
     (void)full_screen;
     for (auto& child : root_.children) {
         int w = child.style.width.has_value() ? *child.style.width : measure_content_width(child);
         int h = child.style.height.has_value() ? *child.style.height : measure_content_height(child);
-        Rectangle positioned = anchor_rect(child.style, w, h, vm.screen_width, vm.screen_height);
+        rf::Rect positioned = anchor_rect(child.style, w, h, vm.screen_width, vm.screen_height);
         layout(child, positioned, vm);
     }
 
@@ -513,7 +528,7 @@ bool UIDocument::update(const UIViewModel& vm, Vector2 mouse_pos, bool mouse_dow
 
     // Update script engine (for animations, timers, etc.)
     if (scriptEngine_ && scriptEngine_->has_scripts()) {
-        scriptEngine_->update(GetFrameTime());
+        scriptEngine_->update(vm.dt > 0.0f ? vm.dt : 0.016f);
         process_script_commands();
     }
 
@@ -567,27 +582,31 @@ void UIDocument::render_node(const Node& node, const UIViewModel& vm) {
 }
 
 void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
-    const Rectangle& r = node.computed_rect;
+    const rf::Rect& r = node.computed_rect;
 
     draw_box_shadow(r, node.style);
 
+    auto& batch = rf::Batch2D::instance();
+
     // Background
     if (node.style.background_color.has_value()) {
-        Color bgColor = apply_opacity(*node.style.background_color, node.style.opacity);
+        rf::Color bgColor = apply_opacity(*node.style.background_color, node.style.opacity);
         if (node.style.border_radius > 0) {
-            DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, bgColor);
+            float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+            batch.drawRectRounded(r.x, r.y, r.w, r.h, roundness, 8, bgColor);
         } else {
-            DrawRectangleRec(r, bgColor);
+            batch.drawRect(r.x, r.y, r.w, r.h, bgColor);
         }
     }
 
     // Border
     if (node.style.border_width > 0) {
-        Color borderColor = apply_opacity(node.style.border_color, node.style.opacity);
+        rf::Color borderColor = apply_opacity(node.style.border_color, node.style.opacity);
         if (node.style.border_radius > 0) {
-            DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, static_cast<float>(node.style.border_width), borderColor);
+            float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+            batch.drawRectRoundedLines(r.x, r.y, r.w, r.h, roundness, 8, static_cast<float>(node.style.border_width), borderColor);
         } else {
-            DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), borderColor);
+            batch.drawRectLinesEx(r.x, r.y, r.w, r.h, static_cast<float>(node.style.border_width), borderColor);
         }
     }
 
@@ -605,9 +624,10 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
     }
 
     const int fontSize = node.style.font_size;
-    const Color color = to_raylib_color(node.style.color);
-    const int textW = MeasureText(node.text.c_str(), fontSize);
-    const Rectangle& r = node.computed_rect;
+    const rf::Color color = to_rf_color(node.style.color);
+    auto& batch = rf::Batch2D::instance();
+    const int textW = static_cast<int>(batch.measureText(node.text, static_cast<float>(fontSize)));
+    const rf::Rect& r = node.computed_rect;
 
     // Horizontal alignment
     int tx = static_cast<int>(r.x);
@@ -616,10 +636,10 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
             tx = static_cast<int>(r.x);
             break;
         case UITextAlign::Center:
-            tx = static_cast<int>(r.x + (r.width - textW) / 2);
+            tx = static_cast<int>(r.x + (r.w - textW) / 2);
             break;
         case UITextAlign::Right:
-            tx = static_cast<int>(r.x + r.width - textW);
+            tx = static_cast<int>(r.x + r.w - textW);
             break;
     }
 
@@ -630,20 +650,20 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
             ty = static_cast<int>(r.y);
             break;
         case UIVerticalAlign::Middle:
-            ty = static_cast<int>(r.y + (r.height - fontSize) / 2);
+            ty = static_cast<int>(r.y + (r.h - fontSize) / 2);
             break;
         case UIVerticalAlign::Bottom:
-            ty = static_cast<int>(r.y + r.height - fontSize);
+            ty = static_cast<int>(r.y + r.h - fontSize);
             break;
     }
 
-    DrawText(node.text.c_str(), tx, ty, fontSize, color);
+    batch.drawText(node.text, static_cast<float>(tx), static_cast<float>(ty), static_cast<float>(fontSize), color);
 }
 
 void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
     (void)vm;
 
-    const Rectangle& r = node.computed_rect;
+    const rf::Rect& r = node.computed_rect;
 
     draw_box_shadow(r, node.style);
 
@@ -659,11 +679,13 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
         bg.b = static_cast<unsigned char>(std::min(255, bg.b + 30));
     }
 
-    Color bgColor = apply_opacity(bg, node.style.opacity);
+    auto& batch = rf::Batch2D::instance();
+    rf::Color bgColor = apply_opacity(bg, node.style.opacity);
     if (node.style.border_radius > 0) {
-        DrawRectangleRounded(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, bgColor);
+        float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+        batch.drawRectRounded(r.x, r.y, r.w, r.h, roundness, 8, bgColor);
     } else {
-        DrawRectangleRec(r, bgColor);
+        batch.drawRect(r.x, r.y, r.w, r.h, bgColor);
     }
 
     // Border
@@ -674,24 +696,25 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
             border_col.g = static_cast<unsigned char>(std::min(255, border_col.g + 50));
             border_col.b = static_cast<unsigned char>(std::min(255, border_col.b + 50));
         }
-        Color borderColor = apply_opacity(border_col, node.style.opacity);
+        rf::Color borderColor = apply_opacity(border_col, node.style.opacity);
         if (node.style.border_radius > 0) {
-            DrawRectangleRoundedLinesEx(r, static_cast<float>(node.style.border_radius) / std::min(r.width, r.height), 8, static_cast<float>(node.style.border_width), borderColor);
+            float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
+            batch.drawRectRoundedLines(r.x, r.y, r.w, r.h, roundness, 8, static_cast<float>(node.style.border_width), borderColor);
         } else {
-            DrawRectangleLinesEx(r, static_cast<float>(node.style.border_width), borderColor);
+            batch.drawRectLinesEx(r.x, r.y, r.w, r.h, static_cast<float>(node.style.border_width), borderColor);
         }
     }
 
     if (!node.text.empty()) {
         const int fontSize = node.style.font_size;
-        const Color textColor = to_raylib_color(node.style.color);
-        const int textW = MeasureText(node.text.c_str(), fontSize);
+        const rf::Color textColor = to_rf_color(node.style.color);
+        const int textW = static_cast<int>(batch.measureText(node.text, static_cast<float>(fontSize)));
         const int textH = fontSize;
         
         const float innerX = r.x + node.style.padding.left;
         const float innerY = r.y + node.style.padding.top;
-        const float innerW = r.width - node.style.padding.left - node.style.padding.right;
-        const float innerH = r.height - node.style.padding.top - node.style.padding.bottom;
+        const float innerW = r.w - node.style.padding.left - node.style.padding.right;
+        const float innerH = r.h - node.style.padding.top - node.style.padding.bottom;
         
         int tx = static_cast<int>(innerX);
         switch (node.style.text_align) {
@@ -719,16 +742,16 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
                 break;
         }
         
-        DrawText(node.text.c_str(), tx, ty, fontSize, textColor);
+        batch.drawText(node.text, static_cast<float>(tx), static_cast<float>(ty), static_cast<float>(fontSize), textColor);
     }
 }
 
 void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
-    const Texture2D full = load_texture_cached(node.full);
-    const Texture2D half = load_texture_cached(node.half);
-    const Texture2D empty = load_texture_cached(node.empty);
+    const GLuint full = load_texture_cached(node.full);
+    const GLuint half = load_texture_cached(node.half);
+    const GLuint empty_tex = load_texture_cached(node.empty);
 
-    if (full.id == 0 || half.id == 0 || empty.id == 0) {
+    if (full == 0 || half == 0 || empty_tex == 0) {
         return;
     }
 
@@ -741,52 +764,75 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
     const int fullHearts = health / 2;
     const bool hasHalf = (health % 2) != 0;
 
-    const int heartW = node.style.width.has_value() ? *node.style.width : full.width;
-    const int heartH = node.style.height.has_value() ? *node.style.height : full.height;
+    const int heartW = node.style.width.has_value() ? *node.style.width : 16;
+    const int heartH = node.style.height.has_value() ? *node.style.height : 16;
 
     const int gap = node.style.gap;
     const int contentW = hearts * heartW + (hearts > 0 ? (hearts - 1) * gap : 0);
     const int contentH = heartH;
 
-    const Rectangle r = anchor_rect(node.style, contentW, contentH, vm.screen_width, vm.screen_height);
+    const rf::Rect r = anchor_rect(node.style, contentW, contentH, vm.screen_width, vm.screen_height);
 
     for (int i = 0; i < hearts; i++) {
         const int x = static_cast<int>(r.x) + i * (heartW + gap);
         const int y = static_cast<int>(r.y);
 
-        Texture2D tex = empty;
+        auto tex = empty_tex;
         if (i < fullHearts) {
             tex = full;
         } else if (i == fullHearts && hasHalf) {
             tex = half;
         }
 
-        const Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        const Rectangle dst{static_cast<float>(x), static_cast<float>(y), static_cast<float>(heartW), static_cast<float>(heartH)};
-        DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
+        const rf::Rect src{0.0f, 0.0f, static_cast<float>(heartW), static_cast<float>(heartH)};
+        const rf::Rect dst{static_cast<float>(x), static_cast<float>(y), static_cast<float>(heartW), static_cast<float>(heartH)};
+        rf::Batch2D::instance().drawTextureRaw(tex, heartW, heartH, src, dst);
     }
 }
 
 void UIDocument::parse_script_element(tinyxml2::XMLElement* el) {
-    // Get inline script content
+    // Create script engine if not exists
+    auto ensure_script_engine = [&]() -> bool {
+        if (!scriptEngine_) {
+            scriptEngine_ = std::make_unique<scripting::UIScriptEngine>();
+            if (!scriptEngine_->init()) {
+                TraceLog(LOG_ERROR, "[ui] Failed to initialize UI script engine");
+                scriptEngine_.reset();
+                return false;
+            }
+            if (scriptLogCallback_) {
+                scriptEngine_->set_log_callback(scriptLogCallback_);
+            }
+        }
+        return true;
+    };
+    
+    // Check for src attribute: <Script src="scripts/client/ui/button_logic.lua"/>
+    const char* srcAttr = el->Attribute("src");
+    if (srcAttr && std::string(srcAttr).length() > 0) {
+        // Load external script from VFS
+        auto content = engine::vfs::read_text_file(srcAttr);
+        if (!content) {
+            TraceLog(LOG_ERROR, "[ui] Script src not found: %s", srcAttr);
+            return;
+        }
+        
+        if (!ensure_script_engine()) return;
+        
+        auto result = scriptEngine_->load_script(*content, srcAttr);
+        if (!result) {
+            TraceLog(LOG_ERROR, "[ui] Failed to load UI script '%s': %s", srcAttr, result.error.c_str());
+        }
+        return;
+    }
+    
+    // Fall back to inline script content: <Script>...code...</Script>
     const char* text = el->GetText();
     if (!text || std::string(text).empty()) {
         return;
     }
     
-    // Create script engine if not exists
-    if (!scriptEngine_) {
-        scriptEngine_ = std::make_unique<scripting::UIScriptEngine>();
-        if (!scriptEngine_->init()) {
-            TraceLog(LOG_ERROR, "[ui] Failed to initialize UI script engine");
-            scriptEngine_.reset();
-            return;
-        }
-        
-        if (scriptLogCallback_) {
-            scriptEngine_->set_log_callback(scriptLogCallback_);
-        }
-    }
+    if (!ensure_script_engine()) return;
     
     // Load the script
     auto result = scriptEngine_->load_script(text, "inline_script");

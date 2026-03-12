@@ -1,7 +1,16 @@
 #pragma once
 
-#include <raylib.h>
+// =============================================================================
+// Skybox — cubemap skybox renderer
+//
+// Phase 2: Replaced raylib Shader/Model/Texture2D with GLShader/GLMesh/GLTexture.
+// =============================================================================
 
+#include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/camera.hpp"
 #include "engine/maps/rfmap_io.hpp"
 
 #include <cstdint>
@@ -19,7 +28,8 @@ public:
     void set_kind(shared::maps::MapTemplate::SkyboxKind kind);
     shared::maps::MapTemplate::SkyboxKind kind() const { return kind_; }
 
-    void draw(const Camera3D& camera);
+    /// Draw the skybox using the given camera.
+    void draw(const rf::Camera& camera);
 
     bool ready() const { return ready_; }
 
@@ -38,12 +48,9 @@ private:
     std::string pano_path_;
     std::string cube_path_;
 
-    Shader shader_{};
-
-    Model model_{};
-    bool has_model_{false};
-
-    Texture2D cubemap_{};
+    rf::GLShader shader_;
+    rf::GLMesh cubeMesh_;
+    rf::GLTexture cubemap_;
 };
 
 } // namespace renderer

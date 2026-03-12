@@ -6,7 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gl_font.hpp"
 
 #include "css_lite.hpp"
 
@@ -34,7 +36,7 @@ public:
     bool load_from_files(const char* xml_path, const char* css_path);
     void unload();
 
-    bool update(const UIViewModel& vm, Vector2 mouse_pos, bool mouse_down, bool mouse_pressed);
+    bool update(const UIViewModel& vm, rf::Vec2 mouse_pos, bool mouse_down, bool mouse_pressed);
 
     void render(const UIViewModel& vm);
 
@@ -63,28 +65,32 @@ private:
         UIStyle style{};
         std::vector<Node> children;
 
-        Rectangle computed_rect{0, 0, 0, 0};
+        rf::Rect computed_rect{0, 0, 0, 0};
 
         bool hovered{false};
         bool pressed{false};
         bool focused{false};
     };
 
+    // Texture cache — stores loaded textures by path
     struct TextureRef {
-        Texture2D tex{};
+        rf::GLTexture tex{};
     };
 
-    Texture2D load_texture_cached(const std::string& path);
-    Font load_font_cached(int size);
+    // Font cache — stores loaded fonts by pixel size
+    rf::GLFont* load_font_cached(int size);
+
+    /// Load a texture (or return cached). Returns the GL texture ID (0 if failed).
+    GLuint load_texture_cached(const std::string& path);
 
     Node parse_node_rec(tinyxml2::XMLElement* el);
     void apply_styles_rec(Node& n);
 
-    void layout(Node& node, Rectangle available, const UIViewModel& vm);
+    void layout(Node& node, rf::Rect available, const UIViewModel& vm);
     int measure_content_width(const Node& node);
     int measure_content_height(const Node& node);
 
-    bool update_node_rec(Node& node, Vector2 mouse_pos, bool mouse_down, bool mouse_pressed);
+    bool update_node_rec(Node& node, rf::Vec2 mouse_pos, bool mouse_down, bool mouse_pressed);
 
     void render_node(const Node& node, const UIViewModel& vm);
     void render_health_bar(const Node& node, const UIViewModel& vm);
@@ -97,7 +103,7 @@ private:
 
     bool loaded_{false};
     std::unordered_map<std::string, TextureRef> texture_cache_{};
-    std::unordered_map<int, Font> font_cache_{};
+    std::unordered_map<int, std::unique_ptr<rf::GLFont>> font_cache_{};
 
     OnClickCallback on_click_{};
     

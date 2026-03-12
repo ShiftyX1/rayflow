@@ -1,6 +1,11 @@
 #include "ui_manager.hpp"
 
-#include <raylib.h>
+#include "engine/client/core/input.hpp"
+#include "engine/client/core/window.hpp"
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
+#include "engine/renderer/batch_2d.hpp"
 
 #ifdef DEBUG_UI
 #include "../debug/debug_ui.hpp"
@@ -13,11 +18,15 @@ UIManager::~UIManager() {
     connect_menu_.unload();
     pause_menu_.unload();
     hud_.unload();
+
+#ifdef DEBUG_UI
+    debug::shutdown();
+#endif
 }
 
 void UIManager::init() {
 #ifdef DEBUG_UI
-    debug::init();
+    debug::init(rf::Window::instance().handle());
 #endif
 
     // Load main menu UI
@@ -107,9 +116,11 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
     (void)in;
 #endif
 
-    const Vector2 mouse_pos = GetMousePosition();
-    const bool mouse_down = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-    const bool mouse_pressed = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    auto& rfInput = rf::Input::instance();
+
+    const rf::Vec2 mouse_pos = rfInput.getMousePosition();
+    const bool mouse_down = rfInput.isMouseButtonDown(MOUSE_LEFT_BUTTON);
+    const bool mouse_pressed = rfInput.isMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
     if (vm.game_screen == GameScreen::MainMenu) {
         // Main menu always captures input (cursor should be visible)
@@ -125,15 +136,15 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
         out.capture.wants_keyboard = true;
 
         // Handle text input for server address
-        int key = GetCharPressed();
+        int key = rfInput.getCharPressed();
         while (key > 0) {
             if ((key >= 32) && (key <= 125) && server_address_.length() < 64) {
                 server_address_ += static_cast<char>(key);
             }
-            key = GetCharPressed();
+            key = rfInput.getCharPressed();
         }
         
-        if (IsKeyPressed(KEY_BACKSPACE) && !server_address_.empty()) {
+        if (rfInput.isKeyPressed(KEY_BACKSPACE) && !server_address_.empty()) {
             server_address_.pop_back();
         }
         
@@ -143,7 +154,7 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
         }
         
         // Enter to connect
-        if (IsKeyPressed(KEY_ENTER)) {
+        if (rfInput.isKeyPressed(KEY_ENTER)) {
             handle_ui_click("connect_to_server");
         }
 
@@ -194,7 +205,13 @@ void UIManager::queue_command_if_changed(float prev, float next) {
 }
 
 void UIManager::render(const UIViewModel& vm) {
+    auto& batch = rf::Batch2D::instance();
+    batch.begin(vm.screen_width, vm.screen_height);
+
 #ifdef DEBUG_UI
+    // Begin ImGui frame (before any ImGui draw calls)
+    debug::new_frame();
+
     if (debug_mode_ == DebugMode::Interactive) {
         debug::DebugUIState state;
         state.show_player_info = show_player_info_;
@@ -209,6 +226,8 @@ void UIManager::render(const UIViewModel& vm) {
         const float prev_sens = camera_sensitivity_;
         camera_sensitivity_ = result.state.camera_sensitivity;
         queue_command_if_changed(prev_sens, camera_sensitivity_);
+        batch.end();
+        debug::render_draw_data();
         return;
     }
 
@@ -218,53 +237,54 @@ void UIManager::render(const UIViewModel& vm) {
         state.show_net_info = true;
         state.camera_sensitivity = camera_sensitivity_;
         (void)debug::draw_overlay(state, vm);
+        batch.end();
+        debug::render_draw_data();
         return;
     }
 #endif
 
     if (vm.game_screen == GameScreen::MainMenu) {
-        DrawRectangle(0, 0, vm.screen_width, vm.screen_height, Color{1, 4, 9, 255});
-        
+        // Dark background fill
+        batch.drawRect(0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height), rf::Color{1, 4, 9, 255});
+
         if (main_menu_loaded_) {
             main_menu_.render(vm);
         }
     } else if (vm.game_screen == GameScreen::ConnectMenu) {
-        DrawRectangle(0, 0, vm.screen_width, vm.screen_height, Color{1, 4, 9, 255});
-        
+        // Dark background fill
+        batch.drawRect(0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height), rf::Color{1, 4, 9, 255});
+
         if (connect_menu_loaded_) {
             connect_menu_.render(vm);
         }
-        
-        // Draw text input content over the hint
-        // Calculate input box position (centered, below title)
+
+        // Text input rendering for server address
         const int inputX = (vm.screen_width - 340) / 2;
         const int inputY = (vm.screen_height - 380) / 2 + 160;
-        
-        // Draw address text
-        DrawText(server_address_.c_str(), inputX + 12, inputY + 14, 16, Color{201, 209, 217, 255});
-        
-        // Draw cursor
-        const int cursorX = inputX + 12 + MeasureText(server_address_.c_str(), 16);
-        if ((static_cast<int>(GetTime() * 2) % 2) == 0) {
-            DrawRectangle(cursorX, inputY + 12, 2, 20, Color{88, 166, 255, 255});
+        batch.drawText(server_address_, static_cast<float>(inputX + 12), static_cast<float>(inputY + 14), 16.0f, rf::Color{201, 209, 217, 255});
+        const int cursorX = inputX + 12 + static_cast<int>(batch.measureText(server_address_, 16.0f));
+        // Blinking cursor (toggle every 0.5s)
+        if ((static_cast<int>(rf::log::GetTime() * 2.0) % 2) == 0) {
+            batch.drawRect(static_cast<float>(cursorX), static_cast<float>(inputY + 12), 2.0f, 20.0f, rf::Color{88, 166, 255, 255});
         }
     } else if (vm.game_screen == GameScreen::Connecting) {
-        DrawRectangle(0, 0, vm.screen_width, vm.screen_height, Color{1, 4, 9, 255});
-        
-        // Draw connecting message
-        const char* text = "Connecting...";
-        const int textW = MeasureText(text, 32);
-        DrawText(text, (vm.screen_width - textW) / 2, vm.screen_height / 2 - 40, 32, Color{88, 166, 255, 255});
-        
-        // Draw cancel hint
-        const char* hint = "Press ESC to cancel";
-        const int hintW = MeasureText(hint, 16);
-        DrawText(hint, (vm.screen_width - hintW) / 2, vm.screen_height / 2 + 20, 16, Color{139, 148, 158, 255});
-        
-        // Show error if any
+        // Dark background fill
+        batch.drawRect(0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height), rf::Color{1, 4, 9, 255});
+
+        // "Connecting..." message
+        const std::string connText = "Connecting...";
+        const int textW = static_cast<int>(batch.measureText(connText, 32.0f));
+        batch.drawText(connText, static_cast<float>((vm.screen_width - textW) / 2), static_cast<float>(vm.screen_height / 2 - 40), 32.0f, rf::Color{88, 166, 255, 255});
+
+        // Hint
+        const std::string hint = "Press ESC to cancel";
+        const int hintW = static_cast<int>(batch.measureText(hint, 16.0f));
+        batch.drawText(hint, static_cast<float>((vm.screen_width - hintW) / 2), static_cast<float>(vm.screen_height / 2 + 20), 16.0f, rf::Color{139, 148, 158, 255});
+
+        // Error message (if any)
         if (vm.net.connection_failed && !vm.net.connection_error.empty()) {
-            const int errW = MeasureText(vm.net.connection_error.c_str(), 18);
-            DrawText(vm.net.connection_error.c_str(), (vm.screen_width - errW) / 2, vm.screen_height / 2 + 60, 18, Color{248, 81, 73, 255});
+            const int errW = static_cast<int>(batch.measureText(vm.net.connection_error, 18.0f));
+            batch.drawText(vm.net.connection_error, static_cast<float>((vm.screen_width - errW) / 2), static_cast<float>(vm.screen_height / 2 + 60), 18.0f, rf::Color{248, 81, 73, 255});
         }
     } else if (vm.game_screen == GameScreen::Paused) {
         // Note: world is still rendered in game.cpp, we just overlay pause menu
@@ -276,6 +296,13 @@ void UIManager::render(const UIViewModel& vm) {
             hud_.render(vm);
         }
     }
+
+    batch.end();
+
+#ifdef DEBUG_UI
+    // Render ImGui draw data (after all UI, before buffer swap)
+    debug::render_draw_data();
+#endif
 }
 
 } // namespace ui

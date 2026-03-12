@@ -8,11 +8,19 @@
 #include "engine/core/types.hpp"
 #include "engine/ui/runtime/ui_view_model.hpp"
 #include "engine/ui/runtime/ui_frame.hpp"
+#include "engine/renderer/render_pipeline.hpp"
+#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gl_mesh.hpp"
 
 #include "../shared/protocol/messages.hpp"
 
+// Forward declaration
+namespace bedwars::scripting {
+class ClientScriptEngine;
+}
+
 #include <entt/entt.hpp>
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -74,7 +82,7 @@ struct ClientPlayerState {
 struct ClientTeamState {
     proto::TeamId id{proto::Teams::None};
     bool hasBed{true};
-    Color color{WHITE};
+    rf::Color color{rf::Color::White()};
 };
 
 /// Dropped item on client
@@ -160,10 +168,8 @@ private:
     void clear_player_input();
     
     // --- Rendering ---
-    void render_world(const Camera3D& camera);
-    void render_players();
-    void render_items();
-    void render_hud();
+    void render_players(const rf::Camera& camera);
+    void render_items(const rf::Camera& camera);
     void render_debug_info();
     
     // --- UI ---
@@ -171,7 +177,7 @@ private:
     void update_ui_view_model();
 
     // --- Helpers ---
-    Color get_team_color(proto::TeamId team) const;
+    rf::Color get_team_color(proto::TeamId team) const;
     void update_lights();
 
 private:
@@ -235,8 +241,20 @@ private:
     // UI input capture
     bool uiCapturesInput_{false};
     
+    // Render pipeline (HDR + shadows + tone mapping)
+    rf::RenderPipeline renderPipeline_;
+    bool pipelineInitialized_{false};
+    
+    // Solid color shader + cube mesh for entity rendering
+    rf::GLShader solidShader_;
+    rf::GLMesh   entityCube_;
+    bool         entityRenderReady_{false};
+    
     // Debug
     bool showDebug_{false};
+    
+    // Client script engine
+    std::unique_ptr<bedwars::scripting::ClientScriptEngine> clientScriptEngine_;
 };
 
 } // namespace bedwars

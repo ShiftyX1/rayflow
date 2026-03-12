@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 
 namespace ui {
 
@@ -30,8 +30,8 @@ enum class GameScreen {
 // ============================================================================
 
 struct PlayerViewModel {
-    Vector3 position{0.0f, 0.0f, 0.0f};
-    Vector3 velocity{0.0f, 0.0f, 0.0f};
+    rf::Vec3 position{0.0f, 0.0f, 0.0f};
+    rf::Vec3 velocity{0.0f, 0.0f, 0.0f};
 
     bool on_ground{false};
     bool sprinting{false};
@@ -94,7 +94,7 @@ struct KillFeedEntry {
 
 struct GameNotification {
     std::string message;
-    Color color{WHITE};
+    rf::Color color{rf::Color::White()};
     float time_remaining{3.0f};
 };
 

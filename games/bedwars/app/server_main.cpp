@@ -3,11 +3,13 @@
 
 #include <engine/core/server_engine.hpp>
 #include <engine/transport/enet_server.hpp>
+#include <engine/vfs/vfs.hpp>
 #include "../server/bedwars_server.hpp"
 
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <thread>
 
@@ -108,6 +110,20 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     
+    // Initialize VFS for server-side scripts
+    {
+        auto serverDir = std::filesystem::current_path();
+#if RAYFLOW_USE_PAK
+        engine::vfs::init(serverDir, engine::vfs::InitFlags::None);
+        if (engine::vfs::mount("scripts.pak", "/")) {
+            std::cout << "[INFO] Mounted scripts.pak\n";
+        }
+#else
+        engine::vfs::init(serverDir, engine::vfs::InitFlags::LooseOnly);
+        std::cout << "[INFO] VFS initialized (loose files mode)\n";
+#endif
+    }
+    
     // Create ENet server transport
     auto transport = std::make_shared<engine::transport::ENetServerTransport>();
     
@@ -158,6 +174,7 @@ int main(int argc, char* argv[]) {
     engine.stop();
     transport->stop();
     serverThread.join();
+    engine::vfs::shutdown();
     std::cout << "[INFO] Server stopped\n";
     
     return 0;

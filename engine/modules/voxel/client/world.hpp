@@ -1,7 +1,10 @@
 #pragma once
 
 #include "chunk.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/camera.hpp"
+#include "engine/renderer/render_pipeline.hpp"
 #include <unordered_map>
 #include <memory>
 #include <functional>
@@ -21,8 +24,8 @@ struct ChunkCoordHash {
 };
 
 struct PointLight {
-    Vector3 position;
-    Vector3 color;
+    rf::Vec3 position;
+    rf::Vec3 color;
     float radius;
     float intensity;
 };
@@ -36,7 +39,10 @@ public:
     World& operator=(const World&) = delete;
     
     void set_lights(const std::vector<PointLight>& lights) { scene_lights_ = lights; }
-
+    
+    void set_static_lights(const std::vector<rf::Vec3>& positions);
+    const std::vector<PointLight>& static_lights() const { return static_lights_; }
+    
     Block get_block(int x, int y, int z) const;
     void set_block(int x, int y, int z, Block type);
     
@@ -51,8 +57,15 @@ public:
     
     void recompute_chunk_states(int chunkX, int chunkZ);
     
-    void update(const Vector3& player_position);
-    void render(const Camera3D& camera) const;
+    void update(const rf::Vec3& player_position);
+    /// Render all visible chunks using the voxel shader.
+    void render(const rf::Camera& camera) const;
+
+    /// Render all visible chunks using the full pipeline (shadows, fog, HDR).
+    void render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const;
+
+    /// Render shadow depth pass (call between pipeline.beginShadowPass/endShadowPass).
+    void renderShadowPass(rf::GLShader& shadowShader, rf::RenderPipeline& pipeline) const;
     
     void set_render_distance(int distance) { render_distance_ = distance; }
     int get_render_distance() const { return render_distance_; }
@@ -77,10 +90,16 @@ public:
     float sample_skylight01(int x, int y, int z) const;
     float sample_blocklight01(int x, int y, int z) const { (void)x; (void)y; (void)z; return 0.0f; }
 
+    /// Fog settings derived from environment.
+    rf::Vec3 get_fog_color() const;
+    float get_fog_start() const;
+    float get_fog_end() const;
+
     void load_voxel_shader();
     void unload_voxel_shader();
-    Shader get_voxel_shader() const { return voxel_shader_; }
-    bool has_voxel_shader() const { return voxel_shader_loaded_; }
+    rf::GLShader& get_voxel_shader() { return voxel_shader_; }
+    const rf::GLShader& get_voxel_shader() const { return voxel_shader_; }
+    bool has_voxel_shader() const { return voxel_shader_.isValid(); }
     
     void set_environment(float timeOfDay, float sunIntensity, float ambientIntensity) {
         time_of_day_ = timeOfDay;
@@ -94,8 +113,9 @@ public:
 
 private:
     void generate_chunk_terrain(Chunk& chunk);
-    void load_chunks_around_player(const Vector3& player_position);
-    void unload_distant_chunks(const Vector3& player_position);
+    void load_chunks_around_player(const rf::Vec3& player_position);
+    void unload_distant_chunks(const rf::Vec3& player_position);
+    void extract_lights_from_map();
     
     float perlin_noise(float x, float y) const;
     float octave_perlin(float x, float y, int octaves, float persistence) const;
@@ -105,7 +125,7 @@ private:
     
     unsigned int seed_{0};
     int render_distance_{8};
-    Vector3 last_player_position_{0, 0, 0};
+    rf::Vec3 last_player_position_{0, 0, 0};
 
     float time_of_day_{12.0f};
     float sun_intensity_{1.0f};
@@ -121,10 +141,10 @@ private:
     mutable bool perm_initialized_{false};
     void init_perlin() const;
 
-    Shader voxel_shader_{};
-    bool voxel_shader_loaded_{false};
+    rf::GLShader voxel_shader_;
 
     std::vector<PointLight> scene_lights_;
+    std::vector<PointLight> static_lights_;
     int light_count_loc_{-1};
     
     // Cached shader locations (resolved once on shader load)

@@ -1,5 +1,8 @@
 #include "ui_script_engine.hpp"
 
+#include <engine/core/scripting/lua_state_call.hpp>
+#include <engine/core/scripting/api/utils.hpp>
+
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
@@ -115,25 +118,8 @@ void UIScriptEngine::setup_ui_api() {
     
     // Override print with our log function
     lua["print"] = [this](sol::variadic_args va, sol::this_state ts) {
-        sol::state_view luaView(ts);
-        std::ostringstream oss;
-        
-        bool first = true;
-        for (auto v : va) {
-            if (!first) oss << "\t";
-            first = false;
-            
-            sol::protected_function tostring = luaView["tostring"];
-            if (tostring.valid()) {
-                auto result = tostring(v);
-                if (result.valid()) {
-                    oss << result.get<std::string>();
-                }
-            }
-        }
-        
         if (logCallback_) {
-            logCallback_("[ui] " + oss.str());
+            logCallback_("[ui] " + engine::scripting::api::lua_args_to_string(va, ts));
         }
     };
 }

@@ -125,7 +125,7 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/rayflow-config.cmake" "
 #
 # Available targets:
 #   rayflow::core   - Headless engine (server, tools)
-#   rayflow::client - Client with raylib
+#   rayflow::client - Client (GLFW + OpenGL)
 #   rayflow::ui     - UI framework
 #   rayflow::voxel  - Voxel module
 #   rayflow::engine - All-in-one (links all above)
@@ -157,9 +157,10 @@ else()
 endif()
 
 # =============================================================================
-# Find dependencies (user must have raylib installed)
+# Find dependencies
 # =============================================================================
-find_package(raylib CONFIG REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
 # EnTT (header-only, shipped with SDK)
 if(NOT TARGET EnTT::EnTT)
@@ -210,12 +211,12 @@ set_target_properties(rayflow::core PROPERTIES
     INTERFACE_LINK_LIBRARIES \"rayflow::enet;rayflow::luajit;EnTT::EnTT\"
 )
 
-# Client (with raylib)
+# Client (GLFW + OpenGL)
 add_library(rayflow::client STATIC IMPORTED)
 set_target_properties(rayflow::client PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_client\${_RAYFLOW_LIB_SUFFIX}\"
-    INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include;\${RAYFLOW_SDK_DIR}/include/rayflow\"
-    INTERFACE_LINK_LIBRARIES \"rayflow::core;raylib;EnTT::EnTT\"
+    IMPORTED_LOCATION "${RAYFLOW_SDK_DIR}/lib/${_RAYFLOW_LIB_PREFIX}engine_client${_RAYFLOW_LIB_SUFFIX}"
+    INTERFACE_INCLUDE_DIRECTORIES "${RAYFLOW_SDK_DIR}/include;${RAYFLOW_SDK_DIR}/include/rayflow"
+    INTERFACE_LINK_LIBRARIES "rayflow::core;glfw;glad;glm::glm;stb_headers;EnTT::EnTT"
 )
 
 # UI framework

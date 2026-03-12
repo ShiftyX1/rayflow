@@ -2,12 +2,22 @@
 
 #include "../system.hpp"
 #include "../components.hpp"
+#include "engine/core/math_types.hpp"
 
 namespace voxel {
     class World;
 }
 
 namespace ecs {
+
+// NOTE(migration): Phase 0 placeholder — will be replaced by a proper camera struct.
+struct Camera3D {
+    rf::Vec3 position{0.f, 0.f, 0.f};
+    rf::Vec3 target{0.f, 0.f, 0.f};
+    rf::Vec3 up{0.f, 1.f, 0.f};
+    float fovy{60.f};
+    int projection{0};
+};
 
 class PlayerSystem : public System {
 public:
@@ -16,7 +26,7 @@ public:
 
     void set_client_replica_mode(bool enabled) { clientReplicaMode_ = enabled; }
     
-    static entt::entity create_player(entt::registry& registry, const Vector3& spawn_position);
+    static entt::entity create_player(entt::registry& registry, const rf::Vec3& spawn_position);
     
     static Camera3D get_camera(entt::registry& registry, entt::entity player);
     

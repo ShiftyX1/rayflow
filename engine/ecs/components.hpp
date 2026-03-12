@@ -1,31 +1,36 @@
 #pragma once
 
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
 #include <entt/entt.hpp>
 
 #include "engine/core/player_constants.hpp"
 
+namespace rf {
+    class GLMesh;
+    class GLShader;
+}
+
 namespace ecs {
 
 struct Transform {
-    Vector3 position{0.0f, 0.0f, 0.0f};
-    Vector3 rotation{0.0f, 0.0f, 0.0f};  // Euler angles (pitch, yaw, roll)
-    Vector3 scale{1.0f, 1.0f, 1.0f};
+    rf::Vec3 position{0.0f, 0.0f, 0.0f};
+    rf::Vec3 rotation{0.0f, 0.0f, 0.0f};  // Euler angles (pitch, yaw, roll)
+    rf::Vec3 scale{1.0f, 1.0f, 1.0f};
 };
 
 struct Velocity {
-    Vector3 linear{0.0f, 0.0f, 0.0f};
-    Vector3 angular{0.0f, 0.0f, 0.0f};
+    rf::Vec3 linear{0.0f, 0.0f, 0.0f};
+    rf::Vec3 angular{0.0f, 0.0f, 0.0f};
 };
 
 struct PreviousPosition {
-    Vector3 value{0.0f, 0.0f, 0.0f};
+    rf::Vec3 value{0.0f, 0.0f, 0.0f};
     bool initialized{false};
 };
 
 struct BoxCollider {
-    Vector3 size{1.0f, 1.0f, 1.0f};
-    Vector3 offset{0.0f, 0.0f, 0.0f};
+    rf::Vec3 size{1.0f, 1.0f, 1.0f};
+    rf::Vec3 offset{0.0f, 0.0f, 0.0f};
     bool is_trigger{false};
 };
 
@@ -65,15 +70,22 @@ struct RigidBody {
     bool is_kinematic{false};
 };
 
+// ECS mesh/model components with material pipeline.
+// mesh/shader pointers are non-owning — the resource system owns the lifetime.
+
 struct MeshComponent {
-    Mesh mesh{};
-    Material material{};
-    bool cast_shadow{true};
+    rf::GLMesh*   mesh{nullptr};      // If null, RenderSystem uses default cube
+    rf::GLShader* shader{nullptr};    // If null, RenderSystem uses solid-color shader
+    rf::Color     color{rf::Color::White()};
+    bool          cast_shadow{true};
+    bool          visible{true};
 };
 
 struct ModelComponent {
-    Model model{};
-    bool visible{true};
+    rf::GLMesh*   mesh{nullptr};
+    rf::GLShader* shader{nullptr};
+    rf::Color     color{rf::Color::White()};
+    bool          visible{true};
 };
 
 struct ToolHolder {
@@ -110,8 +122,8 @@ struct BlockBreaker {
 };
 
 struct InputState {
-    Vector2 move_input{0.0f, 0.0f};
-    Vector2 look_input{0.0f, 0.0f};
+    rf::Vec2 move_input{0.0f, 0.0f};
+    rf::Vec2 look_input{0.0f, 0.0f};
     bool jump_pressed{false};
     bool sprint_pressed{false};
     bool primary_action{false};   // Left mouse

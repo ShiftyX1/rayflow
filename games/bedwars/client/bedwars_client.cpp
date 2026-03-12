@@ -1,4 +1,5 @@
 #include "bedwars_client.hpp"
+#include "scripting/client_script_engine.hpp"
 #include "../shared/protocol/serialization.hpp"
 
 // Engine subsystems are accessed through IClientServices
@@ -8,15 +9,24 @@
 #include "engine/ecs/systems/input_system.hpp"
 #include "engine/ecs/systems/player_system.hpp"
 #include "engine/renderer/skybox.hpp"
+#include "engine/renderer/camera.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
 #include "engine/modules/voxel/shared/block.hpp"
 #include "engine/maps/rfmap_io.hpp"
 #include "engine/maps/runtime_paths.hpp"
 
-#include <raylib.h>
+#include "engine/client/core/input.hpp"
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
+#include "engine/renderer/batch_2d.hpp"
+#include "engine/renderer/gl_font.hpp"
+#include "engine/client/core/window.hpp"
 #include <filesystem>
-#include <raymath.h>
+#include <glad/gl.h>
 
+#include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cstdio>
 #include <cmath>
 
@@ -28,10 +38,10 @@ namespace bedwars {
 
 BedWarsClient::BedWarsClient() {
     // Initialize team colors
-    teams_[0] = {proto::Teams::Red, true, RED};
-    teams_[1] = {proto::Teams::Blue, true, BLUE};
-    teams_[2] = {proto::Teams::Green, true, GREEN};
-    teams_[3] = {proto::Teams::Yellow, true, YELLOW};
+    teams_[0] = {proto::Teams::Red, true, rf::Color::Red()};
+    teams_[1] = {proto::Teams::Blue, true, rf::Color::Blue()};
+    teams_[2] = {proto::Teams::Green, true, rf::Color::Green()};
+    teams_[3] = {proto::Teams::Yellow, true, rf::Color::Yellow()};
 }
 
 BedWarsClient::~BedWarsClient() = default;
@@ -41,29 +51,65 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
     
     engine_->log(engine::LogLevel::Info, "BedWarsClient initialized");
     
+    // Initialize client script engine
+    clientScriptEngine_ = std::make_unique<bedwars::scripting::ClientScriptEngine>();
+    clientScriptEngine_->set_log_callback([this](const std::string& msg) {
+        engine_->log(engine::LogLevel::Info, "[lua] " + msg);
+    });
+    if (clientScriptEngine_->init()) {
+        clientScriptEngine_->init_game_scripts();
+    } else {
+        engine_->log(engine::LogLevel::Warning, "Failed to initialize client script engine");
+        clientScriptEngine_.reset();
+    }
+    
     // Initialize ECS systems (same as rayflow)
     inputSystem_ = std::make_unique<ecs::InputSystem>();
     playerSystem_ = std::make_unique<ecs::PlayerSystem>();
     playerSystem_->set_client_replica_mode(true);  // Server-authoritative
     
     // Create player entity with all required components
-    Vector3 spawnPos = {0.0f, 80.0f, 0.0f};
+    rf::Vec3 spawnPos = {0.0f, 80.0f, 0.0f};
     playerEntity_ = ecs::PlayerSystem::create_player(registry_, spawnPos);
     
     // Start in main menu with cursor enabled
     gameScreen_ = ui::GameScreen::MainMenu;
-    EnableCursor();
+    rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
+
+    // Initialize render pipeline (HDR + shadows + tone mapping)
+    auto& win = rf::Window::instance();
+    if (renderPipeline_.init(win.width(), win.height())) {
+        pipelineInitialized_ = true;
+        engine_->log(engine::LogLevel::Info, "Render pipeline initialized");
+    } else {
+        engine_->log(engine::LogLevel::Warning, "Render pipeline failed — falling back to legacy");
+    }
+
+    // Initialize solid shader and cube mesh for entity rendering (players, items)
+    if (solidShader_.loadFromFiles("shaders/solid.vs", "shaders/solid.fs")) {
+        entityCube_ = rf::GLMesh::createCube(1.0f);
+        entityRenderReady_ = entityCube_.isValid();
+    }
+    if (!entityRenderReady_) {
+        engine_->log(engine::LogLevel::Warning, "Entity render resources failed to load");
+    }
     
     engine_->log(engine::LogLevel::Info, "Starting in main menu");
 }
 
 void BedWarsClient::on_shutdown() {
     engine_->log(engine::LogLevel::Info, "BedWarsClient shutting down");
+    clientScriptEngine_.reset();
+    renderPipeline_.shutdown();
+    pipelineInitialized_ = false;
+    solidShader_.destroy();
+    entityCube_.destroy();
+    entityRenderReady_ = false;
     inputSystem_.reset();
     playerSystem_.reset();
     registry_.clear();
     playerEntity_ = entt::null;
-    EnableCursor();
+    rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
 }
 
 // ============================================================================
@@ -77,9 +123,10 @@ void BedWarsClient::on_update(float dt) {
     // Process UI (F1 = debug UI, F2 = debug overlay, same as rayflow)
     ui::UIFrameInput uiInput;
     uiInput.dt = dt;
-    uiInput.toggle_pause = IsKeyPressed(KEY_ESCAPE);
-    uiInput.toggle_debug_ui = IsKeyPressed(KEY_F1);
-    uiInput.toggle_debug_overlay = IsKeyPressed(KEY_F2);
+    auto& rfInput = rf::Input::instance();
+    uiInput.toggle_pause = rfInput.isKeyPressed(KEY_ESCAPE);
+    uiInput.toggle_debug_ui = rfInput.isKeyPressed(KEY_F1);
+    uiInput.toggle_debug_overlay = rfInput.isKeyPressed(KEY_F2);
     
     ui::UIFrameOutput uiOutput = engine_->ui_manager().update(uiInput, uiViewModel_);
     uiCapturesInput_ = uiOutput.capture.captured();
@@ -90,18 +137,18 @@ void BedWarsClient::on_update(float dt) {
                             (sessionState_ == SessionState::InGame) && 
                             !uiCapturesInput_;
     if (shouldLockCursor) {
-        if (!IsCursorHidden()) {
-            DisableCursor();
+        if (!rfInput.isCursorHidden()) {
+            rfInput.setCursorMode(rf::CursorMode::Disabled);
         }
     } else {
-        if (IsCursorHidden()) {
-            EnableCursor();
+        if (rfInput.isCursorHidden()) {
+            rfInput.setCursorMode(rf::CursorMode::Normal);
         }
     }
     
 #ifdef NDEBUG
     // F3: Toggle BedWars-specific debug info (Release only)
-    if (IsKeyPressed(KEY_F3)) {
+    if (rfInput.isKeyPressed(KEY_F3)) {
         showDebug_ = !showDebug_;
     }
 #endif
@@ -142,36 +189,35 @@ void BedWarsClient::on_update(float dt) {
         if (playerEntity_ != entt::null) {
             auto& transform = registry_.get<ecs::Transform>(playerEntity_);
             
-            try {
-                auto& world = engine_->world();
-                world.update(transform.position);
+            if (auto* world = engine_->world()) {
+                world->update(transform.position);
 
                 update_lights();
                 
                 // Update block interaction
-                auto& blockInteraction = engine_->block_interaction();
-                if (!uiCapturesInput_) {
-                    Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
-                    Vector3 camDir = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+                auto* blockInteraction = engine_->block_interaction();
+                if (blockInteraction && !uiCapturesInput_) {
+                    ecs::Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+                    rf::Vec3 camDiff = camera.target - camera.position;
+                    float camLen = std::sqrt(camDiff.x*camDiff.x + camDiff.y*camDiff.y + camDiff.z*camDiff.z);
+                    rf::Vec3 camDir = (camLen > 0.0001f) ? camDiff / camLen : rf::Vec3{0,0,1};
                     
                     auto& input = registry_.get<ecs::InputState>(playerEntity_);
                     auto& tool = registry_.get<ecs::ToolHolder>(playerEntity_);
                     
-                    blockInteraction.update(world, camera.position, camDir, tool, 
+                    blockInteraction->update(*world, camera.position, camDir, tool, 
                                             input.primary_action, input.secondary_action, dt);
                     
                     // Check for pending block operations
-                    if (auto breakReq = blockInteraction.consume_break_request()) {
+                    if (auto breakReq = blockInteraction->consume_break_request()) {
                         send_try_break_block(breakReq->x, breakReq->y, breakReq->z);
                     }
-                    if (auto placeReq = blockInteraction.consume_place_request()) {
+                    if (auto placeReq = blockInteraction->consume_place_request()) {
                         send_try_place_block(placeReq->x, placeReq->y, placeReq->z,
                                              static_cast<proto::BlockType>(placeReq->block_type),
                                              placeReq->hitY, placeReq->face);
                     }
                 }
-            } catch (const std::runtime_error&) {
-                // World not initialized yet
             }
         }
     }
@@ -195,197 +241,242 @@ void BedWarsClient::clear_player_input() {
 // ============================================================================
 
 void BedWarsClient::on_render() {
+    auto& win = rf::Window::instance();
+    int sw = win.width();
+    int sh = win.height();
+    auto& batch = rf::Batch2D::instance();
+
     // Render based on game screen
     if (gameScreen_ == ui::GameScreen::MainMenu || 
         gameScreen_ == ui::GameScreen::ConnectMenu ||
         gameScreen_ == ui::GameScreen::Paused) {
-        // Clear and render UI only
-        ClearBackground(DARKGRAY);
+        // UI manager handles its own Batch2D frame internally
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
     if (gameScreen_ == ui::GameScreen::Connecting) {
-        // Show connecting screen
-        ClearBackground(BLACK);
-        DrawText("Connecting to server...", 100, 100, 30, WHITE);
-        
-        if (sessionState_ == SessionState::WaitingServerHello) {
-            DrawText("Waiting for ServerHello...", 100, 140, 20, GRAY);
-        } else if (sessionState_ == SessionState::WaitingJoinAck) {
-            DrawText("Joining match...", 100, 140, 20, GRAY);
-        }
-        
-        if (!connectionError_.empty()) {
-            DrawText(connectionError_.c_str(), 100, 200, 20, RED);
-        }
-        
+        // UI manager handles background + connecting message + its own Batch2D frame
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
     // Playing - render 3D world
     if (playerEntity_ == entt::null) {
-        ClearBackground(BLACK);
         engine_->ui_manager().render(uiViewModel_);
         return;
     }
     
-    // Get camera from ECS (same as rayflow)
-    Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    // Get camera from ECS
+    ecs::Camera3D ecsCamera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
     
-    BeginMode3D(camera);
-    
-    // Draw skybox first (before world)
-    renderer::Skybox::instance().draw(camera);
-    
-    render_world(camera);
-    render_players();
-    render_items();
-    
-    // Block interaction highlight
-    try {
-        auto& blockInteraction = engine_->block_interaction();
-        blockInteraction.render_highlight(camera);
-        blockInteraction.render_break_overlay(camera);
-    } catch (const std::runtime_error&) {
-        // Not initialized yet
+    // Convert to rf::Camera for OpenGL rendering
+    rf::Camera camera;
+    camera.setPerspective(ecsCamera.fovy, static_cast<float>(sw) / static_cast<float>(sh), 0.1f, 1000.0f);
+    camera.setPosition(ecsCamera.position);
+    camera.setTarget(ecsCamera.target);
+    camera.setUp(ecsCamera.up);
+
+    // Handle window resize for pipeline
+    if (pipelineInitialized_ && (renderPipeline_.width() != sw || renderPipeline_.height() != sh)) {
+        renderPipeline_.resize(sw, sh);
+    }
+
+    // ---- Compute sun direction (shared between shadow and main pass) ----
+    float timeOfDay = 12.0f;
+    rf::Vec3 sunDir(0.0f, 1.0f, 0.3f);
+    if (auto* world = engine_->world()) {
+        timeOfDay = world->get_time_of_day();
+        float angle = (timeOfDay / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
+        sunDir = rf::Vec3(std::cos(angle), std::sin(angle), 0.3f);
+        // Clamp sun above horizon to prevent everything going dark + broken shadow map
+        sunDir.y = std::max(sunDir.y, 0.05f);
+        sunDir = glm::normalize(sunDir);
+    }
+
+    if (pipelineInitialized_) {
+        // ===== PIPELINE PATH: Shadow → HDR Scene → Tone Map =====
+
+        // 1. Shadow pass
+        glDisable(GL_BLEND);  // No blending during shadow depth
+        renderPipeline_.beginShadowPass(camera, sunDir);
+        if (auto* world = engine_->world()) {
+            world->renderShadowPass(renderPipeline_.shadowShader(), renderPipeline_);
+        }
+        renderPipeline_.endShadowPass();
+
+        // 2. HDR scene pass
+        renderPipeline_.beginScene();
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        // Skybox (alpha blending OK for skybox)
+        glEnable(GL_BLEND);
+        renderer::Skybox::instance().draw(camera);
+
+        // Voxel world — disable blending, rely on alpha-test (discard)
+        // This prevents transparent texture edges from causing
+        // order-dependent blending artifacts when camera moves.
+        glDisable(GL_BLEND);
+        if (auto* world = engine_->world()) {
+            world->render(camera, renderPipeline_);
+        }
+
+        // Render player/item entities and block interaction overlays
+        glEnable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        render_players(camera);
+        render_items(camera);
+        if (auto* bi = engine_->block_interaction()) {
+            bi->render_highlight(camera);
+            bi->render_break_overlay(camera);
+        }
+
+        glDisable(GL_DEPTH_TEST);
+        renderPipeline_.endScene();
+
+        // 3. Tone mapping (HDR → LDR)
+        renderPipeline_.postProcess(1.0f);
+
+    } else {
+        // ===== FALLBACK: Legacy forward rendering =====
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+
+        renderer::Skybox::instance().draw(camera);
+
+        if (auto* world = engine_->world()) {
+            world->render(camera);
+        }
+
+        // Render player/item entities and block interaction overlays
+        render_players(camera);
+        render_items(camera);
+        if (auto* bi = engine_->block_interaction()) {
+            bi->render_highlight(camera);
+            bi->render_break_overlay(camera);
+        }
+
+        glDisable(GL_DEPTH_TEST);
     }
     
-    EndMode3D();
-    
-    // 2D overlay
-    // render_hud();
-    
+    // 2D overlay: crosshair + debug info (game-specific)
+    batch.begin(sw, sh);
+
 #ifdef NDEBUG
-    // BedWars-specific debug info (F3 toggle, Release only)
     if (showDebug_) {
         render_debug_info();
     }
 #endif
-    
+
     // Crosshair (show when playing and UI not capturing input)
     if (!uiCapturesInput_) {
-        voxel::BlockInteraction::render_crosshair(GetScreenWidth(), GetScreenHeight());
+        int cx = sw / 2, cy = sh / 2;
+        batch.drawRect(static_cast<float>(cx - 10), static_cast<float>(cy - 1), 20.0f, 2.0f, rf::Color::White());
+        batch.drawRect(static_cast<float>(cx - 1), static_cast<float>(cy - 10), 2.0f, 20.0f, rf::Color::White());
     }
-    
-    // Render UI (HUD, debug overlays handled by engine's UI manager)
+
+    batch.end();
+
+    // Rayflow UI Render (HUD (XML + CSS + lua), debug overlays)
     engine_->ui_manager().render(uiViewModel_);
 }
 
-void BedWarsClient::render_world(const Camera3D& camera) {
-    try {
-        engine_->world().render(camera);
-    } catch (const std::runtime_error&) {
-        // World not initialized
-    }
-}
+void BedWarsClient::render_players(const rf::Camera& camera) {
+    if (!entityRenderReady_) return;
 
-void BedWarsClient::render_players() {
-    // Render other players as simple colored cubes
+    rf::Mat4 vp = camera.viewProjectionMatrix();
+
+    solidShader_.bind();
+
     for (const auto& [id, player] : players_) {
         if (id == localPlayerId_) continue;  // Don't render self
-        
-        Color color = get_team_color(player.team);
+
+        rf::Color color = get_team_color(player.team);
         if (!player.alive) {
             color.a = 100;  // Semi-transparent when dead
         }
-        
-        Vector3 pos = {player.px, player.py + 0.9f, player.pz};  // Center of player
-        DrawCube(pos, 0.6f, 1.8f, 0.6f, color);
-        DrawCubeWires(pos, 0.6f, 1.8f, 0.6f, BLACK);
+
+        rf::Vec3 pos = {player.px, player.py + 0.9f, player.pz};  // Center of player
+        rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                       * glm::scale(rf::Mat4(1.0f), rf::Vec3(0.6f, 1.8f, 0.6f));
+        rf::Mat4 mvp = vp * model;
+
+        solidShader_.setMat4("mvp", mvp);
+        solidShader_.setVec4("color", color.normalized());
+        entityCube_.draw();
     }
+
+    rf::GLShader::unbind();
 }
 
-void BedWarsClient::render_items() {
-    // Render dropped items as small floating cubes
+void BedWarsClient::render_items(const rf::Camera& camera) {
+    if (!entityRenderReady_) return;
+
+    rf::Mat4 vp = camera.viewProjectionMatrix();
+
+    solidShader_.bind();
+
     for (const auto& [id, item] : items_) {
-        Color color = GOLD;  // Different colors for different item types could be added
-        
-        Vector3 pos = {item.x, item.y + 0.2f, item.z};
-        DrawCube(pos, 0.3f, 0.3f, 0.3f, color);
-    }
-}
+        rf::Color color = rf::Color{255, 203, 0, 255};  // GOLD
 
-void BedWarsClient::render_hud() {
-    int sw = GetScreenWidth();
-    int sh = GetScreenHeight();
-    
-    // Health bar
-    int barWidth = 200;
-    int barHeight = 20;
-    int barX = 20;
-    int barY = sh - 40;
-    
-    float healthPercent = static_cast<float>(localPlayer_.hp) / static_cast<float>(localPlayer_.maxHp);
-    
-    DrawRectangle(barX, barY, barWidth, barHeight, DARKGRAY);
-    DrawRectangle(barX, barY, static_cast<int>(barWidth * healthPercent), barHeight, RED);
-    DrawRectangleLines(barX, barY, barWidth, barHeight, WHITE);
-    
-    // Health text
-    char healthText[32];
-    std::snprintf(healthText, sizeof(healthText), "%d / %d HP", localPlayer_.hp, localPlayer_.maxHp);
-    DrawText(healthText, barX + barWidth + 10, barY + 2, 16, WHITE);
-    
-    // Team indicator
-    Color teamColor = get_team_color(localPlayer_.team);
-    DrawRectangle(sw - 120, 20, 100, 30, teamColor);
-    
-    const char* teamName = "None";
-    switch (localPlayer_.team) {
-        case proto::Teams::Red: teamName = "RED"; break;
-        case proto::Teams::Blue: teamName = "BLUE"; break;
-        case proto::Teams::Green: teamName = "GREEN"; break;
-        case proto::Teams::Yellow: teamName = "YELLOW"; break;
-        default: break;
+        rf::Vec3 pos = {item.x, item.y + 0.2f, item.z};
+        rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                       * glm::scale(rf::Mat4(1.0f), rf::Vec3(0.3f, 0.3f, 0.3f));
+        rf::Mat4 mvp = vp * model;
+
+        solidShader_.setMat4("mvp", mvp);
+        solidShader_.setVec4("color", color.normalized());
+        entityCube_.draw();
     }
-    DrawText(teamName, sw - 110, 25, 20, WHITE);
+
+    rf::GLShader::unbind();
 }
 
 void BedWarsClient::render_debug_info() {
+    auto& batch = rf::Batch2D::instance();
     char buf[256];
-    int y = 10;
-    
-    std::snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
-    DrawText(buf, 10, y, 16, GREEN);
+    float y = 10.0f;
+
+    std::snprintf(buf, sizeof(buf), "FPS: %d", uiViewModel_.fps);
+    batch.drawText(buf, 10, y, 16, rf::Color::Green());
     y += 20;
-    
+
     // Get position and camera from ECS
     if (playerEntity_ != entt::null) {
         if (registry_.all_of<ecs::Transform>(playerEntity_)) {
             auto& pos = registry_.get<ecs::Transform>(playerEntity_).position;
             std::snprintf(buf, sizeof(buf), "Pos: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
-            DrawText(buf, 10, y, 16, WHITE);
+            batch.drawText(buf, 10, y, 16, rf::Color::White());
             y += 20;
         }
         if (registry_.all_of<ecs::FirstPersonCamera>(playerEntity_)) {
             auto& cam = registry_.get<ecs::FirstPersonCamera>(playerEntity_);
             std::snprintf(buf, sizeof(buf), "Yaw: %.1f  Pitch: %.1f", cam.yaw, cam.pitch);
-            DrawText(buf, 10, y, 16, WHITE);
+            batch.drawText(buf, 10, y, 16, rf::Color::White());
             y += 20;
         }
     }
-    
+
     std::snprintf(buf, sizeof(buf), "Seed: %u", worldSeed_);
-    DrawText(buf, 10, y, 16, WHITE);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
     y += 20;
-    
+
     std::snprintf(buf, sizeof(buf), "Player ID: %u", localPlayerId_);
-    DrawText(buf, 10, y, 16, WHITE);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
     y += 20;
-    
+
     // Network info
     std::snprintf(buf, sizeof(buf), "Ping: %u ms", engine_->ping_ms());
-    DrawText(buf, 10, y, 16, YELLOW);
+    batch.drawText(buf, 10, y, 16, rf::Color::Yellow());
     y += 20;
-    
+
     std::snprintf(buf, sizeof(buf), "Server Tick: %u", serverTick_);
-    DrawText(buf, 10, y, 16, WHITE);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
     y += 20;
-    
+
     std::snprintf(buf, sizeof(buf), "Tick Rate: %u Hz", tickRate_);
-    DrawText(buf, 10, y, 16, WHITE);
+    batch.drawText(buf, 10, y, 16, rf::Color::White());
 }
 
 // ============================================================================
@@ -498,12 +589,12 @@ void BedWarsClient::handle_server_hello(const proto::ServerHello& msg) {
         
         shared::maps::MapTemplate mapTemplate;
         std::string err;
-        if (shared::maps::read_rfmap(path, &mapTemplate, &err)) {
+        if (auto* world = engine_->world(); world && shared::maps::read_rfmap(path, &mapTemplate, &err)) {
             // Apply map template to world
-            engine_->world().set_map_template(std::move(mapTemplate));
+            world->set_map_template(std::move(mapTemplate));
             
             // Apply visual settings (skybox, etc.)
-            if (const auto* mt = engine_->world().map_template()) {
+            if (const auto* mt = world->map_template()) {
                 renderer::Skybox::instance().set_kind(mt->visualSettings.skyboxKind);
             }
             
@@ -533,7 +624,7 @@ void BedWarsClient::handle_join_ack(const proto::JoinAck& msg) {
     
     // Switch to playing mode
     gameScreen_ = ui::GameScreen::Playing;
-    DisableCursor();
+    rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
 }
 
 void BedWarsClient::handle_state_snapshot(const proto::StateSnapshot& msg) {
@@ -569,10 +660,8 @@ void BedWarsClient::handle_state_snapshot(const proto::StateSnapshot& msg) {
 }
 
 void BedWarsClient::handle_chunk_data(const proto::ChunkData& msg) {
-    try {
-        engine_->world().apply_chunk_data(msg.chunkX, msg.chunkZ, msg.blocks);
-    } catch (const std::runtime_error&) {
-        // World not initialized
+    if (auto* world = engine_->world()) {
+        world->apply_chunk_data(msg.chunkX, msg.chunkZ, msg.blocks);
     }
 }
 
@@ -581,7 +670,9 @@ void BedWarsClient::handle_block_placed(const proto::BlockPlaced& msg) {
                  "BlockPlaced: " + std::to_string(msg.x) + "," + std::to_string(msg.y) + "," + std::to_string(msg.z) +
                  " type=" + std::to_string(static_cast<int>(msg.blockType)));
     try {
-        engine_->world().set_block(msg.x, msg.y, msg.z, static_cast<voxel::Block>(msg.blockType));
+        if (auto* world = engine_->world()) {
+            world->set_block(msg.x, msg.y, msg.z, static_cast<voxel::Block>(msg.blockType));
+        }
     } catch (const std::runtime_error& e) {
         engine_->log(engine::LogLevel::Error, "Failed to set block: " + std::string(e.what()));
     }
@@ -591,7 +682,9 @@ void BedWarsClient::handle_block_broken(const proto::BlockBroken& msg) {
     engine_->log(engine::LogLevel::Info, 
                  "BlockBroken: " + std::to_string(msg.x) + "," + std::to_string(msg.y) + "," + std::to_string(msg.z));
     try {
-        engine_->world().set_block(msg.x, msg.y, msg.z, static_cast<voxel::Block>(shared::voxel::BlockType::Air));
+        if (auto* world = engine_->world()) {
+            world->set_block(msg.x, msg.y, msg.z, static_cast<voxel::Block>(shared::voxel::BlockType::Air));
+        }
     } catch (const std::runtime_error& e) {
         engine_->log(engine::LogLevel::Error, "Failed to break block: " + std::string(e.what()));
     }
@@ -602,10 +695,8 @@ void BedWarsClient::handle_action_rejected(const proto::ActionRejected& msg) {
                  "Action rejected, seq=" + std::to_string(msg.seq) + 
                  " reason=" + std::to_string(static_cast<int>(msg.reason)));
     
-    try {
-        engine_->block_interaction().on_action_rejected();
-    } catch (const std::runtime_error&) {
-        // Not initialized
+    if (auto* bi = engine_->block_interaction()) {
+        bi->on_action_rejected();
     }
 }
 
@@ -761,7 +852,10 @@ void BedWarsClient::send_message(const T& msg) {
 void BedWarsClient::update_ui_view_model() {
     uiViewModel_.screen_width = engine_->window_width();
     uiViewModel_.screen_height = engine_->window_height();
-    uiViewModel_.fps = GetFPS();
+    uiViewModel_.dt = engine_->frame_dt();
+    uiViewModel_.fps = (engine_->frame_dt() > 0.0f)
+                        ? static_cast<int>(1.0f / engine_->frame_dt())
+                        : 0;
     uiViewModel_.game_screen = gameScreen_;
     
     // Player info from ECS (same as rayflow)
@@ -853,13 +947,13 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
         else if (std::get_if<ui::ResumeGame>(&cmd)) {
             if (sessionState_ == SessionState::InGame) {
                 gameScreen_ = ui::GameScreen::Playing;
-                DisableCursor();
+                rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
             }
         }
         else if (std::get_if<ui::OpenPauseMenu>(&cmd)) {
             if (sessionState_ == SessionState::InGame) {
                 gameScreen_ = ui::GameScreen::Paused;
-                EnableCursor();
+                rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
             }
         }
         else if (std::get_if<ui::ReturnToMainMenu>(&cmd)) {
@@ -868,7 +962,7 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
             }
             gameScreen_ = ui::GameScreen::MainMenu;
             sessionState_ = SessionState::Disconnected;
-            EnableCursor();
+            rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
         }
     }
 }
@@ -877,13 +971,13 @@ void BedWarsClient::apply_ui_commands(const ui::UIFrameOutput& out) {
 // Helpers
 // ============================================================================
 
-Color BedWarsClient::get_team_color(proto::TeamId team) const {
+rf::Color BedWarsClient::get_team_color(proto::TeamId team) const {
     switch (team) {
-        case proto::Teams::Red: return RED;
-        case proto::Teams::Blue: return BLUE;
-        case proto::Teams::Green: return GREEN;
-        case proto::Teams::Yellow: return YELLOW;
-        default: return WHITE;
+        case proto::Teams::Red: return rf::Color::Red();
+        case proto::Teams::Blue: return rf::Color::Blue();
+        case proto::Teams::Green: return rf::Color::Green();
+        case proto::Teams::Yellow: return rf::Color::Yellow();
+        default: return rf::Color::White();
     }
 }
 
@@ -925,7 +1019,7 @@ void BedWarsClient::update_lights() {
         }
     }
 
-    engine_->world().set_lights(active_lights);
+    engine_->world()->set_lights(active_lights);
 }
 
 } // namespace bedwars

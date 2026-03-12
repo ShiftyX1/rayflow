@@ -4,6 +4,7 @@
 #include <sol/sol.hpp>
 
 #include "engine/modules/voxel/shared/block.hpp"
+#include "engine/core/scripting/api/utils.hpp"
 
 #include <chrono>
 #include <random>
@@ -220,25 +221,8 @@ double BedWarsAPI::api_time() {
 }
 
 void BedWarsAPI::api_log(sol::variadic_args va, sol::this_state ts) {
-    sol::state_view lua(ts);
-    std::ostringstream oss;
-    
-    bool first = true;
-    for (auto v : va) {
-        if (!first) oss << "\t";
-        first = false;
-        
-        sol::protected_function tostring = lua["tostring"];
-        if (tostring.valid()) {
-            auto result = tostring(v);
-            if (result.valid()) {
-                oss << result.get<std::string>();
-            }
-        }
-    }
-    
     if (engine_.log_callback()) {
-        engine_.log_callback()("[script] " + oss.str());
+        engine_.log_callback()("[script] " + engine::scripting::api::lua_args_to_string(va, ts));
     }
 }
 

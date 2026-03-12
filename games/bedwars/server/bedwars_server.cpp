@@ -234,10 +234,25 @@ void BedWarsServer::on_init(engine::IEngineServices& engine) {
     std::string mode = opts_.editorCameraMode ? " (editor mode)" : "";
     engine_->log_info("BedWars server initialized with seed " + std::to_string(worldSeed_) + mode);
     engine_->log_info("Teams: " + std::to_string(matchConfig_.teamCount) + ", Generators: " + std::to_string(generators_.size()));
+    
+    // Initialize scripting engine
+    scriptEngine_ = std::make_unique<bedwars::scripting::BedWarsScriptEngine>();
+    scriptEngine_->set_log_callback([this](const std::string& msg) {
+        engine_->log_info("[lua] " + msg);
+    });
+    
+    if (scriptEngine_->init()) {
+        // Load game-level scripts from scripts/server/ (via VFS)
+        scriptEngine_->init_game_scripts();
+    } else {
+        engine_->log_warning("Failed to initialize script engine");
+        scriptEngine_.reset();
+    }
 }
 
 void BedWarsServer::on_shutdown() {
     engine_->log_info("BedWars server shutting down");
+    scriptEngine_.reset();
     players_.clear();
     terrain_.reset();
     engine_ = nullptr;

@@ -28,11 +28,25 @@ add_library(engine_core STATIC
     core/scripting/scripting.hpp
     core/scripting/lua_state.hpp
     core/scripting/lua_state.cpp
+    core/scripting/lua_state_call.hpp
     core/scripting/sandbox.hpp
     core/scripting/sandbox.cpp
     core/scripting/script_types.hpp
     core/scripting/script_engine_base.hpp
     core/scripting/script_engine_base.cpp
+    core/scripting/script_api_module.hpp
+    
+    # Scripting API modules (generic, game-agnostic)
+    core/scripting/api/utils.hpp
+    core/scripting/api/utils.cpp
+    core/scripting/api/engine_api.hpp
+    core/scripting/api/engine_api.cpp
+    core/scripting/api/math_api.hpp
+    core/scripting/api/math_api.cpp
+    core/scripting/api/timer_api.hpp
+    core/scripting/api/timer_api.cpp
+    core/scripting/api/events_api.hpp
+    core/scripting/api/events_api.cpp
     
     # VFS (Virtual File System)
     vfs/pak_format.hpp
@@ -97,7 +111,7 @@ if(WIN32)
 endif()
 
 # =============================================================================
-# Engine Client (with raylib - for graphical games)
+# Engine Client (GLFW + OpenGL — graphical games)
 # Base client without game-specific modules
 # =============================================================================
 add_library(engine_client STATIC
@@ -106,6 +120,8 @@ add_library(engine_client STATIC
     core/client_engine.cpp
     
     # Client core
+    client/core/window.cpp
+    client/core/input.cpp
     client/core/config.cpp
     client/core/logger.cpp
     client/core/resources.cpp
@@ -127,8 +143,17 @@ add_library(engine_client STATIC
     ecs/systems/camera2d_system.cpp
     
     # Renderer (universal - moved from client/renderer/)
+    renderer/gl_shader.cpp
+    renderer/gl_texture.cpp
+    renderer/gl_framebuffer.cpp
+    renderer/gl_mesh.cpp
+    renderer/gl_font.cpp
+    renderer/batch_2d.cpp
+    renderer/camera.cpp
+    renderer/stb_impl.cpp
     renderer/mesh.cpp
     renderer/skybox.cpp
+    renderer/render_pipeline.cpp
 )
 
 target_include_directories(engine_client PUBLIC
@@ -138,7 +163,7 @@ target_include_directories(engine_client PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(engine_client PUBLIC engine_core raylib EnTT::EnTT)
+target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT)
 
 # Set PAK mode compile definition
 if(ENGINE_USE_PAK)
@@ -148,7 +173,7 @@ else()
 endif()
 
 # =============================================================================
-# Engine UI (with raylib - UI framework)
+# Engine UI framework
 # =============================================================================
 add_library(engine_ui STATIC
     ui/runtime/ui_manager.cpp
@@ -164,12 +189,11 @@ target_include_directories(engine_ui PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(engine_ui PUBLIC engine_client tinyxml2)
+target_link_libraries(engine_ui PUBLIC engine_client tinyxml2 imgui)
 
-# Debug UI (raygui) - available in all builds
+# Debug UI (Dear ImGui) - available in all builds
 target_sources(engine_ui PRIVATE
     ui/debug/debug_ui.cpp
-    ui/debug/raygui_impl.cpp
 )
 
 # Enable DEBUG_UI in Debug builds
@@ -214,7 +238,8 @@ add_library(engine_lib ALIAS engine_core)
 # =============================================================================
 # Tools
 # =============================================================================
-add_subdirectory(modules/voxel/tools/map_editor)
+# Map editor temporarily disabled during GLFW/OpenGL migration
+# add_subdirectory(modules/voxel/tools/map_editor)
 
 # Asset packer tool (no raylib dependency)
 if(RAYFLOW_BUILD_PACK_ASSETS)

@@ -3,7 +3,11 @@
 #include "world.hpp"
 #include "engine/ecs/components.hpp"
 #include "engine/core/player_constants.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/camera.hpp"
 
 #include <optional>
 #include <array>
@@ -44,11 +48,15 @@ public:
     bool init();
     void destroy();
     
-    void update(World& world, const Vector3& camera_pos, const Vector3& camera_dir, 
+    void update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir, 
                 const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time);
     
-    void render_highlight(const Camera3D& camera) const;
-    void render_break_overlay(const Camera3D& camera) const;
+    /// Render wireframe outline around the targeted block.
+    void render_highlight(const rf::Camera& camera) const;
+
+    /// Render destroy stage texture overlay on the targeted block.
+    void render_break_overlay(const rf::Camera& camera) const;
+
     static void render_crosshair(int screen_width, int screen_height);
     
     const BlockRaycastResult& get_target() const { return target_; }
@@ -60,8 +68,8 @@ public:
     void on_action_rejected();
     
 private:
-    BlockRaycastResult raycast(const World& world, const Vector3& origin, 
-                                const Vector3& direction, float max_distance) const;
+    BlockRaycastResult raycast(const World& world, const rf::Vec3& origin, 
+                                const rf::Vec3& direction, float max_distance) const;
     float calculate_break_time(BlockType block_type, const ecs::ToolHolder& tool) const;
     
     BlockRaycastResult target_;
@@ -76,8 +84,15 @@ private:
     std::optional<BreakRequest> outgoing_break_;
     std::optional<PlaceRequest> outgoing_place_;
 
-    std::array<Texture2D, DESTROY_STAGE_COUNT> destroy_textures_{};
+    std::array<rf::GLTexture, DESTROY_STAGE_COUNT> destroy_textures_;
     bool textures_loaded_{false};
+
+    // Rendering resources (loaded in init())
+    rf::GLShader solidShader_;
+    rf::GLShader overlayShader_;
+    rf::GLMesh   wireframeCube_;
+    rf::GLMesh   overlayCube_;    // Solid cube with UVs for destroy overlay
+    bool         render_resources_loaded_{false};
 };
 
 } // namespace voxel

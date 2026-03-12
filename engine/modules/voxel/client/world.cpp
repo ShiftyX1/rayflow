@@ -1,7 +1,9 @@
 #include "world.hpp"
+#include "block_registry.hpp"
 #include "engine/client/core/resources.hpp"
-#include <raylib.h>
-#include <raymath.h>
+#include "engine/core/logging.hpp"
+#include "engine/core/math_types.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <cstdio>
 #include <chrono>
@@ -53,11 +55,13 @@ World::~World() {
 void World::set_map_template(shared::maps::MapTemplate map) {
     map_template_ = std::move(map);
     chunks_.clear();
+    extract_lights_from_map();
 }
 
 void World::clear_map_template() {
     map_template_.reset();
     chunks_.clear();
+    static_lights_.clear();
 }
 
 float World::temperature() const {
@@ -309,7 +313,7 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
     
     chunk->set_dirty_callback([this](Chunk* c) {
         if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
-            dirty_chunks_.push_back(c);
+            dirty_chunks_.insert(dirty_chunks_.begin(), c);
         }
     });
     
@@ -343,7 +347,7 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
         
         newChunk->set_dirty_callback([this](Chunk* c) {
             if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
-                dirty_chunks_.push_back(c);
+                dirty_chunks_.insert(dirty_chunks_.begin(), c);
             }
         });
         
@@ -357,6 +361,11 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
                                         static_cast<std::size_t>(lz) * static_cast<std::size_t>(CHUNK_WIDTH) +
                                         static_cast<std::size_t>(lx);
                 Block bt = static_cast<Block>(blockData[idx]);
+                
+                if (static_cast<BlockType>(bt) == BlockType::Light) {
+                    bt = static_cast<Block>(BlockType::Air);
+                }
+                
                 chunk->set_block(lx, y, lz, bt);
             }
         }
@@ -389,8 +398,6 @@ void World::recompute_chunk_states(int chunkX, int chunkZ) {
     if (it == chunks_.end()) return;
     
     Chunk* chunk = it->second.get();
-    const int baseX = chunkX * CHUNK_WIDTH;
-    const int baseZ = chunkZ * CHUNK_DEPTH;
     
     Chunk* north_chunk = get_chunk(chunkX, chunkZ - 1);
     Chunk* south_chunk = get_chunk(chunkX, chunkZ + 1);
@@ -461,6 +468,10 @@ void World::generate_chunk_terrain(Chunk& chunk) {
                                                     static_cast<std::size_t>(z) * static_cast<std::size_t>(CHUNK_WIDTH) +
                                                     static_cast<std::size_t>(x);
                             bt = static_cast<Block>(src->blocks[idx]);
+                            
+                            if (static_cast<BlockType>(bt) == BlockType::Light) {
+                                bt = static_cast<Block>(BlockType::Air);
+                            }
                         }
                         chunk.set_block(x, y, z, bt);
                     }
@@ -541,7 +552,7 @@ void World::generate_chunk_terrain(Chunk& chunk) {
     }
 }
 
-void World::update(const Vector3& player_position) {
+void World::update(const rf::Vec3& player_position) {
     load_chunks_around_player(player_position);
     unload_distant_chunks(player_position);
     
@@ -582,7 +593,7 @@ void World::update(const Vector3& player_position) {
     last_player_position_ = player_position;
 }
 
-void World::load_chunks_around_player(const Vector3& player_position) {
+void World::load_chunks_around_player(const rf::Vec3& player_position) {
     int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
     int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
     
@@ -595,7 +606,7 @@ void World::load_chunks_around_player(const Vector3& player_position) {
     }
 }
 
-void World::unload_distant_chunks(const Vector3& player_position) {
+void World::unload_distant_chunks(const rf::Vec3& player_position) {
     int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
     int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
     
@@ -617,129 +628,245 @@ void World::unload_distant_chunks(const Vector3& player_position) {
     }
 }
 
-void World::render(const Camera3D& camera) const {
-    (void)camera; // May be used for frustum culling later
-    
-    if (voxel_shader_loaded_) {
-        // Update lights
-        int count = static_cast<int>(scene_lights_.size());
-        if (count > 32) count = 32;
-        
-        // theta = (time - 12) / 24 * 2PI
-        float theta = (time_of_day_ - 12.0f) / 24.0f * 2.0f * PI;
-        
-        // TODO: Rotate (0,1,0) around Z axis by theta?
-        // x = sin(theta), y = cos(theta)
-        // Noon (0): x=0, y=1. Correct.
-        // TODO: 18:00 (6): theta=PI/2. x=1, y=0. (West?)
-        // TODO: 6:00 (-6): theta=-PI/2. x=-1, y=0. (East?)
-        
-        Vector3 sunDirVec = { -std::sin(theta), std::cos(theta), 0.2f }; // Slight Z tilt
-        sunDirVec = Vector3Normalize(sunDirVec);
-        
-        Vector3 sunColVec = {1.0f, 1.0f, 0.9f};
-        // Simple day/night color
-        if (time_of_day_ < 6.0f || time_of_day_ > 18.0f) {
-           // Night
-           sunColVec = {0.1f, 0.1f, 0.2f};
-        } else if (time_of_day_ < 7.0f || time_of_day_ > 17.0f) {
-           // Transition
-           sunColVec = {1.0f, 0.6f, 0.3f};
-        }
+// =============================================================================
+// Rendering
+// =============================================================================
 
-        Vector3 ambColVec = {0.6f, 0.6f, 0.7f};
-        
-        sunColVec = Vector3Scale(sunColVec, sun_intensity_);
-        ambColVec = Vector3Scale(ambColVec, ambient_intensity_);
+void World::render(const rf::Camera& camera) const {
+    if (!voxel_shader_.isValid()) return;
 
-        if (sun_dir_loc_ != -1) SetShaderValue(voxel_shader_, sun_dir_loc_, &sunDirVec, SHADER_UNIFORM_VEC3);
-        if (sun_col_loc_ != -1) SetShaderValue(voxel_shader_, sun_col_loc_, &sunColVec, SHADER_UNIFORM_VEC3);
-        if (amb_col_loc_ != -1) SetShaderValue(voxel_shader_, amb_col_loc_, &ambColVec, SHADER_UNIFORM_VEC3);
-        if (view_pos_loc_ != -1) SetShaderValue(voxel_shader_, view_pos_loc_, &camera.position, SHADER_UNIFORM_VEC3);
+    auto& shader = const_cast<rf::GLShader&>(voxel_shader_);
+    shader.bind();
 
-        SetShaderValue(voxel_shader_, light_count_loc_, &count, SHADER_UNIFORM_INT);
+    // MVP = projection * view (model is identity for chunks — vertices are in world space)
+    rf::Mat4 view = camera.viewMatrix();
+    rf::Mat4 proj = camera.projectionMatrix();
+    rf::Mat4 model = rf::Mat4(1.0f);
+    rf::Mat4 mvp = proj * view * model;
 
-        for (int i = 0; i < count; i++) {
-             const auto& locs = light_locs_[i];
-             const auto& light = scene_lights_[i];
-             
-             if (locs.position != -1) SetShaderValue(voxel_shader_, locs.position, &light.position, SHADER_UNIFORM_VEC3);
-             if (locs.color != -1) SetShaderValue(voxel_shader_, locs.color, &light.color, SHADER_UNIFORM_VEC3);
-             if (locs.radius != -1) SetShaderValue(voxel_shader_, locs.radius, &light.radius, SHADER_UNIFORM_FLOAT);
-             if (locs.intensity != -1) SetShaderValue(voxel_shader_, locs.intensity, &light.intensity, SHADER_UNIFORM_FLOAT);
+    shader.setMat4("mvp", mvp);
+    shader.setMat4("matModel", model);
+    rf::Mat4 normalMat = glm::transpose(glm::inverse(model));
+    shader.setMat4("matNormal", normalMat);
+
+    // Diffuse color (white by default)
+    shader.setVec4("colDiffuse", rf::Vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    // Sun direction (based on time of day)
+    float angle = (time_of_day_ / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
+    rf::Vec3 sunDir = rf::Vec3(std::cos(angle), std::sin(angle), 0.3f);
+    // Clamp sun above horizon to prevent darkness and broken shadow map
+    sunDir.y = std::max(sunDir.y, 0.05f);
+    sunDir = glm::normalize(sunDir);
+    shader.setVec3("sunDir", sunDir);
+
+    // Sun and ambient colors
+    rf::Vec3 sunColor = rf::Vec3(1.0f, 0.95f, 0.9f) * sun_intensity_;
+    rf::Vec3 ambientColor = rf::Vec3(0.4f, 0.45f, 0.55f) * ambient_intensity_;
+    shader.setVec3("sunColor", sunColor);
+    shader.setVec3("ambientColor", ambientColor);
+
+    // Camera position (for specular / point light distance)
+    shader.setVec3("viewPos", camera.position());
+
+    // Point lights
+    auto all_lights = scene_lights_;
+    all_lights.insert(all_lights.end(), static_lights_.begin(), static_lights_.end());
+    int light_count = std::min(static_cast<int>(all_lights.size()), 32);
+    shader.setInt("lightCount", light_count);
+
+    for (int i = 0; i < light_count; ++i) {
+        if (i < static_cast<int>(light_locs_.size())) {
+            shader.setVec3(light_locs_[i].position, all_lights[i].position);
+            shader.setVec3(light_locs_[i].color, all_lights[i].color);
+            shader.setFloat(light_locs_[i].radius, all_lights[i].radius);
+            shader.setFloat(light_locs_[i].intensity, all_lights[i].intensity);
         }
     }
 
-    const Vector3& cam_pos = camera.position;
-    const float max_render_dist_sq = static_cast<float>(render_distance_ * CHUNK_WIDTH * render_distance_ * CHUNK_WIDTH);
-    
-    for (const auto& [key, chunk] : chunks_) {
-        if (chunk->is_empty()) continue;
-        
-        const Vector3 chunk_center = {
-            chunk->get_world_position().x + CHUNK_WIDTH * 0.5f,
-            CHUNK_HEIGHT * 0.5f,
-            chunk->get_world_position().z + CHUNK_DEPTH * 0.5f
-        };
-        
-        const float dx = chunk_center.x - cam_pos.x;
-        const float dz = chunk_center.z - cam_pos.z;
-        const float dist_sq = dx * dx + dz * dz;
-        
-        if (dist_sq > max_render_dist_sq) continue;
-        
-        // Render with voxel shader (AO) if available, otherwise use default
-        if (voxel_shader_loaded_) {
-            chunk->render(voxel_shader_);
-        } else {
+    // Bind atlas texture to unit 0
+    if (BlockRegistry::instance().is_initialized()) {
+        BlockRegistry::instance().get_atlas_texture().bind(0);
+    }
+    shader.setInt("texture0", 0);
+
+    // Shadow disabled in legacy path
+    shader.setInt("shadowEnabled", 0);
+    shader.setMat4("lightSpaceMatrix", rf::Mat4(1.0f));
+
+    // Fog
+    rf::Vec3 fogCol = get_fog_color();
+    shader.setVec3("fogColor", fogCol);
+    shader.setFloat("fogStart", get_fog_start());
+    shader.setFloat("fogEnd", get_fog_end());
+
+    // Draw all chunks
+    for (const auto& [coord, chunk] : chunks_) {
+        if (chunk && chunk->is_generated()) {
+            chunk->render();
+        }
+    }
+
+    rf::GLShader::unbind();
+}
+
+// -----------------------------------------------------------------------------
+// Pipeline-aware render (shadows, fog, HDR)
+// -----------------------------------------------------------------------------
+
+void World::render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const {
+    if (!voxel_shader_.isValid()) return;
+
+    auto& shader = const_cast<rf::GLShader&>(voxel_shader_);
+    shader.bind();
+
+    // MVP
+    rf::Mat4 view = camera.viewMatrix();
+    rf::Mat4 proj = camera.projectionMatrix();
+    rf::Mat4 model = rf::Mat4(1.0f);
+    rf::Mat4 mvp = proj * view * model;
+
+    shader.setMat4("mvp", mvp);
+    shader.setMat4("matModel", model);
+    rf::Mat4 normalMat = glm::transpose(glm::inverse(model));
+    shader.setMat4("matNormal", normalMat);
+    shader.setVec4("colDiffuse", rf::Vec4(1.0f));
+
+    // Sun direction
+    float angle = (time_of_day_ / 24.0f) * glm::two_pi<float>() - glm::half_pi<float>();
+    rf::Vec3 sunDir = rf::Vec3(std::cos(angle), std::sin(angle), 0.3f);
+    // Clamp sun above horizon to prevent darkness and broken shadow map
+    sunDir.y = std::max(sunDir.y, 0.05f);
+    sunDir = glm::normalize(sunDir);
+    shader.setVec3("sunDir", sunDir);
+
+    // Sun and ambient colors
+    rf::Vec3 sunColor = rf::Vec3(1.0f, 0.95f, 0.9f) * sun_intensity_;
+    rf::Vec3 ambientColor = rf::Vec3(0.4f, 0.45f, 0.55f) * ambient_intensity_;
+    shader.setVec3("sunColor", sunColor);
+    shader.setVec3("ambientColor", ambientColor);
+    shader.setVec3("viewPos", camera.position());
+
+    // Point lights
+    auto all_lights = scene_lights_;
+    all_lights.insert(all_lights.end(), static_lights_.begin(), static_lights_.end());
+    int light_count = std::min(static_cast<int>(all_lights.size()), 32);
+    shader.setInt("lightCount", light_count);
+    for (int i = 0; i < light_count; ++i) {
+        if (i < static_cast<int>(light_locs_.size())) {
+            shader.setVec3(light_locs_[i].position, all_lights[i].position);
+            shader.setVec3(light_locs_[i].color, all_lights[i].color);
+            shader.setFloat(light_locs_[i].radius, all_lights[i].radius);
+            shader.setFloat(light_locs_[i].intensity, all_lights[i].intensity);
+        }
+    }
+
+    // Atlas texture on unit 0
+    if (BlockRegistry::instance().is_initialized()) {
+        BlockRegistry::instance().get_atlas_texture().bind(0);
+    }
+    shader.setInt("texture0", 0);
+
+    // Shadow map on unit 1
+    shader.setInt("shadowEnabled", 1);
+    shader.setMat4("lightSpaceMatrix", pipeline.lightSpaceMatrix());
+    pipeline.bindShadowMap(1);
+    shader.setInt("shadowMap", 1);
+
+    // Fog
+    rf::Vec3 fogCol = get_fog_color();
+    shader.setVec3("fogColor", fogCol);
+    shader.setFloat("fogStart", get_fog_start());
+    shader.setFloat("fogEnd", get_fog_end());
+
+    // Update frustum and draw visible chunks
+    pipeline.updateFrustum(camera);
+
+    for (const auto& [coord, chunk] : chunks_) {
+        if (chunk && chunk->is_generated()) {
+            if (pipeline.isChunkVisible(coord.first, coord.second)) {
+                chunk->render();
+            }
+        }
+    }
+
+    rf::GLShader::unbind();
+}
+
+// -----------------------------------------------------------------------------
+// Shadow depth pass
+// -----------------------------------------------------------------------------
+
+void World::renderShadowPass(rf::GLShader& shadowShader, rf::RenderPipeline& /*pipeline*/) const {
+    // Bind atlas for alpha-test on foliage
+    if (BlockRegistry::instance().is_initialized()) {
+        BlockRegistry::instance().get_atlas_texture().bind(0);
+    }
+    shadowShader.setInt("texture0", 0);
+
+    for (const auto& [coord, chunk] : chunks_) {
+        if (chunk && chunk->is_generated()) {
+            // Shadow frustum culling not strictly needed (ortho covers area)
+            // but skip very distant chunks for performance
             chunk->render();
         }
     }
 }
 
+// -----------------------------------------------------------------------------
+// Fog helpers
+// -----------------------------------------------------------------------------
+
+rf::Vec3 World::get_fog_color() const {
+    // Blend between day/night fog colors based on sun intensity
+    rf::Vec3 dayFog = rf::Vec3(0.7f, 0.8f, 0.95f);
+    rf::Vec3 nightFog = rf::Vec3(0.05f, 0.06f, 0.12f);
+    float t = std::clamp(sun_intensity_, 0.0f, 1.0f);
+    return dayFog * t + nightFog * (1.0f - t);
+}
+
+float World::get_fog_start() const {
+    return static_cast<float>(render_distance_) * 16.0f * 0.6f;
+}
+
+float World::get_fog_end() const {
+    return static_cast<float>(render_distance_) * 16.0f * 0.95f;
+}
+
 void World::load_voxel_shader() {
-    if (voxel_shader_loaded_) return;
+    if (voxel_shader_.isValid()) return;
 
-    const char* vs_path = "shaders/voxel.vs";
-    const char* fs_path = "shaders/voxel.fs";
+    bool ok = voxel_shader_.loadFromFiles("shaders/voxel.vs", "shaders/voxel.fs");
+    if (ok) {
+        // Cache uniform locations
+        light_count_loc_ = voxel_shader_.getUniformLocation("lightCount");
+        sun_dir_loc_ = voxel_shader_.getUniformLocation("sunDir");
+        sun_col_loc_ = voxel_shader_.getUniformLocation("sunColor");
+        amb_col_loc_ = voxel_shader_.getUniformLocation("ambientColor");
+        view_pos_loc_ = voxel_shader_.getUniformLocation("viewPos");
 
-    voxel_shader_ = resources::load_shader(vs_path, fs_path);
-    if (voxel_shader_.id != 0) {
-        voxel_shader_loaded_ = true;
-        
-        // Cache all shader locations once
-        light_count_loc_ = GetShaderLocation(voxel_shader_, "lightCount");
-        sun_dir_loc_ = GetShaderLocation(voxel_shader_, "sunDir");
-        sun_col_loc_ = GetShaderLocation(voxel_shader_, "sunColor");
-        amb_col_loc_ = GetShaderLocation(voxel_shader_, "ambientColor");
-        view_pos_loc_ = GetShaderLocation(voxel_shader_, "viewPos");
-        
-        // Cache light array locations (max 32)
         light_locs_.clear();
         light_locs_.reserve(32);
         for (int i = 0; i < 32; i++) {
             std::string base = "lights[" + std::to_string(i) + "]";
             LightLocations locs;
-            locs.position = GetShaderLocation(voxel_shader_, (base + ".position").c_str());
-            locs.color = GetShaderLocation(voxel_shader_, (base + ".color").c_str());
-            locs.radius = GetShaderLocation(voxel_shader_, (base + ".radius").c_str());
-            locs.intensity = GetShaderLocation(voxel_shader_, (base + ".intensity").c_str());
+            locs.position = voxel_shader_.getUniformLocation(base + ".position");
+            locs.color = voxel_shader_.getUniformLocation(base + ".color");
+            locs.radius = voxel_shader_.getUniformLocation(base + ".radius");
+            locs.intensity = voxel_shader_.getUniformLocation(base + ".intensity");
             light_locs_.push_back(locs);
         }
-        
-        TraceLog(LOG_INFO, "Voxel shader loaded successfully (active)");
+
+        TraceLog(LOG_INFO, "Voxel shader loaded successfully");
     } else {
-        TraceLog(LOG_WARNING, "Voxel shader not found, using default shader");
-        voxel_shader_loaded_ = false;
+        TraceLog(LOG_WARNING, "Voxel shader failed to load");
     }
 }
 
 void World::unload_voxel_shader() {
-    if (voxel_shader_loaded_) {
-        UnloadShader(voxel_shader_);
-        voxel_shader_loaded_ = false;
-        TraceLog(LOG_INFO, "Voxel shader unloaded");
-    }
+    voxel_shader_.destroy();
+    light_locs_.clear();
+    TraceLog(LOG_INFO, "Voxel shader unloaded");
 }
 
 float World::sample_skylight01(int x, int y, int z) const {
@@ -748,6 +875,68 @@ float World::sample_skylight01(int x, int y, int z) const {
         return it->second->get_light(x & 15, y, z & 15) / 15.0f;
     }
     return 1.0f;
+}
+
+void World::set_static_lights(const std::vector<rf::Vec3>& positions) {
+    static_lights_.clear();
+    static_lights_.reserve(positions.size());
+    
+    // Default light properties for map lights
+    const rf::Vec3 default_color = {1.0f, 0.95f, 0.85f};
+    const float default_radius = 12.0f;
+    const float default_intensity = 1.2f;
+    
+    for (const auto& pos : positions) {
+        static_lights_.push_back(PointLight{
+            .position = pos,
+            .color = default_color,
+            .radius = default_radius,
+            .intensity = default_intensity
+        });
+    }
+    
+    TraceLog(LOG_INFO, "Set %zu static lights from map", static_lights_.size());
+}
+
+void World::extract_lights_from_map() {
+    static_lights_.clear();
+    
+    if (!map_template_) {
+        return;
+    }
+    
+    std::vector<rf::Vec3> light_positions;
+    
+    // Scan all chunks in the map template for Light blocks
+    for (const auto& [chunk_coord, chunk_data] : map_template_->chunks) {
+        const int chunk_x = chunk_coord.first;
+        const int chunk_z = chunk_coord.second;
+        const int base_x = chunk_x * CHUNK_WIDTH;
+        const int base_z = chunk_z * CHUNK_DEPTH;
+        
+        for (int y = 0; y < CHUNK_HEIGHT; ++y) {
+            for (int z = 0; z < CHUNK_DEPTH; ++z) {
+                for (int x = 0; x < CHUNK_WIDTH; ++x) {
+                    const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(CHUNK_WIDTH * CHUNK_DEPTH) +
+                                            static_cast<std::size_t>(z) * static_cast<std::size_t>(CHUNK_WIDTH) +
+                                            static_cast<std::size_t>(x);
+                    
+                    const auto block_type = chunk_data.blocks[idx];
+                    
+                    if (block_type == BlockType::Light) {
+                        rf::Vec3 pos = {
+                            static_cast<float>(base_x + x) + 0.5f,
+                            static_cast<float>(y) + 0.5f,
+                            static_cast<float>(base_z + z) + 0.5f
+                        };
+                        light_positions.push_back(pos);
+                    }
+                }
+            }
+        }
+    }
+    
+    set_static_lights(light_positions);
 }
 
 } // namespace voxel

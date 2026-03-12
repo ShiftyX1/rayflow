@@ -10,7 +10,16 @@
 #include "engine/renderer/skybox.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
 
-#include <raylib.h>
+#include "engine/client/core/window.hpp"
+#include "engine/client/core/input.hpp"
+
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
+
+#include <glad/gl.h>
+
+#include <chrono>
 #include <cstdio>
 
 namespace engine {
@@ -124,21 +133,15 @@ std::uint32_t ClientEngine::ping_ms() const {
 }
 
 // ============================================================================
-// IClientServices - World
+// IClientServices - World (optional voxel module)
 // ============================================================================
 
-voxel::World& ClientEngine::world() {
-    if (!world_) {
-        throw std::runtime_error("World not initialized - call init_world() first");
-    }
-    return *world_;
+voxel::World* ClientEngine::world() {
+    return world_.get();
 }
 
-const voxel::World& ClientEngine::world() const {
-    if (!world_) {
-        throw std::runtime_error("World not initialized - call init_world() first");
-    }
-    return *world_;
+const voxel::World* ClientEngine::world() const {
+    return world_.get();
 }
 
 void ClientEngine::init_world(std::uint32_t seed) {
@@ -154,14 +157,19 @@ void ClientEngine::init_world(std::uint32_t seed) {
     world_ = std::make_unique<voxel::World>(seed);
     world_->load_voxel_shader();
     
+    // Create block interaction if not yet created (lazy init)
+    if (!blockInteraction_) {
+        blockInteraction_ = std::make_unique<voxel::BlockInteraction>();
+        if (!blockInteraction_->init()) {
+            log(LogLevel::Error, "Failed to initialize block interaction");
+        }
+    }
+    
     log(LogLevel::Info, "World initialized");
 }
 
-voxel::BlockInteraction& ClientEngine::block_interaction() {
-    if (!blockInteraction_) {
-        throw std::runtime_error("BlockInteraction not initialized");
-    }
-    return *blockInteraction_;
+voxel::BlockInteraction* ClientEngine::block_interaction() {
+    return blockInteraction_.get();
 }
 
 // ============================================================================
@@ -206,23 +214,26 @@ void ClientEngine::log(LogLevel level, std::string_view msg) {
 // ============================================================================
 
 void ClientEngine::init_window() {
-    unsigned int flags = FLAG_WINDOW_RESIZABLE;
-    if (config_.vsync) {
-        flags |= FLAG_VSYNC_HINT;
+    auto& win = rf::Window::instance();
+    if (!win.init(config_.windowWidth, config_.windowHeight, config_.windowTitle, config_.vsync)) {
+        log(LogLevel::Error, "Failed to create window");
+        running_ = false;
+        return;
     }
-    SetConfigFlags(flags);
-    
-    InitWindow(config_.windowWidth, config_.windowHeight, config_.windowTitle.c_str());
-    SetExitKey(KEY_NULL);  // Don't exit on ESC
-    
-    // Set target FPS (works even with vsync as a fallback limiter)
-    if (config_.targetFps > 0) {
-        SetTargetFPS(config_.targetFps);
-    }
+
+    // Initialize input system with the GLFW window
+    rf::Input::instance().init(win.handle());
+
+    // Set initial OpenGL state
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    log(LogLevel::Info, "Window initialized (GLFW + OpenGL)");
 }
 
 void ClientEngine::close_window() {
-    CloseWindow();
+    rf::Window::instance().shutdown();
 }
 
 // ============================================================================
@@ -240,26 +251,23 @@ void ClientEngine::init_subsystems() {
     core::Logger::instance().init(core::Config::instance().logging());
     log(LogLevel::Info, cfg_ok ? "Config loaded" : "Config not found, using defaults");
     
-    // Initialize block registry
+    // Voxel module: Initialize block registry and model loader eagerly
+    // (lightweight — just loads texture atlas and model defs)
     if (!voxel::BlockRegistry::instance().init("textures/terrain.png")) {
-        log(LogLevel::Error, "Failed to initialize block registry");
+        log(LogLevel::Warning, "Block registry not initialized (voxel textures may be missing)");
     }
     
-    // Initialize block model loader
     if (!voxel::BlockModelLoader::instance().init()) {
-        log(LogLevel::Warning, "Failed to initialize block model loader");
+        log(LogLevel::Warning, "Block model loader not initialized");
     }
     
     // Initialize skybox
     renderer::Skybox::instance().init();
     
-    // Initialize block interaction
-    blockInteraction_ = std::make_unique<voxel::BlockInteraction>();
-    if (!blockInteraction_->init()) {
-        log(LogLevel::Error, "Failed to initialize block interaction");
-    }
+    // Voxel: block interaction created lazily on init_world()
+    // (will be initialized when the game calls init_world())
     
-    // Initialize UI
+    // Initialize UI (UIManager owns Dear ImGui lifecycle)
     uiManager_ = std::make_unique<ui::UIManager>();
     uiManager_->init();
     
@@ -269,7 +277,7 @@ void ClientEngine::init_subsystems() {
 void ClientEngine::shutdown_subsystems() {
     log(LogLevel::Info, "Shutting down engine subsystems...");
     
-    // Shutdown UI
+    // Shutdown UI (UIManager shuts down Dear ImGui)
     uiManager_.reset();
     
     // Shutdown block interaction
@@ -295,30 +303,38 @@ void ClientEngine::shutdown_subsystems() {
 // ============================================================================
 
 void ClientEngine::main_loop(IGameClient& game) {
-    while (running_ && !WindowShouldClose()) {
-        // Update frame delta time
-        frameDt_ = GetFrameTime();
-        
+    auto& win = rf::Window::instance();
+    auto& input = rf::Input::instance();
+
+    while (running_ && !win.shouldClose()) {
+        // Begin frame: snapshot previous input state, then poll new events
+        input.beginFrame();
+        win.pollEvents();
+
+        // Compute delta time via GLFW timer
+        frameDt_ = win.updateDeltaTime();
+
         // Poll network
         if (transport_) {
             transport_->poll(0);
         }
-        
+
         // Update game logic
         game.on_update(frameDt_);
-        
-        // Render
-        BeginDrawing();
-        ClearBackground(BLACK);
-        
+
+        // --- Render frame ---
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
         game.on_render();
-        
-        EndDrawing();
-        
-        // Update window size if resized
-        if (IsWindowResized()) {
-            config_.windowWidth = GetScreenWidth();
-            config_.windowHeight = GetScreenHeight();
+
+        win.swapBuffers();
+
+        // Handle window resize
+        if (win.isResized()) {
+            config_.windowWidth = win.width();
+            config_.windowHeight = win.height();
+            glViewport(0, 0, win.width(), win.height());
         }
     }
 }

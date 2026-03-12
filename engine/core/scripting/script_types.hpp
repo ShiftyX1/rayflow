@@ -35,6 +35,28 @@ struct MapScriptData {
     }
 };
 
+// Game-level script data loaded from VFS (scripts/ directory).
+// Unlike MapScriptData (embedded in .rfmap), game scripts live on disk/pak
+// and persist across map changes.
+struct GameScriptData {
+    // VFS base path for this script set (e.g., "scripts/server" or "scripts/client")
+    std::string basePath;
+    
+    // Main script content (entry point — basePath/main.lua)
+    std::string mainScript;
+    
+    // Module scripts discovered in the directory (name -> content)
+    struct Module {
+        std::string name;      // relative path, e.g. "utils/math"
+        std::string content;
+    };
+    std::vector<Module> modules;
+    
+    bool empty() const {
+        return mainScript.empty() && modules.empty();
+    }
+};
+
 // UI script data for XML documents
 struct UIScriptData {
     // Inline script content

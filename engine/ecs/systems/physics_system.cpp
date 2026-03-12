@@ -1,6 +1,7 @@
 #include "physics_system.hpp"
 #include "engine/modules/voxel/client/world.hpp"
 #include "engine/client/core/config.hpp"
+#include "engine/core/logging.hpp"
 #include <cmath>
 #include <cstdio>
 
@@ -87,7 +88,7 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
         const bool was_on_ground = player.on_ground;
         player.on_ground = false;
 
-        Vector3 pos = transform.position;
+        rf::Vec3 pos = transform.position;
 
         auto resolve_x = [&](float dx) {
             if (dx == 0.0f) return;
@@ -250,7 +251,7 @@ void PhysicsSystem::apply_velocity(entt::registry& registry, float delta_time) {
     }
 }
 
-bool PhysicsSystem::check_block_collision(const Vector3& position, const Vector3& size) {
+bool PhysicsSystem::check_block_collision(const rf::Vec3& position, const rf::Vec3& size) {
     if (!world_) return false;
     
     int min_x = static_cast<int>(std::floor(position.x - size.x / 2.0f));

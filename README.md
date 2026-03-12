@@ -1,153 +1,89 @@
-# Rayflow
+# Forgeflow
 
 [![Build](https://github.com/ShiftyX1/rayflow/actions/workflows/build.yml/badge.svg)](https://github.com/ShiftyX1/rayflow/actions/workflows/build.yml)
 [![Tests](https://github.com/ShiftyX1/rayflow/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiftyX1/rayflow/actions/workflows/tests.yml)
 
-Rayflow это внутренний инструмент команды Pulse Studio для разработки игр с использованием Raylib. Он предоставляет удобную среду для создания, тестирования и отладки игр, а также интеграцию с различными инструментами разработки.
+Forgeflow is an internal game engine developed at Pulse Studio. Built on GLFW (window/input) + OpenGL 4.1 Core (rendering) + GLM (math). Provides an ECS architecture, voxel renderer, multiplayer networking (client-server), UI framework, and map editor.
 
-## Статус проекта
-
-Проект находится в активной разработке и используется внутри команды Pulse Studio. Идет активная работа над улучшением функциональности и добавлением новых возможностей.
-
-## Требования
+## Requirements
 
 - **CMake**: 3.21+
-- **C++ компилятор**: GCC 10+, Clang 13+, или MSVC 2019+
-- **Ninja** (рекомендуется) или Make
+- **C++ compiler**: GCC 10+, Clang 13+, or MSVC 2019+
+- **Ninja** (recommended) or Make
 
-## Зависимости
+## Dependencies
 
-Проект использует следующие библиотеки:
+All dependencies are fetched automatically via CMake FetchContent — no pre-installation required.
 
-| Библиотека | Версия | Описание |
-|------------|--------|----------|
-| [raylib](https://www.raylib.com/) | 5.5 | Графическая библиотека |
+| Library | Version | Description |
+|---------|---------|-------------|
+| [GLFW](https://www.glfw.org/) | 3.4 | Window, input, OpenGL context |
+| [glad](https://github.com/Dav1dde/glad) | — | OpenGL 4.1 core loader |
+| [GLM](https://github.com/g-truc/glm) | 1.0.1 | Math (vec, mat, quat) |
+| [stb](https://github.com/nothings/stb) | — | Image and font loading |
+| [Dear ImGui](https://github.com/ocornut/imgui) | 1.91.8 | Debug UI |
 | [EnTT](https://github.com/skypjack/entt) | 3.13.2 | Entity Component System |
-| [tinyxml2](https://github.com/leethomason/tinyxml2) | 10.0.0 | XML парсер |
+| [tinyxml2](https://github.com/leethomason/tinyxml2) | 10.0.0 | XML parser |
+| [ENet](https://github.com/lsalzman/enet) | 1.3.18 | Network transport (UDP) |
+| [LuaJIT](https://luajit.org/) | 2.1 | Scripting |
+| [sol2](https://github.com/ThePhD/sol2) | — | C++ bindings for Lua |
 
-### Автоматическая загрузка зависимостей
-
-EnTT и tinyxml2 загружаются автоматически через CMake FetchContent.
-
-raylib ищется в следующем порядке:
-1. Через `find_package(raylib)` (если установлен системный пакет)
-2. Через поиск в стандартных путях установки
-3. **Автоматическая загрузка через FetchContent** (если не найден)
-
-Это означает, что проект соберётся на чистой системе без предустановленного raylib.
-
-### Установка raylib (опционально, ускоряет сборку)
-
-<details>
-<summary><b>macOS (Homebrew)</b></summary>
+## Build
 
 ```bash
-brew install raylib
-```
-</details>
-
-<details>
-<summary><b>Ubuntu / Debian</b></summary>
-
-```bash
-sudo apt install libraylib-dev
-```
-
-Если пакет недоступен или устаревший:
-```bash
-# Сборка произойдёт автоматически через FetchContent
-```
-</details>
-
-<details>
-<summary><b>Arch Linux</b></summary>
-
-```bash
-sudo pacman -S raylib
-# или из AUR:
-yay -S raylib
-```
-</details>
-
-<details>
-<summary><b>Fedora</b></summary>
-
-```bash
-sudo dnf install raylib-devel
-```
-</details>
-
-<details>
-<summary><b>Windows (MSYS2)</b></summary>
-
-```bash
-# UCRT64 (рекомендуется)
-pacman -S mingw-w64-ucrt-x86_64-raylib
-
-# или MinGW64
-pacman -S mingw-w64-x86_64-raylib
-```
-</details>
-
-### Принудительная загрузка raylib
-
-Если хотите использовать FetchContent вместо системного raylib:
-
-```bash
-cmake --preset debug -DRAYFLOW_FETCH_RAYLIB=ON
-```
-
-## Сборка
-
-### Быстрый старт
-
-```bash
-# Конфигурация (Debug)
+# Configure (Debug)
 cmake --preset debug
 
-# Сборка
+# Build
 cmake --build --preset debug
 
-# Запуск тестов
+# Run tests
 ctest --preset debug
 ```
 
-### Пресеты сборки
+### Build presets
 
-| Пресет | Описание |
-|--------|----------|
-| `debug` | Debug сборка с тестами |
-| `release` | Release сборка с оптимизациями |
+| Preset | Description |
+|--------|-------------|
+| `debug` | Debug build with tests |
+| `release` | Release build with optimizations |
 
-### Сборка отдельных компонентов
+### Build individual targets
 
 ```bash
-# Только основной клиент
-cmake --build --preset debug --target rayflow
+# Game client
+cmake --build --preset debug --target bedwars
 
-# Только редактор карт
+# Dedicated server
+cmake --build --preset debug --target bedwars_server
+
+# Map editor
 cmake --build --preset debug --target map_builder
-
-# Только выделенный сервер
-cmake --build --preset debug --target rfds
 ```
 
-## Структура проекта
+## Project Structure
 
 ```
-rayflow/
-├── app/           # Точки входа (main.cpp, etc.)
-├── client/        # Клиентский код (рендеринг, ввод, UI)
-├── server/        # Серверный код (симуляция, правила)
-├── shared/        # Общий код (протокол, типы)
-├── ui/            # UI фреймворк (XML + CSS-lite)
-├── tests/         # Тесты
-├── cmake/         # CMake модули
-└── build/         # Директория сборки
+forgeflow/
+├── engine/        # Engine source
+│   ├── core/      # Headless engine core (server-compatible)
+│   ├── client/    # Client systems (renderer, input, UI)
+│   ├── ecs/       # Entity Component System
+│   ├── ui/        # XML+CSS UI framework
+│   ├── vfs/       # Virtual File System / PAK archives
+│   ├── transport/ # Networking transport layer
+│   ├── maps/      # RFMAP format
+│   └── modules/   # Optional modules (voxel)
+├── games/         # Game projects
+│   └── bedwars/   # Reference implementation
+├── tests/         # Unit and integration tests
+├── documentation/ # MkDocs documentation
+└── build/         # Build output (CMake generated)
     ├── debug/
     └── release/
 ```
 
-## Документация
+## Documentation
 
-Подробная документация доступна в директории `documentation/docs/`.
+Full documentation is available in `documentation/forgeflow/docs/`.
+

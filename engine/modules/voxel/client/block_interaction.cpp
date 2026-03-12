@@ -2,8 +2,11 @@
 #include "block_registry.hpp"
 #include "engine/client/core/resources.hpp"
 #include "../shared/block_state.hpp"
+#include "engine/core/logging.hpp"
+#include "engine/core/math_types.hpp"
+#include <glad/gl.h>
+#include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
-#include <rlgl.h>
 #include <cstdio>
 
 namespace voxel {
@@ -15,7 +18,7 @@ bool BlockInteraction::init() {
         char path[128];
         snprintf(path, sizeof(path), "textures/destroy_stages/destroy_stage_%d.png", i);
         destroy_textures_[i] = resources::load_texture(path);
-        if (destroy_textures_[i].id == 0) {
+        if (!destroy_textures_[i].isValid()) {
             TraceLog(LOG_ERROR, "Failed to load destroy texture: %s", path);
             return false;
         }
@@ -23,15 +26,38 @@ bool BlockInteraction::init() {
 
     textures_loaded_ = true;
     TraceLog(LOG_INFO, "Destroy stage textures loaded");
+
+    // Load rendering resources for highlight + destroy overlay
+    if (!render_resources_loaded_) {
+        if (!solidShader_.loadFromFiles("shaders/solid.vs", "shaders/solid.fs")) {
+            TraceLog(LOG_WARNING, "BlockInteraction: failed to load solid shader");
+        }
+        if (!overlayShader_.loadFromFiles("shaders/overlay.vs", "shaders/overlay.fs")) {
+            TraceLog(LOG_WARNING, "BlockInteraction: failed to load overlay shader");
+        }
+
+        wireframeCube_ = rf::GLMesh::createWireframeCube(1.0f);
+        overlayCube_ = rf::GLMesh::createCubeWithUVs(1.0f);
+        render_resources_loaded_ = true;
+        TraceLog(LOG_INFO, "BlockInteraction render resources loaded");
+    }
+
     return true;
 }
 
 void BlockInteraction::destroy() {
     if (textures_loaded_) {
         for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
-            UnloadTexture(destroy_textures_[i]);
+            destroy_textures_[i].destroy();
         }
         textures_loaded_ = false;
+    }
+    if (render_resources_loaded_) {
+        solidShader_.destroy();
+        overlayShader_.destroy();
+        wireframeCube_.destroy();
+        overlayCube_.destroy();
+        render_resources_loaded_ = false;
     }
 }
 
@@ -70,7 +96,7 @@ void BlockInteraction::on_action_rejected() {
     was_placing_ = false;
 }
 
-void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vector3& camera_dir,
+void BlockInteraction::update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir,
                                const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time) {
     target_ = raycast(world, camera_pos, camera_dir, MAX_REACH_DISTANCE);
 
@@ -168,14 +194,14 @@ void BlockInteraction::update(World& world, const Vector3& camera_pos, const Vec
     was_placing_ = is_placing;
 }
 
-BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& origin,
-                                              const Vector3& direction, float max_distance) const {
+BlockRaycastResult BlockInteraction::raycast(const World& world, const rf::Vec3& origin,
+                                              const rf::Vec3& direction, float max_distance) const {
     BlockRaycastResult result;
     
     float len = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
     if (len < 0.0001f) return result;
     
-    Vector3 dir = {direction.x / len, direction.y / len, direction.z / len};
+    rf::Vec3 dir = {direction.x / len, direction.y / len, direction.z / len};
     
     int x = static_cast<int>(std::floor(origin.x));
     int y = static_cast<int>(std::floor(origin.y));
@@ -208,7 +234,7 @@ BlockRaycastResult BlockInteraction::raycast(const World& world, const Vector3& 
             result.distance = distance;
             result.block_type = static_cast<BlockType>(block);
             
-            Vector3 hitPos = {
+            rf::Vec3 hitPos = {
                 origin.x + dir.x * distance,
                 origin.y + dir.y * distance,
                 origin.z + dir.z * distance
@@ -258,106 +284,75 @@ float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::To
     return base_time / mining_speed;
 }
 
-void BlockInteraction::render_highlight(const Camera3D& camera) const {
+// ============================================================================
+// Rendering
+// ============================================================================
+
+void BlockInteraction::render_highlight(const rf::Camera& camera) const {
     if (!target_.hit) return;
-    
-    Vector3 pos = {
+    if (!render_resources_loaded_ || !solidShader_.isValid() || !wireframeCube_.isValid()) return;
+
+    rf::Vec3 pos = {
         static_cast<float>(target_.block_x) + 0.5f,
         static_cast<float>(target_.block_y) + 0.5f,
         static_cast<float>(target_.block_z) + 0.5f
     };
-    
-    DrawCubeWires(pos, 1.02f, 1.02f, 1.02f, BLACK);
+
+    // Slightly larger than 1.0 to avoid z-fighting with block surface
+    rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                   * glm::scale(rf::Mat4(1.0f), rf::Vec3(1.005f));
+    rf::Mat4 mvp = camera.viewProjectionMatrix() * model;
+
+    glLineWidth(2.0f);
+    solidShader_.bind();
+    solidShader_.setMat4("mvp", mvp);
+    solidShader_.setVec4("color", rf::Vec4(0.0f, 0.0f, 0.0f, 0.8f));
+    wireframeCube_.draw(GL_LINES);
+    rf::GLShader::unbind();
+    glLineWidth(1.0f);
 }
 
-void BlockInteraction::render_break_overlay(const Camera3D& camera) const {
+void BlockInteraction::render_break_overlay(const rf::Camera& camera) const {
     if (!target_.hit || break_progress_ <= 0.0f) return;
+    if (!render_resources_loaded_ || !overlayShader_.isValid() || !overlayCube_.isValid()) return;
     if (!textures_loaded_) return;
-
-    (void)camera;
 
     int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
     if (stage < 0) stage = 0;
     if (stage > 9) stage = 9;
 
-    const Texture2D& tex = destroy_textures_[stage];
-    
-    Vector3 pos = {
+    rf::Vec3 pos = {
         static_cast<float>(target_.block_x) + 0.5f,
         static_cast<float>(target_.block_y) + 0.5f,
         static_cast<float>(target_.block_z) + 0.5f
     };
 
-    constexpr float size = 1.002f;
-    
-    float x = pos.x;
-    float y = pos.y;
-    float z = pos.z;
-    float width = size;
-    float height = size;
-    float length = size;
+    // Render destroy texture on a cube slightly larger than the block
+    rf::Mat4 model = glm::translate(rf::Mat4(1.0f), pos)
+                   * glm::scale(rf::Mat4(1.0f), rf::Vec3(1.002f));
+    rf::Mat4 mvp = camera.viewProjectionMatrix() * model;
 
-    float texWidth = static_cast<float>(tex.width);
-    float texHeight = static_cast<float>(tex.height);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1.0f, -1.0f);
 
-    rlSetTexture(tex.id);
+    overlayShader_.bind();
+    overlayShader_.setMat4("mvp", mvp);
+    overlayShader_.setVec4("tintColor", rf::Vec4(1.0f, 1.0f, 1.0f, 0.7f));
+    overlayShader_.setInt("tex", 0);
+    destroy_textures_[stage].bind(0);
+    overlayCube_.draw();
+    rf::GLTexture::unbind(0);
+    rf::GLShader::unbind();
 
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    
-    rlNormal3f(0.0f, 0.0f, 1.0f);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
-    
-    rlNormal3f(0.0f, 0.0f, -1.0f);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
-    
-    rlNormal3f(0.0f, 1.0f, 0.0f);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
-    
-    rlNormal3f(0.0f, -1.0f, 0.0f);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
-    
-    rlNormal3f(1.0f, 0.0f, 0.0f);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);
-    
-    rlNormal3f(-1.0f, 0.0f, 0.0f);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);
-    
-    rlEnd();
-    rlSetTexture(0);
+    glDisable(GL_POLYGON_OFFSET_FILL);
 }
 
 void BlockInteraction::render_crosshair(int screen_width, int screen_height) {
-    int center_x = screen_width / 2;
-    int center_y = screen_height / 2;
-    int size = 10;
-    int thickness = 2;
-    
-    DrawRectangle(center_x - size, center_y - thickness/2, size * 2, thickness, WHITE);
-    DrawRectangle(center_x - thickness/2, center_y - size, thickness, size * 2, WHITE);
-    
-    DrawRectangleLines(center_x - size - 1, center_y - thickness/2 - 1, 
-                       size * 2 + 2, thickness + 2, BLACK);
-    DrawRectangleLines(center_x - thickness/2 - 1, center_y - size - 1, 
-                       thickness + 2, size * 2 + 2, BLACK);
+    (void)screen_width;
+    (void)screen_height;
+    // Crosshair rendering moved to game-level code (bedwars_client / render_system)
 }
 
 } // namespace voxel

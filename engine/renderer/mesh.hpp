@@ -1,12 +1,16 @@
 #pragma once
 
-#include <raylib.h>
+// =============================================================================
+// Legacy MeshBuilder — thin wrapper around GLMesh for backwards compatibility.
+// New code should use rf::GLMesh directly.
+// =============================================================================
+
+#include "engine/renderer/gl_mesh.hpp"
 
 namespace renderer {
 
 struct MeshData {
-    Mesh mesh{};
-    Material material{};
+    rf::GLMesh mesh{};
     bool valid{false};
 };
 

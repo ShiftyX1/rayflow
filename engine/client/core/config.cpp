@@ -6,7 +6,8 @@
 #include <fstream>
 #include <sstream>
 
-#include <raylib.h>
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>

@@ -116,7 +116,7 @@ else()
 endif()
 
 option(RAYFLOW_BUILD_TESTS "Build unit and integration tests" OFF)
-option(RAYFLOW_BUILD_MAP_EDITOR "Build rayflow map editor" ON)
+option(RAYFLOW_BUILD_MAP_EDITOR "Build rayflow map editor" OFF)  # NOTE(migration): disabled during Phase 0
 option(RAYFLOW_BUILD_DEDICATED_SERVER "Build rayflow dedicated server" ON)
 option(RAYFLOW_BUILD_PACK_ASSETS "Build pack_assets tool" ON)
 

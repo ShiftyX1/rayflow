@@ -1,8 +1,11 @@
 #include "player_system.hpp"
 #include "engine/modules/voxel/client/world.hpp"
 #include "engine/client/core/config.hpp"
+#include "engine/client/core/input.hpp"
 #include "engine/core/player_constants.hpp"
-#include <raylib.h>
+#include "engine/core/math_types.hpp"
+#include "engine/core/key_codes.hpp"
+#include "engine/core/logging.hpp"
 #include <cmath>
 #include <cstdio>
 
@@ -22,7 +25,7 @@ void PlayerSystem::update(entt::registry& registry, float delta_time) {
     handle_jumping(registry);
 }
 
-entt::entity PlayerSystem::create_player(entt::registry& registry, const Vector3& spawn_position) {
+entt::entity PlayerSystem::create_player(entt::registry& registry, const rf::Vec3& spawn_position) {
     auto entity = registry.create();
     
     registry.emplace<PlayerTag>(entity);
@@ -69,7 +72,7 @@ Camera3D PlayerSystem::get_camera(entt::registry& registry, entt::entity player)
     float yaw_rad = fps_camera.yaw * DEG_TO_RAD;
     float pitch_rad = fps_camera.pitch * DEG_TO_RAD;
     
-    Vector3 direction;
+    rf::Vec3 direction;
     direction.x = std::cos(pitch_rad) * std::sin(yaw_rad);
     direction.y = std::sin(pitch_rad);
     direction.z = std::cos(pitch_rad) * std::cos(yaw_rad);
@@ -82,7 +85,7 @@ Camera3D PlayerSystem::get_camera(entt::registry& registry, entt::entity player)
     
     camera.up = {0.0f, 1.0f, 0.0f};
     camera.fovy = fps_camera.fov;
-    camera.projection = CAMERA_PERSPECTIVE;
+    camera.projection = 0; // was CAMERA_PERSPECTIVE
     
     return camera;
 }
@@ -103,8 +106,8 @@ void PlayerSystem::handle_movement(entt::registry& registry, float delta_time) {
         
         float yaw_rad = camera.yaw * DEG_TO_RAD;
         
-        Vector3 forward = {std::sin(yaw_rad), 0.0f, std::cos(yaw_rad)};
-        Vector3 right = {std::cos(yaw_rad), 0.0f, -std::sin(yaw_rad)};
+        rf::Vec3 forward = {std::sin(yaw_rad), 0.0f, std::cos(yaw_rad)};
+        rf::Vec3 right = {std::cos(yaw_rad), 0.0f, -std::sin(yaw_rad)};
         
         float move_x = input.move_input.x * speed;
         float move_z = input.move_input.y * speed;
@@ -117,7 +120,7 @@ void PlayerSystem::handle_movement(entt::registry& registry, float delta_time) {
             if (input.jump_pressed) {
                 velocity.linear.y = speed;
             }
-            if (IsKeyDown(controls.fly_down)) {
+            if (rf::Input::instance().isKeyDown(controls.fly_down)) {
                 velocity.linear.y = -speed;
             }
         }
@@ -144,7 +147,7 @@ void PlayerSystem::handle_creative_mode(entt::registry& registry) {
 
     const auto& controls = core::Config::instance().controls();
     
-    if (IsKeyPressed(controls.toggle_creative)) {
+    if (rf::Input::instance().isKeyPressed(controls.toggle_creative)) {
         for (auto entity : view) {
             auto& player = view.get<PlayerController>(entity);
             player.in_creative_mode = !player.in_creative_mode;
@@ -161,27 +164,27 @@ void PlayerSystem::handle_tool_selection(entt::registry& registry) {
     for (auto entity : view) {
         auto& tool = view.get<ToolHolder>(entity);
         
-        if (IsKeyPressed(controls.tool_1)) {
+        if (rf::Input::instance().isKeyPressed(controls.tool_1)) {
             tool.tool_type = ToolHolder::ToolType::None;
             tool.tool_level = ToolHolder::ToolLevel::Hand;
             TraceLog(LOG_INFO, "Selected: Hand");
         }
-        if (IsKeyPressed(controls.tool_2)) {
+        if (rf::Input::instance().isKeyPressed(controls.tool_2)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Wood;
             TraceLog(LOG_INFO, "Selected: Wooden Pickaxe");
         }
-        if (IsKeyPressed(controls.tool_3)) {
+        if (rf::Input::instance().isKeyPressed(controls.tool_3)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Stone;
             TraceLog(LOG_INFO, "Selected: Stone Pickaxe");
         }
-        if (IsKeyPressed(controls.tool_4)) {
+        if (rf::Input::instance().isKeyPressed(controls.tool_4)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Iron;
             TraceLog(LOG_INFO, "Selected: Iron Pickaxe");
         }
-        if (IsKeyPressed(controls.tool_5)) {
+        if (rf::Input::instance().isKeyPressed(controls.tool_5)) {
             tool.tool_type = ToolHolder::ToolType::Pickaxe;
             tool.tool_level = ToolHolder::ToolLevel::Diamond;
             TraceLog(LOG_INFO, "Selected: Diamond Pickaxe");

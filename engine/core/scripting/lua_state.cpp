@@ -268,6 +268,12 @@ void LuaState::reset() {
     }
 }
 
+void LuaState::reset_limiter() {
+    if (impl_) {
+        impl_->reset_execution_limiter();
+    }
+}
+
 std::unique_ptr<LuaState> create_sandboxed_state(const ScriptLimits& limits) {
     auto state = std::make_unique<LuaState>();
     if (!state->init()) {
@@ -298,7 +304,7 @@ std::unique_ptr<LuaState> create_engine_state() {
     return state;
 }
 
-// Call overloads
+// Call (no-args overload — non-template, defined in .cpp)
 ScriptResult LuaState::call(const std::string& funcName) {
     if (sandboxed_) {
         impl_->reset_execution_limiter();
@@ -310,120 +316,6 @@ ScriptResult LuaState::call(const std::string& funcName) {
     }
     
     auto result = func();
-    if (!result.valid()) {
-        sol::error err = result;
-        return ScriptResult::fail(err.what());
-    }
-    
-    return ScriptResult::ok();
-}
-
-ScriptResult LuaState::call(const std::string& funcName, int arg1) {
-    if (sandboxed_) {
-        impl_->reset_execution_limiter();
-    }
-    
-    sol::protected_function func = impl_->lua[funcName];
-    if (!func.valid()) {
-        return ScriptResult::fail("function '" + funcName + "' not found");
-    }
-    
-    auto result = func(arg1);
-    if (!result.valid()) {
-        sol::error err = result;
-        return ScriptResult::fail(err.what());
-    }
-    
-    return ScriptResult::ok();
-}
-
-ScriptResult LuaState::call(const std::string& funcName, float arg1) {
-    if (sandboxed_) {
-        impl_->reset_execution_limiter();
-    }
-    
-    sol::protected_function func = impl_->lua[funcName];
-    if (!func.valid()) {
-        return ScriptResult::fail("function '" + funcName + "' not found");
-    }
-    
-    auto result = func(arg1);
-    if (!result.valid()) {
-        sol::error err = result;
-        return ScriptResult::fail(err.what());
-    }
-    
-    return ScriptResult::ok();
-}
-
-ScriptResult LuaState::call(const std::string& funcName, const std::string& arg1) {
-    if (sandboxed_) {
-        impl_->reset_execution_limiter();
-    }
-    
-    sol::protected_function func = impl_->lua[funcName];
-    if (!func.valid()) {
-        return ScriptResult::fail("function '" + funcName + "' not found");
-    }
-    
-    auto result = func(arg1);
-    if (!result.valid()) {
-        sol::error err = result;
-        return ScriptResult::fail(err.what());
-    }
-    
-    return ScriptResult::ok();
-}
-
-ScriptResult LuaState::call(const std::string& funcName, std::uint32_t arg1) {
-    if (sandboxed_) {
-        impl_->reset_execution_limiter();
-    }
-    
-    sol::protected_function func = impl_->lua[funcName];
-    if (!func.valid()) {
-        return ScriptResult::fail("function '" + funcName + "' not found");
-    }
-    
-    auto result = func(arg1);
-    if (!result.valid()) {
-        sol::error err = result;
-        return ScriptResult::fail(err.what());
-    }
-    
-    return ScriptResult::ok();
-}
-
-ScriptResult LuaState::call(const std::string& funcName, std::uint32_t arg1, int arg2, int arg3, int arg4) {
-    if (sandboxed_) {
-        impl_->reset_execution_limiter();
-    }
-    
-    sol::protected_function func = impl_->lua[funcName];
-    if (!func.valid()) {
-        return ScriptResult::fail("function '" + funcName + "' not found");
-    }
-    
-    auto result = func(arg1, arg2, arg3, arg4);
-    if (!result.valid()) {
-        sol::error err = result;
-        return ScriptResult::fail(err.what());
-    }
-    
-    return ScriptResult::ok();
-}
-
-ScriptResult LuaState::call(const std::string& funcName, std::uint32_t arg1, int arg2, int arg3, int arg4, int arg5) {
-    if (sandboxed_) {
-        impl_->reset_execution_limiter();
-    }
-    
-    sol::protected_function func = impl_->lua[funcName];
-    if (!func.valid()) {
-        return ScriptResult::fail("function '" + funcName + "' not found");
-    }
-    
-    auto result = func(arg1, arg2, arg3, arg4, arg5);
     if (!result.valid()) {
         sol::error err = result;
         return ScriptResult::fail(err.what());

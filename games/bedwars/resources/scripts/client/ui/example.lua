@@ -1,0 +1,26 @@
+-- =============================================================================
+-- Example UI Script — loaded via <Script src="scripts/client/ui/example.lua"/>
+-- =============================================================================
+-- UI scripts handle element interactions in XML UI documents.
+-- They run in the UIScriptEngine VM (separate from game scripts).
+--
+-- Available API:
+--   ui.show(elementId)                    — Show an element
+--   ui.hide(elementId)                    — Hide an element
+--   ui.set_text(elementId, text)          — Set element text
+--   ui.set_style(elementId, prop, value)  — Set CSS property
+--   ui.add_class(elementId, className)    — Add CSS class
+--   ui.remove_class(elementId, className) — Remove CSS class
+--   ui.play_sound(soundName)              — Play sound effect
+--
+-- Event registration:
+--   ui.on(elementId, eventName, handlerFunc)
+--
+-- Example:
+--   ui.on("play_button", "click", "on_play_click")
+--   function on_play_click()
+--       log("Play clicked!")
+--   end
+-- =============================================================================
+
+log("[ui scripts] Example UI script loaded")

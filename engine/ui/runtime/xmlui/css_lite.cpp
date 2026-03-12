@@ -369,46 +369,48 @@ CSSParseResult parse_css_lite(std::string_view css) {
             } else if (key == "height") {
                 if (auto v = parse_int(value); v.has_value()) rule.style.height = *v;
             } else if (key == "gap") {
-                if (auto v = parse_int(value); v.has_value()) rule.style.gap = *v;
+                if (auto v = parse_int(value); v.has_value()) { rule.style.gap = *v; rule.set_props |= CSSProp::Gap; }
             } else if (key == "margin") {
-                if (auto v = parse_int(value); v.has_value()) set_box_all(rule.style.margin, *v);
+                if (auto v = parse_int(value); v.has_value()) { set_box_all(rule.style.margin, *v); rule.set_props |= CSSProp::Margin; }
             } else if (key == "padding") {
-                if (auto v = parse_int(value); v.has_value()) set_box_all(rule.style.padding, *v);
+                if (auto v = parse_int(value); v.has_value()) { set_box_all(rule.style.padding, *v); rule.set_props |= CSSProp::Padding; }
             } else if (key == "anchor") {
-                if (auto a = parse_anchor(value); a.has_value()) rule.style.anchor = *a;
+                if (auto a = parse_anchor(value); a.has_value()) { rule.style.anchor = *a; rule.set_props |= CSSProp::Anchor; }
             } else if (key == "direction" || key == "flex-direction") {
-                if (auto d = parse_direction(value); d.has_value()) rule.style.direction = *d;
+                if (auto d = parse_direction(value); d.has_value()) { rule.style.direction = *d; rule.set_props |= CSSProp::Direction; }
             } else if (key == "align-items") {
-                if (auto a = parse_align(value); a.has_value()) rule.style.align_items = *a;
+                if (auto a = parse_align(value); a.has_value()) { rule.style.align_items = *a; rule.set_props |= CSSProp::AlignItems; }
             } else if (key == "justify-content") {
-                if (auto a = parse_align(value); a.has_value()) rule.style.justify_content = *a;
+                if (auto a = parse_align(value); a.has_value()) { rule.style.justify_content = *a; rule.set_props |= CSSProp::Justify; }
             } else if (key == "grow" || key == "flex-grow") {
-                rule.style.grow = parse_bool(value);
+                rule.style.grow = parse_bool(value); rule.set_props |= CSSProp::Grow;
             } else if (key == "font-size") {
-                if (auto v = parse_int(value); v.has_value()) rule.style.font_size = *v;
+                if (auto v = parse_int(value); v.has_value()) { rule.style.font_size = *v; rule.set_props |= CSSProp::FontSize; }
             } else if (key == "color") {
-                if (auto c = parse_color(value); c.has_value()) rule.style.color = *c;
+                if (auto c = parse_color(value); c.has_value()) { rule.style.color = *c; rule.set_props |= CSSProp::Color; }
             } else if (key == "text-align") {
-                if (auto a = parse_text_align(value); a.has_value()) rule.style.text_align = *a;
+                if (auto a = parse_text_align(value); a.has_value()) { rule.style.text_align = *a; rule.set_props |= CSSProp::TextAlign; }
             } else if (key == "vertical-align") {
-                if (auto a = parse_vertical_align(value); a.has_value()) rule.style.vertical_align = *a;
+                if (auto a = parse_vertical_align(value); a.has_value()) { rule.style.vertical_align = *a; rule.set_props |= CSSProp::VAlign; }
             } else if (key == "background-color" || key == "background") {
                 if (auto c = parse_color(value); c.has_value()) rule.style.background_color = c;
             } else if (key == "border-width") {
-                if (auto v = parse_int(value); v.has_value()) rule.style.border_width = *v;
+                if (auto v = parse_int(value); v.has_value()) { rule.style.border_width = *v; rule.set_props |= CSSProp::BorderWidth; }
             } else if (key == "border-color") {
-                if (auto c = parse_color(value); c.has_value()) rule.style.border_color = *c;
+                if (auto c = parse_color(value); c.has_value()) { rule.style.border_color = *c; rule.set_props |= CSSProp::BorderColor; }
             } else if (key == "border-radius") {
-                if (auto v = parse_int(value); v.has_value()) rule.style.border_radius = *v;
+                if (auto v = parse_int(value); v.has_value()) { rule.style.border_radius = *v; rule.set_props |= CSSProp::BorderRadius; }
             } else if (key == "visible") {
-                rule.style.visible = parse_bool(value);
+                rule.style.visible = parse_bool(value); rule.set_props |= CSSProp::Visible;
             } else if (key == "opacity") {
                 try {
                     float opacity = std::stof(std::string(value));
                     rule.style.opacity = std::max(0.0f, std::min(1.0f, opacity));
+                    rule.set_props |= CSSProp::Opacity;
                 } catch (...) {}
             } else if (key == "box-shadow") {
                 rule.style.has_shadow = true;
+                rule.set_props |= CSSProp::Shadow;
                 size_t pos = 0;
                 std::string val_str{value};
                 // Skip whitespace
@@ -470,33 +472,34 @@ UIStyle compute_style(
     for (const auto& r : rules) {
         if (!selector_matches(r.selector, type, id, class_name)) continue;
 
-        if (r.style.width.has_value()) out.width = r.style.width;
+        const uint32_t s = r.set_props;
+
+        if (r.style.width.has_value())  out.width = r.style.width;
         if (r.style.height.has_value()) out.height = r.style.height;
 
-        out.margin = r.style.margin;
-        out.padding = r.style.padding;
-        out.gap = r.style.gap;
-        out.anchor = r.style.anchor;
+        if (s & CSSProp::Margin)       out.margin = r.style.margin;
+        if (s & CSSProp::Padding)      out.padding = r.style.padding;
+        if (s & CSSProp::Gap)          out.gap = r.style.gap;
+        if (s & CSSProp::Anchor)       out.anchor = r.style.anchor;
 
-        out.direction = r.style.direction;
-        out.align_items = r.style.align_items;
-        out.justify_content = r.style.justify_content;
-        out.grow = r.style.grow;
+        if (s & CSSProp::Direction)    out.direction = r.style.direction;
+        if (s & CSSProp::AlignItems)   out.align_items = r.style.align_items;
+        if (s & CSSProp::Justify)      out.justify_content = r.style.justify_content;
+        if (s & CSSProp::Grow)         out.grow = r.style.grow;
 
-        out.font_size = r.style.font_size;
-        out.color = r.style.color;
-        out.text_align = r.style.text_align;
-        out.vertical_align = r.style.vertical_align;
+        if (s & CSSProp::FontSize)     out.font_size = r.style.font_size;
+        if (s & CSSProp::Color)        out.color = r.style.color;
+        if (s & CSSProp::TextAlign)    out.text_align = r.style.text_align;
+        if (s & CSSProp::VAlign)       out.vertical_align = r.style.vertical_align;
         if (r.style.background_color.has_value()) out.background_color = r.style.background_color;
 
-        out.border_width = r.style.border_width;
-        out.border_color = r.style.border_color;
-        out.border_radius = r.style.border_radius;
-        out.visible = r.style.visible;
-        out.opacity = r.style.opacity;
-        
-        // Shadow properties
-        if (r.style.has_shadow) {
+        if (s & CSSProp::BorderWidth)  out.border_width = r.style.border_width;
+        if (s & CSSProp::BorderColor)  out.border_color = r.style.border_color;
+        if (s & CSSProp::BorderRadius) out.border_radius = r.style.border_radius;
+        if (s & CSSProp::Visible)      out.visible = r.style.visible;
+        if (s & CSSProp::Opacity)      out.opacity = r.style.opacity;
+
+        if (s & CSSProp::Shadow) {
             out.has_shadow = r.style.has_shadow;
             out.shadow_offset_x = r.style.shadow_offset_x;
             out.shadow_offset_y = r.style.shadow_offset_y;

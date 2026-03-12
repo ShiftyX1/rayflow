@@ -1,27 +1,25 @@
 #include "mesh.hpp"
+#include "engine/core/logging.hpp"
 
 namespace renderer {
 
 MeshData MeshBuilder::create_cube(float size) {
     MeshData data;
-    data.mesh = GenMeshCube(size, size, size);
-    data.material = LoadMaterialDefault();
-    data.valid = true;
+    data.mesh = rf::GLMesh::createCube(size);
+    data.valid = data.mesh.isValid();
     return data;
 }
 
 MeshData MeshBuilder::create_plane(float width, float depth) {
     MeshData data;
-    data.mesh = GenMeshPlane(width, depth, 1, 1);
-    data.material = LoadMaterialDefault();
-    data.valid = true;
+    data.mesh = rf::GLMesh::createPlane(width, depth);
+    data.valid = data.mesh.isValid();
     return data;
 }
 
 void MeshBuilder::destroy(MeshData& mesh_data) {
     if (mesh_data.valid) {
-        UnloadMesh(mesh_data.mesh);
-        UnloadMaterial(mesh_data.material);
+        mesh_data.mesh.destroy();
         mesh_data.valid = false;
     }
 }
