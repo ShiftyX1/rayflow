@@ -29,7 +29,7 @@
 
 namespace ecs {
 
-class ParticleSystem : public System {
+class RAYFLOW_CLIENT_API ParticleSystem : public System {
 public:
     void update(entt::registry& registry, float dt) override {
         auto view = registry.view<Transform2D, ParticleEmitter>();

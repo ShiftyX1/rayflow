@@ -11,9 +11,9 @@ set(CMAKE_CXX_COMPILER "cl.exe")
 
 # MSVC is auto-detected, but we set some defaults
 
-# Use static runtime for easier distribution (no VCRUNTIME DLLs needed)
-# Comment out if you prefer dynamic runtime
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Use dynamic (DLL) CRT — required for shared library builds
+# All engine DLLs and executables must use the same CRT
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 # Compiler flags
 set(CMAKE_C_FLAGS_INIT "/W4 /utf-8")

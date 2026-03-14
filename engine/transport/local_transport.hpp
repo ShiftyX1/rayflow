@@ -1,6 +1,7 @@
 #pragma once
 
 #include "transport.hpp"
+#include "engine/core/export.hpp"
 
 #include <memory>
 #include <mutex>
@@ -24,13 +25,13 @@ struct LocalTransportPair {
     std::shared_ptr<LocalServerTransport> server;
 };
 
-LocalTransportPair create_local_transport_pair();
+RAYFLOW_CORE_API LocalTransportPair create_local_transport_pair();
 
 // ============================================================================
 // LocalClientTransport
 // ============================================================================
 
-class LocalClientTransport : public IClientTransport {
+class RAYFLOW_CORE_API LocalClientTransport : public IClientTransport {
     friend LocalTransportPair create_local_transport_pair();
     friend class LocalServerTransport;
 
@@ -58,7 +59,7 @@ private:
 // LocalServerTransport
 // ============================================================================
 
-class LocalServerTransport : public IServerTransport {
+class RAYFLOW_CORE_API LocalServerTransport : public IServerTransport {
     friend LocalTransportPair create_local_transport_pair();
     friend class LocalClientTransport;
 

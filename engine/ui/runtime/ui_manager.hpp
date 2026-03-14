@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "ui_frame.hpp"
 #include "ui_view_model.hpp"
 
@@ -7,7 +8,7 @@
 
 namespace ui {
 
-class UIManager {
+class RAYFLOW_UI_API UIManager {
 public:
     UIManager() = default;
     ~UIManager();

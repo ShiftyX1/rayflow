@@ -29,7 +29,7 @@
 
 namespace ecs {
 
-class SpriteSystem : public System {
+class RAYFLOW_CLIENT_API SpriteSystem : public System {
 public:
     /// Update animations (call every frame)
     void update(entt::registry& registry, float dt) override {

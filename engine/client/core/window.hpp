@@ -7,13 +7,15 @@
 // Manages GLFW window lifecycle, OpenGL context, delta time and resize events.
 // =============================================================================
 
+#include "engine/core/export.hpp"
+
 #include <string>
 
 struct GLFWwindow;
 
 namespace rf {
 
-class Window {
+class RAYFLOW_CLIENT_API Window {
 public:
     /// Initialize GLFW, create window with OpenGL context, load glad.
     /// @return true on success.

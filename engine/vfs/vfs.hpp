@@ -5,6 +5,8 @@
 // Abstracts file access with support for loose files and PAK archives.
 // =============================================================================
 
+#include "engine/core/export.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -40,13 +42,12 @@ struct FileStat {
 //
 // @param gameDir  Root directory containing loose files and .pak archives.
 // @param flags    Initialization flags (default: None).
-void init(const std::filesystem::path& gameDir, InitFlags flags = InitFlags::None);
+RAYFLOW_CORE_API void init(const std::filesystem::path& gameDir, InitFlags flags = InitFlags::None);
 
 // Shutdown VFS and release all mounted archives.
-void shutdown();
-
+RAYFLOW_CORE_API void shutdown();
 // Check if VFS has been initialized.
-bool is_initialized();
+RAYFLOW_CORE_API bool is_initialized();
 
 // Mount a .pak archive (RFPK format).
 // Files in the archive will be accessible via their paths inside the archive.
@@ -55,10 +56,10 @@ bool is_initialized();
 // @param pakFile    Path to .pak file (relative to gameDir or absolute).
 // @param mountPoint Virtual path prefix for archive contents (default: "/" = root).
 // @return true if mounted successfully.
-bool mount(const std::filesystem::path& pakFile, const std::string& mountPoint = "/");
+RAYFLOW_CORE_API bool mount(const std::filesystem::path& pakFile, const std::string& mountPoint = "/");
 
 // Unmount a previously mounted archive.
-void unmount(const std::filesystem::path& pakFile);
+RAYFLOW_CORE_API void unmount(const std::filesystem::path& pakFile);
 
 // Read entire file contents into memory.
 // Search order (unless overridden by InitFlags):
@@ -67,28 +68,28 @@ void unmount(const std::filesystem::path& pakFile);
 //
 // @param virtualPath  Path relative to game root (e.g., "textures/terrain.png").
 // @return File contents, or std::nullopt if not found.
-std::optional<std::vector<std::uint8_t>> read_file(const std::string& virtualPath);
+RAYFLOW_CORE_API std::optional<std::vector<std::uint8_t>> read_file(const std::string& virtualPath);
 
 // Read file contents as string (convenience for text files).
-std::optional<std::string> read_text_file(const std::string& virtualPath);
+RAYFLOW_CORE_API std::optional<std::string> read_text_file(const std::string& virtualPath);
 
 // Check if a file or directory exists.
-bool exists(const std::string& virtualPath);
+RAYFLOW_CORE_API bool exists(const std::string& virtualPath);
 
 // Get file metadata.
-std::optional<FileStat> stat(const std::string& virtualPath);
+RAYFLOW_CORE_API std::optional<FileStat> stat(const std::string& virtualPath);
 
 // List contents of a directory.
 // Returns combined listing from loose files and archives (deduplicated).
 // Names ending with '/' indicate subdirectories.
-std::vector<std::string> list_dir(const std::string& virtualPath);
+RAYFLOW_CORE_API std::vector<std::string> list_dir(const std::string& virtualPath);
 
 // Resolve a virtual path to an actual filesystem path (loose file only).
 // Returns std::nullopt if file doesn't exist as loose file.
 // Useful when APIs require actual file paths (e.g., some raylib functions).
-std::optional<std::filesystem::path> resolve_loose_path(const std::string& virtualPath);
+RAYFLOW_CORE_API std::optional<std::filesystem::path> resolve_loose_path(const std::string& virtualPath);
 
 // Get the base game directory.
-const std::filesystem::path& get_game_dir();
+RAYFLOW_CORE_API const std::filesystem::path& get_game_dir();
 
 } // namespace engine::vfs

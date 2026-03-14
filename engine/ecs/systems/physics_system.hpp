@@ -9,7 +9,7 @@ namespace voxel {
 
 namespace ecs {
 
-class PhysicsSystem : public System {
+class RAYFLOW_VOXEL_API PhysicsSystem : public System {
 public:
     static constexpr float GRAVITY = 20.0f;
     

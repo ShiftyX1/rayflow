@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lua_state.hpp"
+#include "engine/core/export.hpp"
 
 #include <functional>
 #include <string>
@@ -61,7 +62,7 @@ struct SandboxConfig {
 };
 
 // Validation result for scripts
-struct ValidationResult {
+struct RAYFLOW_CORE_API ValidationResult {
     bool valid{false};
     std::vector<std::string> errors;
     std::vector<std::string> warnings;
@@ -70,7 +71,7 @@ struct ValidationResult {
 };
 
 // Sandbox utility functions
-class Sandbox {
+class RAYFLOW_CORE_API Sandbox {
 public:
     // Validate a script without executing it
     static ValidationResult validate_script(const std::string& script);

@@ -7,6 +7,7 @@
 // Computes view and projection matrices using glm.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 
 #include <glm/glm.hpp>
@@ -14,7 +15,7 @@
 
 namespace rf {
 
-class Camera {
+class RAYFLOW_CLIENT_API Camera {
 public:
     Camera() = default;
 

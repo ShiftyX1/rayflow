@@ -10,8 +10,9 @@
 //   - Depth-only mode (no color attachment — shadow maps)
 // =============================================================================
 
-#include <glad/gl.h>
+#include "engine/core/export.hpp"
 
+#include <glad/gl.h>
 #include <vector>
 
 namespace rf {
@@ -25,7 +26,7 @@ struct FBAttachment {
     GLenum wrap           = GL_CLAMP_TO_EDGE;
 };
 
-class GLFramebuffer {
+class RAYFLOW_CLIENT_API GLFramebuffer {
 public:
     GLFramebuffer() = default;
     ~GLFramebuffer();

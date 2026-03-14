@@ -7,6 +7,7 @@
 // =============================================================================
 
 #include "types.hpp"
+#include "export.hpp"
 
 #include <entt/entt.hpp>
 
@@ -37,9 +38,9 @@ namespace engine {
 // IEngineServices - Engine provides this to the game server
 // ============================================================================
 
-class IEngineServices {
+class RAYFLOW_CORE_API IEngineServices {
 public:
-    virtual ~IEngineServices() = default;
+    virtual ~IEngineServices();
 
     // --- Networking ---
     
@@ -84,9 +85,9 @@ public:
 // IGameServer - Game implements this (server-side)
 // ============================================================================
 
-class IGameServer {
+class RAYFLOW_CORE_API IGameServer {
 public:
-    virtual ~IGameServer() = default;
+    virtual ~IGameServer();
 
     // --- Lifecycle ---
     
@@ -118,9 +119,9 @@ public:
 // IClientServices - Engine provides this to the game client
 // ============================================================================
 
-class IClientServices {
+class RAYFLOW_CORE_API IClientServices {
 public:
-    virtual ~IClientServices() = default;
+    virtual ~IClientServices();
 
     // --- Networking ---
     
@@ -190,9 +191,9 @@ public:
 // IGameClient - Game implements this (client-side)
 // ============================================================================
 
-class IGameClient {
+class RAYFLOW_CORE_API IGameClient {
 public:
-    virtual ~IGameClient() = default;
+    virtual ~IGameClient();
 
     // --- Lifecycle ---
     

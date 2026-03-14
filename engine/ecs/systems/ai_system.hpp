@@ -21,7 +21,7 @@
 
 namespace ecs {
 
-class AISystem : public System {
+class RAYFLOW_CORE_API AISystem : public System {
 public:
     /// Set the entity that AI should consider as "player" (target)
     void set_player_entity(entt::entity player) {

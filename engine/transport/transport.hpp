@@ -5,6 +5,8 @@
 // Provides IClientTransport and IServerTransport for network abstraction.
 // =============================================================================
 
+#include "engine/core/export.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <span>
@@ -21,7 +23,7 @@ using OnDisconnectCallback = std::function<void()>;
 
 // --- Client Transport ---
 
-class IClientTransport {
+class RAYFLOW_CORE_API IClientTransport {
 public:
     virtual ~IClientTransport() = default;
 
@@ -59,7 +61,7 @@ using OnClientReceiveCallback = std::function<void(ClientId id, std::span<const 
 using OnClientConnectCallback = std::function<void(ClientId id)>;
 using OnClientDisconnectCallback = std::function<void(ClientId id)>;
 
-class IServerTransport {
+class RAYFLOW_CORE_API IServerTransport {
 public:
     virtual ~IServerTransport() = default;
 

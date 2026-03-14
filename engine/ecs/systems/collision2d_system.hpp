@@ -37,7 +37,7 @@ struct CollisionHit {
     bool is_trigger{false};
 };
 
-class Collision2DSystem : public System {
+class RAYFLOW_CORE_API Collision2DSystem : public System {
 public:
     void update(entt::registry& registry, float dt) override {
         (void)dt;

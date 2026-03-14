@@ -10,6 +10,7 @@
 //   - Frustum culling
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/renderer/gl_framebuffer.hpp"
 #include "engine/renderer/gl_shader.hpp"
 #include "engine/renderer/gl_mesh.hpp"
@@ -34,7 +35,7 @@ struct Frustum {
     bool testAABB(const Vec3& minPt, const Vec3& maxPt) const;
 };
 
-class RenderPipeline {
+class RAYFLOW_CLIENT_API RenderPipeline {
 public:
     RenderPipeline() = default;
     ~RenderPipeline() = default;

@@ -1,10 +1,12 @@
 #pragma once
 
+#include "engine/core/export.hpp"
+
 #include <entt/entt.hpp>
 
 namespace ecs {
 
-class System {
+class RAYFLOW_CORE_API System {
 public:
     virtual ~System() = default;
     virtual void update(entt::registry& registry, float delta_time) = 0;

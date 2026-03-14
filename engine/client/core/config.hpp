@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/core/export.hpp"
+
 #include <string>
 #include <unordered_map>
 
@@ -75,7 +77,7 @@ struct ClientConfig {
     } profiling{};
 };
 
-class Config {
+class RAYFLOW_CLIENT_API Config {
 public:
     static Config& instance();
 

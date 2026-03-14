@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pak_format.hpp"
+#include "engine/core/export.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -14,7 +15,7 @@ namespace engine::vfs {
 
 // PAK archive reader.
 // Opens a .pak file and provides random access to its contents.
-class ArchiveReader {
+class RAYFLOW_CORE_API ArchiveReader {
 public:
     ArchiveReader();
     ~ArchiveReader();

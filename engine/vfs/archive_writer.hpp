@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pak_format.hpp"
+#include "engine/core/export.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -12,7 +13,7 @@ namespace engine::vfs {
 
 // PAK archive writer.
 // Creates a .pak file from a set of files.
-class ArchiveWriter {
+class RAYFLOW_CORE_API ArchiveWriter {
 public:
     ArchiveWriter();
     ~ArchiveWriter();

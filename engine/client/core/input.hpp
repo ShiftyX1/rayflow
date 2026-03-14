@@ -7,6 +7,7 @@
 // Manages keyboard and mouse state via GLFW callbacks with edge detection.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 
 struct GLFWwindow;
@@ -20,7 +21,7 @@ enum class CursorMode {
     Disabled,   ///< Cursor is hidden and captured (FPS-style).
 };
 
-class Input {
+class RAYFLOW_CLIENT_API Input {
 public:
     /// Install GLFW callbacks on the given window.
     /// Call once after Window::init().

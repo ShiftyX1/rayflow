@@ -14,10 +14,12 @@ struct lua_State;
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/forward.hpp>
 
+#include "engine/core/export.hpp"
+
 namespace engine::scripting {
 
 // Script execution result
-struct ScriptResult {
+struct RAYFLOW_CORE_API ScriptResult {
     bool success{false};
     std::string error;
     
@@ -35,7 +37,7 @@ struct ScriptLimits {
 };
 
 // Lua VM wrapper with optional sandboxing
-class LuaState {
+class RAYFLOW_CORE_API LuaState {
 public:
     LuaState();
     ~LuaState();

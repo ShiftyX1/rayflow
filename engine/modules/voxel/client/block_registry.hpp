@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "block.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_texture.hpp"
@@ -18,7 +19,7 @@ struct BlockInfo {
     std::array<int, 6> texture_indices;
 };
 
-class BlockRegistry {
+class RAYFLOW_VOXEL_API BlockRegistry {
 public:
     static BlockRegistry& instance();
     

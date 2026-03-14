@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/core/math_types.hpp"
+#include "engine/core/export.hpp"
 #include <entt/entt.hpp>
 
 #include "engine/core/player_constants.hpp"
@@ -88,7 +89,7 @@ struct ModelComponent {
     bool          visible{true};
 };
 
-struct ToolHolder {
+struct RAYFLOW_CLIENT_API ToolHolder {
     enum class ToolType {
         None,
         Pickaxe,

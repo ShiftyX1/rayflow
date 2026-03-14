@@ -11,7 +11,8 @@
 # SDK Structure:
 #   rayflow-sdk/
 #   ├── include/rayflow/     - Headers
-#   ├── lib/                 - Static libraries
+#   ├── bin/                 - Shared libraries (.dll on Windows)
+#   ├── lib/                 - Import/shared libraries (.lib/.so/.dylib)
 #   └── lib/cmake/rayflow/   - CMake config files
 # =============================================================================
 
@@ -74,13 +75,14 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/engine/modules/
 )
 
 # =============================================================================
-# Install Static Libraries (just copy compiled .a/.lib files)
+# Install Shared Libraries
 # =============================================================================
 
-# Engine libraries
-install(TARGETS engine_core engine_client engine_ui engine_voxel
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+# Engine shared libraries
+install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}      # .lib import libraries (Windows)
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}      # .so/.dylib (Linux/macOS)
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}      # .dll (Windows)
 )
 
 # Copy dependency libraries manually (they're IMPORTED so can't use install(TARGETS))
@@ -144,15 +146,23 @@ get_filename_component(RAYFLOW_SDK_DIR \"\${CMAKE_CURRENT_LIST_DIR}/../../..\" A
 # =============================================================================
 if(WIN32)
     set(_RAYFLOW_LIB_PREFIX \"\")
-    set(_RAYFLOW_LIB_SUFFIX \".lib\")
+    set(_RAYFLOW_LIB_SUFFIX \".lib\")        # import library
+    set(_RAYFLOW_DLL_PREFIX \"\")
+    set(_RAYFLOW_DLL_SUFFIX \".dll\")
+    set(_RAYFLOW_STATIC_PREFIX \"\")
+    set(_RAYFLOW_STATIC_SUFFIX \".lib\")
     set(_RAYFLOW_LUAJIT_NAME \"lua51\")
 elseif(APPLE)
     set(_RAYFLOW_LIB_PREFIX \"lib\")
-    set(_RAYFLOW_LIB_SUFFIX \".a\")
+    set(_RAYFLOW_LIB_SUFFIX \".dylib\")
+    set(_RAYFLOW_STATIC_PREFIX \"lib\")
+    set(_RAYFLOW_STATIC_SUFFIX \".a\")
     set(_RAYFLOW_LUAJIT_NAME \"luajit-5.1\")
 else()
     set(_RAYFLOW_LIB_PREFIX \"lib\")
-    set(_RAYFLOW_LIB_SUFFIX \".a\")
+    set(_RAYFLOW_LIB_SUFFIX \".so\")
+    set(_RAYFLOW_STATIC_PREFIX \"lib\")
+    set(_RAYFLOW_STATIC_SUFFIX \".a\")
     set(_RAYFLOW_LUAJIT_NAME \"luajit-5.1\")
 endif()
 
@@ -177,7 +187,7 @@ endif()
 # ENet
 add_library(rayflow::enet STATIC IMPORTED)
 set_target_properties(rayflow::enet PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/static/\${_RAYFLOW_LIB_PREFIX}enet\${_RAYFLOW_LIB_SUFFIX}\"
+    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/static/\${_RAYFLOW_STATIC_PREFIX}enet\${_RAYFLOW_STATIC_SUFFIX}\"
 )
 if(WIN32)
     set_property(TARGET rayflow::enet APPEND PROPERTY
@@ -188,14 +198,14 @@ endif()
 # LuaJIT
 add_library(rayflow::luajit STATIC IMPORTED)
 set_target_properties(rayflow::luajit PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}\${_RAYFLOW_LUAJIT_NAME}\${_RAYFLOW_LIB_SUFFIX}\"
+    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_STATIC_PREFIX}\${_RAYFLOW_LUAJIT_NAME}\${_RAYFLOW_STATIC_SUFFIX}\"
     INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include/rayflow/lua\"
 )
 
 # TinyXML2
 add_library(rayflow::tinyxml2 STATIC IMPORTED)
 set_target_properties(rayflow::tinyxml2 PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}tinyxml2\${_RAYFLOW_LIB_SUFFIX}\"
+    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_STATIC_PREFIX}tinyxml2\${_RAYFLOW_STATIC_SUFFIX}\"
     INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include\"
 )
 
@@ -204,43 +214,96 @@ set_target_properties(rayflow::tinyxml2 PROPERTIES
 # =============================================================================
 
 # Core (headless - server, tools)
-add_library(rayflow::core STATIC IMPORTED)
+add_library(rayflow::core SHARED IMPORTED)
 set_target_properties(rayflow::core PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_core\${_RAYFLOW_LIB_SUFFIX}\"
     INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include;\${RAYFLOW_SDK_DIR}/include/rayflow\"
     INTERFACE_LINK_LIBRARIES \"rayflow::enet;rayflow::luajit;EnTT::EnTT\"
 )
+if(WIN32)
+    set_target_properties(rayflow::core PROPERTIES
+        IMPORTED_IMPLIB \"\${RAYFLOW_SDK_DIR}/lib/engine_core.lib\"
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/bin/engine_core.dll\"
+    )
+else()
+    set_target_properties(rayflow::core PROPERTIES
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_core\${_RAYFLOW_LIB_SUFFIX}\"
+    )
+endif()
 
 # Client (GLFW + OpenGL)
-add_library(rayflow::client STATIC IMPORTED)
+add_library(rayflow::client SHARED IMPORTED)
 set_target_properties(rayflow::client PROPERTIES
-    IMPORTED_LOCATION "${RAYFLOW_SDK_DIR}/lib/${_RAYFLOW_LIB_PREFIX}engine_client${_RAYFLOW_LIB_SUFFIX}"
-    INTERFACE_INCLUDE_DIRECTORIES "${RAYFLOW_SDK_DIR}/include;${RAYFLOW_SDK_DIR}/include/rayflow"
-    INTERFACE_LINK_LIBRARIES "rayflow::core;glfw;glad;glm::glm;stb_headers;EnTT::EnTT"
+    INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include;\${RAYFLOW_SDK_DIR}/include/rayflow\"
+    INTERFACE_LINK_LIBRARIES \"rayflow::core;glfw;glad;glm::glm;stb_headers;EnTT::EnTT\"
 )
+if(WIN32)
+    set_target_properties(rayflow::client PROPERTIES
+        IMPORTED_IMPLIB \"\${RAYFLOW_SDK_DIR}/lib/engine_client.lib\"
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/bin/engine_client.dll\"
+    )
+else()
+    set_target_properties(rayflow::client PROPERTIES
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_client\${_RAYFLOW_LIB_SUFFIX}\"
+    )
+endif()
 
 # UI framework
-add_library(rayflow::ui STATIC IMPORTED)
+add_library(rayflow::ui SHARED IMPORTED)
 set_target_properties(rayflow::ui PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_ui\${_RAYFLOW_LIB_SUFFIX}\"
     INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include;\${RAYFLOW_SDK_DIR}/include/rayflow\"
     INTERFACE_LINK_LIBRARIES \"rayflow::client;rayflow::tinyxml2\"
 )
+if(WIN32)
+    set_target_properties(rayflow::ui PROPERTIES
+        IMPORTED_IMPLIB \"\${RAYFLOW_SDK_DIR}/lib/engine_ui.lib\"
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/bin/engine_ui.dll\"
+    )
+else()
+    set_target_properties(rayflow::ui PROPERTIES
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_ui\${_RAYFLOW_LIB_SUFFIX}\"
+    )
+endif()
 
 # Voxel module
-add_library(rayflow::voxel STATIC IMPORTED)
+add_library(rayflow::voxel SHARED IMPORTED)
 set_target_properties(rayflow::voxel PROPERTIES
-    IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_voxel\${_RAYFLOW_LIB_SUFFIX}\"
     INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include;\${RAYFLOW_SDK_DIR}/include/rayflow\"
     INTERFACE_LINK_LIBRARIES \"rayflow::client\"
 )
+if(WIN32)
+    set_target_properties(rayflow::voxel PROPERTIES
+        IMPORTED_IMPLIB \"\${RAYFLOW_SDK_DIR}/lib/engine_voxel.lib\"
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/bin/engine_voxel.dll\"
+    )
+else()
+    set_target_properties(rayflow::voxel PROPERTIES
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_voxel\${_RAYFLOW_LIB_SUFFIX}\"
+    )
+endif()
+
+# App (glue layer — ClientEngine)
+add_library(rayflow::app SHARED IMPORTED)
+set_target_properties(rayflow::app PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES \"\${RAYFLOW_SDK_DIR}/include;\${RAYFLOW_SDK_DIR}/include/rayflow\"
+    INTERFACE_LINK_LIBRARIES \"rayflow::core;rayflow::client;rayflow::ui;rayflow::voxel\"
+)
+if(WIN32)
+    set_target_properties(rayflow::app PROPERTIES
+        IMPORTED_IMPLIB \"\${RAYFLOW_SDK_DIR}/lib/engine_app.lib\"
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/bin/engine_app.dll\"
+    )
+else()
+    set_target_properties(rayflow::app PROPERTIES
+        IMPORTED_LOCATION \"\${RAYFLOW_SDK_DIR}/lib/\${_RAYFLOW_LIB_PREFIX}engine_app\${_RAYFLOW_LIB_SUFFIX}\"
+    )
+endif()
 
 # =============================================================================
 # Convenience target (all-in-one)
 # =============================================================================
 add_library(rayflow::engine INTERFACE IMPORTED)
 set_target_properties(rayflow::engine PROPERTIES
-    INTERFACE_LINK_LIBRARIES \"rayflow::voxel;rayflow::ui;rayflow::client;rayflow::core\"
+    INTERFACE_LINK_LIBRARIES \"rayflow::app\"
 )
 
 # =============================================================================

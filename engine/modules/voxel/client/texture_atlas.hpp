@@ -1,11 +1,12 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_texture.hpp"
 
 namespace voxel {
 
-class TextureAtlas {
+class RAYFLOW_VOXEL_API TextureAtlas {
 public:
     bool load(const char* path);
     void unload();

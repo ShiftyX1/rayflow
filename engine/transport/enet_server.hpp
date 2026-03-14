@@ -2,6 +2,7 @@
 
 #include "transport.hpp"
 #include "enet_common.hpp"
+#include "engine/core/export.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -14,7 +15,7 @@ namespace engine::transport {
 // ENetServerTransport - Server-side ENet transport
 // ============================================================================
 
-class ENetServerTransport : public IServerTransport {
+class RAYFLOW_CORE_API ENetServerTransport : public IServerTransport {
 public:
     ENetServerTransport();
     ~ENetServerTransport() override;

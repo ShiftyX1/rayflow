@@ -3,6 +3,8 @@
 // ENet common utilities for engine transport layer.
 // Forward declarations avoid Windows header conflicts.
 
+#include "engine/core/export.hpp"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -20,7 +22,7 @@ namespace engine::transport {
 // ENetInitializer - RAII wrapper for enet_initialize/enet_deinitialize
 // ============================================================================
 
-class ENetInitializer {
+class RAYFLOW_CORE_API ENetInitializer {
 public:
     ENetInitializer();
     ~ENetInitializer();

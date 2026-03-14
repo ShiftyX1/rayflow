@@ -13,7 +13,7 @@ namespace voxel {
 
 namespace ecs {
 
-class RenderSystem : public System {
+class RAYFLOW_VOXEL_API RenderSystem : public System {
 public:
     void update(entt::registry& registry, float delta_time) override;
     
