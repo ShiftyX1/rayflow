@@ -50,6 +50,15 @@ public:
     /// Returns seconds elapsed since the previous call.
     float updateDeltaTime();
 
+    /// Set up default OpenGL state (depth test, blending, etc.).
+    void setupDefaultGLState();
+
+    /// Clear the framebuffer (color + depth). Call at the start of each frame.
+    void beginFrame();
+
+    /// Update the GL viewport to match the current framebuffer size.
+    void updateViewport();
+
     /// Get underlying GLFW handle (for input callbacks etc.)
     GLFWwindow* handle() const { return window_; }
 

@@ -247,7 +247,7 @@ install(TARGETS bedwars bedwars_server
 )
 
 # Install engine DLLs alongside game executables
-install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app
+install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app glad
     LIBRARY DESTINATION bin
     RUNTIME DESTINATION bin
 )

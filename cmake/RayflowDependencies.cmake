@@ -93,8 +93,12 @@ if(NOT EXISTS "${RAYFLOW_GLAD_DIR}/src/gl.c")
         "Run: python -m glad --api gl:core=4.1 --out-path engine/renderer/glad c")
 endif()
 
-add_library(glad STATIC "${RAYFLOW_GLAD_DIR}/src/gl.c")
+add_library(glad SHARED "${RAYFLOW_GLAD_DIR}/src/gl.c")
 target_include_directories(glad PUBLIC "${RAYFLOW_GLAD_DIR}/include")
+target_compile_definitions(glad
+    PUBLIC  GLAD_API_CALL_EXPORT
+    PRIVATE GLAD_API_CALL_EXPORT_BUILD
+)
 
 # -----------------------------------------------------------------------------
 # stb (image + truetype, header-only — implementation compiled in engine)

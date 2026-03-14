@@ -95,6 +95,9 @@ add_library(engine_core SHARED
     ecs/systems/collision2d_system.cpp
     ecs/systems/ai_system.hpp
     ecs/systems/ai_system.cpp
+
+    # Explicit EnTT type_index instantiations for cross-DLL ECS
+    ecs/ecs_type_registry.cpp
 )
 
 target_include_directories(engine_core PUBLIC 
@@ -105,8 +108,8 @@ target_include_directories(engine_core PUBLIC
 )
 
 target_compile_features(engine_core PUBLIC cxx_std_20)
-target_compile_definitions(engine_core PRIVATE RAYFLOW_CORE_EXPORTS)
-target_compile_definitions(engine_core PUBLIC ENTT_API_EXPORT)
+target_compile_definitions(engine_core PRIVATE RAYFLOW_CORE_EXPORTS ENTT_API_EXPORT)
+target_compile_definitions(engine_core INTERFACE ENTT_API_IMPORT)
 set_target_properties(engine_core PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
@@ -176,7 +179,17 @@ set_target_properties(engine_client PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
-target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT)
+target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT imgui)
+
+# Debug UI (Dear ImGui) - compiled in engine_client alongside GLFW/glad
+target_sources(engine_client PRIVATE
+    ui/debug/debug_ui.cpp
+)
+
+# Enable DEBUG_UI in Debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(engine_client PUBLIC DEBUG_UI=1)
+endif()
 
 # Set PAK mode compile definition
 if(ENGINE_USE_PAK)
@@ -209,17 +222,7 @@ set_target_properties(engine_ui PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
-target_link_libraries(engine_ui PUBLIC engine_client tinyxml2 imgui)
-
-# Debug UI (Dear ImGui) - available in all builds
-target_sources(engine_ui PRIVATE
-    ui/debug/debug_ui.cpp
-)
-
-# Enable DEBUG_UI in Debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(engine_ui PUBLIC DEBUG_UI=1)
-endif()
+target_link_libraries(engine_ui PUBLIC engine_client tinyxml2)
 
 # =============================================================================
 # MODULES - Optional game-specific functionality
