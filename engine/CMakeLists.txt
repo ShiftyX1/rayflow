@@ -238,8 +238,8 @@ add_library(engine_lib ALIAS engine_core)
 # =============================================================================
 # Tools
 # =============================================================================
-# Map editor temporarily disabled during GLFW/OpenGL migration
-# add_subdirectory(modules/voxel/tools/map_editor)
+# Map editor (migrated to GLFW/OpenGL + ImGui)
+add_subdirectory(modules/voxel/tools/map_editor)
 
 # Asset packer tool (no raylib dependency)
 if(RAYFLOW_BUILD_PACK_ASSETS)

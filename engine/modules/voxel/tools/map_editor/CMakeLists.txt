@@ -5,9 +5,8 @@
 if(RAYFLOW_BUILD_MAP_EDITOR)
     add_executable(map_builder
         map_editor_main.cpp
-        map_editor_style.cpp
-        editor_session.cpp
-        ${CMAKE_SOURCE_DIR}/engine/ui/debug/raygui_impl.cpp
+        map_editor_client.cpp
+        editor_imgui_ui.cpp
     )
     
     target_include_directories(map_builder PRIVATE
@@ -16,14 +15,12 @@ if(RAYFLOW_BUILD_MAP_EDITOR)
     )
     
     target_link_libraries(map_builder PRIVATE
-        bedwars_client_lib
         bedwars_server_lib
         engine_client
         engine_ui
         engine_voxel
     )
     
-    rayflow_link_raylib(map_builder)
     rayflow_link_platform(map_builder)
     rayflow_configure_executable(map_builder)
 endif()
