@@ -369,8 +369,13 @@ void BedWarsClient::on_render() {
     }
 #endif
 
+    // BW-1: Team selection overlay
+    if (gameScreen_ == ui::GameScreen::TeamSelect) {
+        render_team_select();
+    }
+
     // Crosshair (show when playing and UI not capturing input)
-    if (!uiCapturesInput_) {
+    if (gameScreen_ == ui::GameScreen::Playing && !uiCapturesInput_) {
         int cx = sw / 2, cy = sh / 2;
         batch.drawRect(static_cast<float>(cx - 10), static_cast<float>(cy - 1), 20.0f, 2.0f, rf::Color::White());
         batch.drawRect(static_cast<float>(cx - 1), static_cast<float>(cy - 10), 2.0f, 20.0f, rf::Color::White());
@@ -480,6 +485,92 @@ void BedWarsClient::render_debug_info() {
 }
 
 // ============================================================================
+// BW-1: Team Selection Overlay (Batch2D)
+// ============================================================================
+
+void BedWarsClient::render_team_select() {
+    auto& batch = rf::Batch2D::instance();
+    auto& win = rf::Window::instance();
+    int sw = win.width();
+    int sh = win.height();
+
+    // Semi-transparent dark overlay
+    batch.drawRect(0, 0, static_cast<float>(sw), static_cast<float>(sh), rf::Color{0, 0, 0, 128});
+
+    // Title
+    const std::string title = "Select Your Team";
+    float titleW = batch.measureText(title, 32.0f);
+    batch.drawText(title, (static_cast<float>(sw) - titleW) / 2.0f, static_cast<float>(sh) / 4.0f, 32.0f, rf::Color::White());
+
+    // Team button layout
+    const float btnW = 200.0f;
+    const float btnH = 50.0f;
+    const float gap = 20.0f;
+    float totalW = static_cast<float>(availableTeams_.size()) * btnW + static_cast<float>(availableTeams_.size() - 1) * gap;
+    float startX = (static_cast<float>(sw) - totalW) / 2.0f;
+    float btnY = static_cast<float>(sh) / 2.0f - btnH / 2.0f;
+
+    // Get mouse position
+    auto& input = rf::Input::instance();
+    rf::Vec2 mousePos = input.getMousePosition();
+    float mx = mousePos.x;
+    float my = mousePos.y;
+    bool clicked = input.isMouseButtonPressed(0);
+
+    for (std::size_t i = 0; i < availableTeams_.size(); ++i) {
+        float bx = startX + static_cast<float>(i) * (btnW + gap);
+        
+        // Determine team name and color
+        proto::TeamId tid = availableTeams_[i];
+        rf::Color btnColor = get_team_color(tid);
+        std::string teamName;
+        switch (tid) {
+            case proto::Teams::Red:    teamName = "Red";    break;
+            case proto::Teams::Blue:   teamName = "Blue";   break;
+            case proto::Teams::Green:  teamName = "Green";  break;
+            case proto::Teams::Yellow: teamName = "Yellow"; break;
+            default:                   teamName = "???";    break;
+        }
+
+        // Check hover
+        bool hover = (mx >= bx && mx <= bx + btnW && my >= btnY && my <= btnY + btnH);
+        
+        // Draw button background
+        rf::Color bg = hover ? rf::Color{btnColor.r, btnColor.g, btnColor.b, 220} 
+                             : rf::Color{btnColor.r, btnColor.g, btnColor.b, 160};
+        batch.drawRect(bx, btnY, btnW, btnH, bg);
+
+        // Draw border
+        const float bdr = 2.0f;
+        rf::Color borderColor = hover ? rf::Color::White() : rf::Color{200, 200, 200, 180};
+        batch.drawRect(bx, btnY, btnW, bdr, borderColor);                      // top
+        batch.drawRect(bx, btnY + btnH - bdr, btnW, bdr, borderColor);          // bottom
+        batch.drawRect(bx, btnY, bdr, btnH, borderColor);                       // left
+        batch.drawRect(bx + btnW - bdr, btnY, bdr, btnH, borderColor);          // right
+
+        // Draw team name centered in button
+        float tw = batch.measureText(teamName, 24.0f);
+        batch.drawText(teamName, bx + (btnW - tw) / 2.0f, btnY + (btnH - 24.0f) / 2.0f, 24.0f, rf::Color::White());
+
+        // Handle click
+        if (hover && clicked && !teamSelected_) {
+            send_select_team(tid);
+        }
+    }
+
+    // Hint text
+    if (!teamSelected_) {
+        const std::string hint = "Click a team to join";
+        float hintW = batch.measureText(hint, 18.0f);
+        batch.drawText(hint, (static_cast<float>(sw) - hintW) / 2.0f, btnY + btnH + 30.0f, 18.0f, rf::Color{180, 180, 180, 255});
+    } else {
+        const std::string hint = "Waiting for other players...";
+        float hintW = batch.measureText(hint, 18.0f);
+        batch.drawText(hint, (static_cast<float>(sw) - hintW) / 2.0f, btnY + btnH + 30.0f, 18.0f, rf::Color{88, 166, 255, 255});
+    }
+}
+
+// ============================================================================
 // Networking - Events
 // ============================================================================
 
@@ -572,6 +663,7 @@ void BedWarsClient::handle_server_hello(const proto::ServerHello& msg) {
     hasMapTemplate_ = msg.hasMapTemplate;
     mapId_ = msg.mapId;
     mapVersion_ = msg.mapVersion;
+    availableTeams_ = msg.availableTeams;
     
     engine_->log(engine::LogLevel::Info, "ServerHello: hasMapTemplate=" + std::to_string(hasMapTemplate_) + 
                  " mapId=" + mapId_ + " mapVersion=" + std::to_string(mapVersion_));
@@ -622,9 +714,15 @@ void BedWarsClient::handle_join_ack(const proto::JoinAck& msg) {
     
     sessionState_ = SessionState::InGame;
     
-    // Switch to playing mode
-    gameScreen_ = ui::GameScreen::Playing;
-    rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
+    // BW-1: If server provided available teams, go to team selection first
+    if (!availableTeams_.empty()) {
+        gameScreen_ = ui::GameScreen::TeamSelect;
+        teamSelected_ = false;
+        rf::Input::instance().setCursorMode(rf::CursorMode::Normal);
+    } else {
+        gameScreen_ = ui::GameScreen::Playing;
+        rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
+    }
 }
 
 void BedWarsClient::handle_state_snapshot(const proto::StateSnapshot& msg) {
@@ -707,6 +805,15 @@ void BedWarsClient::handle_team_assigned(const proto::TeamAssigned& msg) {
     
     if (msg.playerId == localPlayerId_) {
         localPlayer_.team = msg.teamId;
+        // BW-1: Mark local player as having selected a team
+        if (msg.teamId != proto::Teams::None) {
+            teamSelected_ = true;
+            // Transition to Playing mode and lock cursor
+            if (gameScreen_ == ui::GameScreen::TeamSelect) {
+                gameScreen_ = ui::GameScreen::Playing;
+                rf::Input::instance().setCursorMode(rf::CursorMode::Disabled);
+            }
+        }
     } else {
         players_[msg.playerId].team = msg.teamId;
     }
@@ -793,6 +900,13 @@ void BedWarsClient::send_client_hello() {
 void BedWarsClient::send_join_match() {
     proto::JoinMatch msg;
     send_message(msg);
+}
+
+void BedWarsClient::send_select_team(proto::TeamId teamId) {
+    proto::SelectTeam msg;
+    msg.teamId = teamId;
+    send_message(msg);
+    engine_->log(engine::LogLevel::Info, "Sending SelectTeam: " + std::to_string(static_cast<int>(teamId)));
 }
 
 void BedWarsClient::send_input_frame() {

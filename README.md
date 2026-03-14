@@ -41,12 +41,33 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
+### Build on Windows (MSVC)
+
+Requires **Visual Studio 2022** with the "Desktop development with C++" workload and **CMake 3.21+**.
+
+The MSVC compiler (`cl.exe`) must be available in the environment. The recommended way is to initialize the VS developer environment via PowerShell before running CMake:
+
+```powershell
+# 1. Initialize x64 MSVC environment
+Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+Enter-VsDevShell -VsInstallPath "C:\Program Files\Microsoft Visual Studio\2022\Community" -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+
+# 2. Configure
+cmake --preset ci-windows
+
+# 3. Build
+cmake --build --preset ci-windows
+```
+
+> **Note:** Do not use `VsDevCmd.bat` directly in PowerShell — it does not propagate environment variables back to the shell. Use the `Enter-VsDevShell` module as shown above, or run from the **"x64 Native Tools Command Prompt for VS 2022"** shortcut in the Start menu.
+
 ### Build presets
 
 | Preset | Description |
 |--------|-------------|
 | `debug` | Debug build with tests |
 | `release` | Release build with optimizations |
+| `ci-windows` | Debug + explicit MSVC toolchain (`cl.exe`, x64) |
 
 ### Build individual targets
 

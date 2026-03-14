@@ -189,6 +189,23 @@ void BlockRegistry::register_blocks() {
     blocks_[static_cast<size_t>(BlockType::DeadBush)] = {
         "Dead Bush", false, true, 0.0f, 0, {55, 55, 55, 55, 55, 55}
     };
+    
+    // Team blocks (BW-1): solid colored blocks for BedWars team spawn points
+    blocks_[static_cast<size_t>(BlockType::TeamRed)] = {
+        "Team Red", true, false, 50.0f, 0, {240, 240, 240, 240, 240, 240}
+    };
+    
+    blocks_[static_cast<size_t>(BlockType::TeamBlue)] = {
+        "Team Blue", true, false, 50.0f, 0, {241, 241, 241, 241, 241, 241}
+    };
+    
+    blocks_[static_cast<size_t>(BlockType::TeamGreen)] = {
+        "Team Green", true, false, 50.0f, 0, {242, 242, 242, 242, 242, 242}
+    };
+    
+    blocks_[static_cast<size_t>(BlockType::TeamYellow)] = {
+        "Team Yellow", true, false, 50.0f, 0, {243, 243, 243, 243, 243, 243}
+    };
 }
 
 const BlockInfo& BlockRegistry::get_block_info(BlockType type) const {

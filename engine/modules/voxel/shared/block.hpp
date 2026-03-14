@@ -46,6 +46,12 @@ enum class BlockType : std::uint8_t {
     Dandelion,
     DeadBush,
     
+    // Team blocks (BW-1): colored team markers for BedWars spawn points / beds
+    TeamRed,
+    TeamBlue,
+    TeamGreen,
+    TeamYellow,
+    
     Count
 };
 
@@ -111,6 +117,14 @@ constexpr BlockLightProps BLOCK_LIGHT_PROPS[static_cast<std::size_t>(BlockType::
     BlockLightProps{ 0u, 0u, 0u, false, false },
     // DeadBush - transparent vegetation
     BlockLightProps{ 0u, 0u, 0u, false, false },
+    // TeamRed - opaque solid block
+    BlockLightProps{ 0u, 0u, 0u, true, false },
+    // TeamBlue - opaque solid block
+    BlockLightProps{ 0u, 0u, 0u, true, false },
+    // TeamGreen - opaque solid block
+    BlockLightProps{ 0u, 0u, 0u, true, false },
+    // TeamYellow - opaque solid block
+    BlockLightProps{ 0u, 0u, 0u, true, false },
 };
 
 inline constexpr const BlockLightProps& get_light_props(BlockType bt) {

@@ -158,6 +158,7 @@ private:
     void send_client_hello();
     void send_join_match();
     void send_input_frame();
+    void send_select_team(proto::TeamId teamId);
     void send_try_break_block(int x, int y, int z);
     void send_try_place_block(int x, int y, int z, proto::BlockType type, float hitY, std::uint8_t face);
     
@@ -171,6 +172,7 @@ private:
     void render_players(const rf::Camera& camera);
     void render_items(const rf::Camera& camera);
     void render_debug_info();
+    void render_team_select();
     
     // --- UI ---
     void apply_ui_commands(const ui::UIFrameOutput& out);
@@ -228,6 +230,8 @@ private:
     
     // Teams
     std::array<ClientTeamState, 4> teams_;
+    std::vector<proto::TeamId> availableTeams_;
+    bool teamSelected_{false};
     
     // Items in world
     std::unordered_map<std::uint32_t, ClientItemState> items_;
