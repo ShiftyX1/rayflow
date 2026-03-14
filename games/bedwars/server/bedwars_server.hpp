@@ -159,6 +159,7 @@ public:
         // Team
         proto::TeamId team{proto::Teams::None};
         bool hasBed{true};
+        bool teamSelected{false};  // BW-1: has player chosen a team?
         
         // Simple inventory: count per item type
         std::unordered_map<proto::ItemType, std::uint16_t> inventory;
@@ -188,6 +189,7 @@ private:
     // --- Message handlers ---
     void handle_client_hello(engine::PlayerId id, const proto::ClientHello& msg);
     void handle_join_match(engine::PlayerId id, const proto::JoinMatch& msg);
+    void handle_select_team(engine::PlayerId id, const proto::SelectTeam& msg);
     void handle_input_frame(engine::PlayerId id, const proto::InputFrame& msg);
     void handle_try_place_block(engine::PlayerId id, const proto::TryPlaceBlock& msg);
     void handle_try_break_block(engine::PlayerId id, const proto::TryBreakBlock& msg);
@@ -219,6 +221,10 @@ private:
     void process_bed_break(int x, int y, int z, engine::PlayerId breakerId);
     TeamState* get_team_at_bed(int x, int y, int z);
     
+    // --- Team blocks (BW-1) ---
+    void scan_team_blocks();
+    static proto::TeamId block_type_to_team(shared::voxel::BlockType bt);
+    
     // --- Helpers ---
     void send_message(engine::PlayerId id, const proto::Message& msg);
     void broadcast_message(const proto::Message& msg);
@@ -248,6 +254,7 @@ private:
     
     // Teams (indexed by team ID - 1, since Teams::None = 0)
     std::array<TeamState, 4> teams_;
+    std::vector<proto::TeamId> availableTeams_;  // BW-1: teams found on current map
     std::size_t nextTeamAssign_{0};  // Round-robin assignment
     
     // Generators
@@ -263,6 +270,7 @@ private:
     std::uint32_t mapVersion_{0};
     float mapCenterX_{0.0f};
     float mapCenterZ_{0.0f};
+    float spawnY_{80.0f};
     
     // Scripting engine (game scripts + map scripts)
     std::unique_ptr<bedwars::scripting::BedWarsScriptEngine> scriptEngine_;

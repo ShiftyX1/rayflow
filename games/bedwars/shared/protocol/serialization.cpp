@@ -26,6 +26,11 @@ std::vector<std::uint8_t> serialize(const Message& msg) {
             w.write_bool(m.hasMapTemplate);
             w.write_string(m.mapId);
             w.write_u32(m.mapVersion);
+            // BW-1: available teams
+            w.write_u8(static_cast<std::uint8_t>(m.availableTeams.size()));
+            for (auto t : m.availableTeams) {
+                w.write_u8(t);
+            }
         }
         else if constexpr (std::is_same_v<T, JoinMatch>) {
             w.write_u8(static_cast<std::uint8_t>(MessageType::JoinMatch));
@@ -200,6 +205,11 @@ std::vector<std::uint8_t> serialize(const Message& msg) {
             w.write_u16(m.count);
             w.write_u8(m.slot);
         }
+        // --- Team Selection (BW-1) ---
+        else if constexpr (std::is_same_v<T, SelectTeam>) {
+            w.write_u8(static_cast<std::uint8_t>(MessageType::SelectTeam));
+            w.write_u8(m.teamId);
+        }
     }, msg);
     
     return w.take();
@@ -232,6 +242,14 @@ std::optional<Message> deserialize(std::span<const std::uint8_t> data) {
                 m.hasMapTemplate = r.read_bool();
                 m.mapId = r.read_string();
                 m.mapVersion = r.read_u32();
+                // BW-1: available teams
+                if (!r.at_end()) {
+                    std::uint8_t teamCount = r.read_u8();
+                    m.availableTeams.resize(teamCount);
+                    for (std::uint8_t i = 0; i < teamCount; ++i) {
+                        m.availableTeams[i] = r.read_u8();
+                    }
+                }
                 return m;
             }
             case MessageType::JoinMatch: {
@@ -428,6 +446,12 @@ std::optional<Message> deserialize(std::span<const std::uint8_t> data) {
                 m.itemType = static_cast<ItemType>(r.read_u16());
                 m.count = r.read_u16();
                 m.slot = r.read_u8();
+                return m;
+            }
+            // --- Team Selection (BW-1) ---
+            case MessageType::SelectTeam: {
+                SelectTeam m;
+                m.teamId = r.read_u8();
                 return m;
             }
             default:

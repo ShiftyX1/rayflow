@@ -295,6 +295,12 @@ void UIManager::render(const UIViewModel& vm) {
         if (hud_loaded_) {
             hud_.render(vm);
         }
+    } else if (vm.game_screen == GameScreen::TeamSelect) {
+        // Team selection overlay — rendered by game code, not UIManager.
+        // Just render HUD underneath if available.
+        if (hud_loaded_) {
+            hud_.render(vm);
+        }
     }
 
     batch.end();

@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <unordered_set>
 
 namespace bedwars::server {
 
@@ -194,11 +195,21 @@ void BedWarsServer::on_init(engine::IEngineServices& engine) {
             }
         }
         engine_->log_info("Spawn Y calculated: " + std::to_string(spawnY));
+        spawnY_ = spawnY;
     }
     
-    // Initialize teams - if map loaded, spawn all teams at map center (temporary until proper spawn points)
+    // BW-1: Scan map for team blocks to determine available teams and spawn points
     if (hasMapTemplate_) {
-        // Single spawn point at map center for all teams (for testing)
+        scan_team_blocks();
+    }
+    
+    // Initialize teams based on scan results or fallback to defaults
+    if (!availableTeams_.empty()) {
+        // Teams already initialized by scan_team_blocks()
+        matchConfig_.teamCount = availableTeams_.size();
+        engine_->log_info("Map has " + std::to_string(availableTeams_.size()) + " team blocks");
+    } else if (hasMapTemplate_) {
+        // Map loaded but no team blocks found — fallback to map center spawns
         teams_[0] = TeamState{proto::Teams::Red, "Red", mapCenterX_, spawnY, mapCenterZ_, 
                               static_cast<int>(mapCenterX_), static_cast<int>(spawnY - 2), static_cast<int>(mapCenterZ_), true, {}};
         teams_[1] = TeamState{proto::Teams::Blue, "Blue", mapCenterX_ + 5.0f, spawnY, mapCenterZ_, 
@@ -207,12 +218,15 @@ void BedWarsServer::on_init(engine::IEngineServices& engine) {
                               static_cast<int>(mapCenterX_), static_cast<int>(spawnY - 2), static_cast<int>(mapCenterZ_) + 5, true, {}};
         teams_[3] = TeamState{proto::Teams::Yellow, "Yellow", mapCenterX_ - 5.0f, spawnY, mapCenterZ_, 
                               static_cast<int>(mapCenterX_) - 5, static_cast<int>(spawnY - 2), static_cast<int>(mapCenterZ_), true, {}};
+        availableTeams_ = {proto::Teams::Red, proto::Teams::Blue, proto::Teams::Green, proto::Teams::Yellow};
+        engine_->log_warning("No team blocks found on map, using default layout");
     } else {
         // Default BedWars layout for procedural terrain
         teams_[0] = TeamState{proto::Teams::Red, "Red", 0.0f, 80.0f, 50.0f, 0, 78, 50, true, {}};
         teams_[1] = TeamState{proto::Teams::Blue, "Blue", 0.0f, 80.0f, -50.0f, 0, 78, -50, true, {}};
         teams_[2] = TeamState{proto::Teams::Green, "Green", 50.0f, 80.0f, 0.0f, 50, 78, 0, true, {}};
         teams_[3] = TeamState{proto::Teams::Yellow, "Yellow", -50.0f, 80.0f, 0.0f, -50, 78, 0, true, {}};
+        availableTeams_ = {proto::Teams::Red, proto::Teams::Blue, proto::Teams::Green, proto::Teams::Yellow};
     }
     
     // Initialize generators only for procedural terrain (skip for custom maps until spawn points are defined)
@@ -247,6 +261,96 @@ void BedWarsServer::on_init(engine::IEngineServices& engine) {
     } else {
         engine_->log_warning("Failed to initialize script engine");
         scriptEngine_.reset();
+    }
+}
+
+// ============================================================================
+// BW-1: Scan map template for team-colored blocks
+// ============================================================================
+
+proto::TeamId BedWarsServer::block_type_to_team(shared::voxel::BlockType bt) {
+    using BT = shared::voxel::BlockType;
+    switch (bt) {
+        case BT::TeamRed:    return proto::Teams::Red;
+        case BT::TeamBlue:   return proto::Teams::Blue;
+        case BT::TeamGreen:  return proto::Teams::Green;
+        case BT::TeamYellow: return proto::Teams::Yellow;
+        default:             return proto::Teams::None;
+    }
+}
+
+void BedWarsServer::scan_team_blocks() {
+    using BT = shared::voxel::BlockType;
+    namespace vox = shared::voxel;
+
+    const auto* tmpl = terrain_->map_template();
+    if (!tmpl) return;
+
+    // Track first found block position per team (used for spawn/bed)
+    struct TeamBlockInfo {
+        proto::TeamId teamId{proto::Teams::None};
+        int x{0}, y{0}, z{0};
+        bool found{false};
+    };
+    std::array<TeamBlockInfo, 4> found{};  // Red, Blue, Green, Yellow
+
+    for (const auto& [coord, chunk] : tmpl->chunks) {
+        const int baseX = coord.first  * vox::CHUNK_WIDTH;
+        const int baseZ = coord.second * vox::CHUNK_DEPTH;
+
+        for (int y = 0; y < vox::CHUNK_HEIGHT; ++y) {
+            for (int z = 0; z < vox::CHUNK_DEPTH; ++z) {
+                for (int x = 0; x < vox::CHUNK_WIDTH; ++x) {
+                    const auto idx = static_cast<std::size_t>(y) * (vox::CHUNK_WIDTH * vox::CHUNK_DEPTH)
+                                   + static_cast<std::size_t>(z) * vox::CHUNK_WIDTH
+                                   + static_cast<std::size_t>(x);
+                    const auto bt = chunk.blocks[idx];
+                    const auto teamId = block_type_to_team(bt);
+                    if (teamId == proto::Teams::None) continue;
+
+                    // Map team enum to index 0-3
+                    int ti = -1;
+                    switch (teamId) {
+                        case proto::Teams::Red:    ti = 0; break;
+                        case proto::Teams::Blue:   ti = 1; break;
+                        case proto::Teams::Green:  ti = 2; break;
+                        case proto::Teams::Yellow: ti = 3; break;
+                        default: break;
+                    }
+                    if (ti < 0) continue;
+
+                    auto& info = found[static_cast<std::size_t>(ti)];
+                    if (!info.found || (baseX + x == 0 && y > info.y)) {
+                        // Take the first found, or prefer higher Y (topmost block)
+                        info.teamId = teamId;
+                        info.x = baseX + x;
+                        info.y = y;
+                        info.z = baseZ + z;
+                        info.found = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // Build team states from discovered blocks
+    static const char* teamNames[] = {"Red", "Blue", "Green", "Yellow"};
+    availableTeams_.clear();
+    for (std::size_t i = 0; i < 4; ++i) {
+        const auto& info = found[i];
+        if (!info.found) continue;
+
+        // Spawn 2 blocks above the team block
+        float sx = static_cast<float>(info.x) + 0.5f;
+        float sy = static_cast<float>(info.y) + 2.0f;
+        float sz = static_cast<float>(info.z) + 0.5f;
+
+        teams_[i] = TeamState{info.teamId, teamNames[i], sx, sy, sz,
+                              info.x, info.y, info.z, true, {}};
+        availableTeams_.push_back(info.teamId);
+        engine_->log_info(std::string("Found team block: ") + teamNames[i]
+                          + " at (" + std::to_string(info.x) + ", "
+                          + std::to_string(info.y) + ", " + std::to_string(info.z) + ")");
     }
 }
 
@@ -429,6 +533,9 @@ void BedWarsServer::on_player_message(engine::PlayerId id, std::span<const std::
         else if constexpr (std::is_same_v<T, proto::TryExportMap>) {
             handle_try_export_map(id, m);
         }
+        else if constexpr (std::is_same_v<T, proto::SelectTeam>) {
+            handle_select_team(id, m);
+        }
     }, *msg);
 }
 
@@ -452,9 +559,11 @@ void BedWarsServer::handle_client_hello(engine::PlayerId id, const proto::Client
     hello.hasMapTemplate = hasMapTemplate_;
     hello.mapId = mapId_;
     hello.mapVersion = mapVersion_;
+    hello.availableTeams = availableTeams_;
     
     engine_->log_info("Sending ServerHello: hasMapTemplate=" + std::to_string(hasMapTemplate_) + 
-                      " mapId=" + mapId_ + " mapVersion=" + std::to_string(mapVersion_));
+                      " mapId=" + mapId_ + " mapVersion=" + std::to_string(mapVersion_) +
+                      " teams=" + std::to_string(availableTeams_.size()));
     
     send_message(id, hello);
 }
@@ -468,20 +577,15 @@ void BedWarsServer::handle_join_match(engine::PlayerId id, const proto::JoinMatc
     it->second.joined = true;
     it->second.alive = true;
     
-    // Assign team
-    proto::TeamId assignedTeam = assign_team(id);
-    it->second.team = assignedTeam;
-    
-    // Set spawn position based on team
-    std::size_t teamIdx = static_cast<std::size_t>(assignedTeam);
-    if (teamIdx > 0 && teamIdx <= teams_.size()) {
-        const auto& team = teams_[teamIdx - 1];
-        it->second.px = team.spawnX;
-        it->second.py = team.spawnY;
-        it->second.pz = team.spawnZ;
-        it->second.hasBed = team.bedAlive;
+    // BW-1: Don't auto-assign team — player must select via SelectTeam message.
+    // Place them in lobby spawn while waiting for team selection.
+    it->second.team = proto::Teams::None;
+    it->second.teamSelected = false;
+    if (hasMapTemplate_) {
+        it->second.px = mapCenterX_;
+        it->second.py = spawnY_;
+        it->second.pz = mapCenterZ_;
     } else {
-        // Default spawn for no team
         it->second.px = 0.0f;
         it->second.py = 80.0f;
         it->second.pz = 0.0f;
@@ -516,12 +620,6 @@ void BedWarsServer::handle_join_match(engine::PlayerId id, const proto::JoinMatc
         }
     }
     
-    // Broadcast team assignment
-    proto::TeamAssigned teamMsg;
-    teamMsg.playerId = id;
-    teamMsg.teamId = assignedTeam;
-    broadcast_message(teamMsg);
-    
     // Send health
     proto::HealthUpdate health;
     health.playerId = id;
@@ -529,7 +627,65 @@ void BedWarsServer::handle_join_match(engine::PlayerId id, const proto::JoinMatc
     health.maxHp = it->second.maxHp;
     send_message(id, health);
     
-    engine_->log_info("Player " + std::to_string(id) + " assigned to team " + std::to_string(static_cast<int>(assignedTeam)));
+    engine_->log_info("Player " + std::to_string(id) + " joined match, waiting for team selection");
+}
+
+// BW-1: Handle team selection from client
+void BedWarsServer::handle_select_team(engine::PlayerId id, const proto::SelectTeam& msg) {
+    auto it = players_.find(id);
+    if (it == players_.end() || !it->second.joined) return;
+
+    // Validate team is available
+    auto teamIt = std::find(availableTeams_.begin(), availableTeams_.end(), msg.teamId);
+    if (teamIt == availableTeams_.end()) {
+        engine_->log_warning("Player " + std::to_string(id) + " tried to select unavailable team " + std::to_string(static_cast<int>(msg.teamId)));
+        return;
+    }
+
+    // Check team capacity
+    std::size_t teamIdx = static_cast<std::size_t>(msg.teamId);
+    if (teamIdx == 0 || teamIdx > teams_.size()) return;
+    auto& team = teams_[teamIdx - 1];
+
+    // Remove from old team if switching
+    if (it->second.teamSelected && it->second.team != proto::Teams::None) {
+        std::size_t oldIdx = static_cast<std::size_t>(it->second.team);
+        if (oldIdx > 0 && oldIdx <= teams_.size()) {
+            auto& oldTeam = teams_[oldIdx - 1];
+            auto memberIt = std::find(oldTeam.members.begin(), oldTeam.members.end(), id);
+            if (memberIt != oldTeam.members.end()) {
+                oldTeam.members.erase(memberIt);
+            }
+        }
+    }
+
+    if (team.members.size() >= matchConfig_.maxPlayersPerTeam) {
+        engine_->log_warning("Player " + std::to_string(id) + " tried to join full team " + team.name);
+        return;
+    }
+
+    // Assign player to team
+    it->second.team = msg.teamId;
+    it->second.teamSelected = true;
+    it->second.hasBed = team.bedAlive;
+
+    // Add to team members list
+    if (std::find(team.members.begin(), team.members.end(), id) == team.members.end()) {
+        team.members.push_back(id);
+    }
+
+    // Move player to team spawn
+    it->second.px = team.spawnX;
+    it->second.py = team.spawnY;
+    it->second.pz = team.spawnZ;
+
+    // Broadcast team assignment to all players
+    proto::TeamAssigned teamMsg;
+    teamMsg.playerId = id;
+    teamMsg.teamId = msg.teamId;
+    broadcast_message(teamMsg);
+
+    engine_->log_info("Player " + std::to_string(id) + " selected team " + team.name);
 }
 
 void BedWarsServer::handle_input_frame(engine::PlayerId id, const proto::InputFrame& msg) {
@@ -690,12 +846,23 @@ void BedWarsServer::handle_try_break_block(engine::PlayerId id, const proto::Try
 
     const auto cur = terrain_->get_block(msg.x, msg.y, msg.z);
     
-    // Check if this is a bed position
+    // BW-1: Check if this is a team block (acts as the team's bed)
+    proto::TeamId blockTeamId = block_type_to_team(cur);
+    bool isTeamBlock = (blockTeamId != proto::Teams::None);
+    
+    // Check if this is a bed position (includes team blocks)
     TeamState* bedTeam = get_team_at_bed(msg.x, msg.y, msg.z);
+    if (!bedTeam && isTeamBlock) {
+        // Direct team block hit — find team by block type
+        std::size_t ti = static_cast<std::size_t>(blockTeamId);
+        if (ti > 0 && ti <= teams_.size()) {
+            bedTeam = &teams_[ti - 1];
+        }
+    }
     if (bedTeam && bedTeam->bedAlive) {
         auto playerIt = players_.find(id);
         if (playerIt != players_.end() && playerIt->second.team == bedTeam->id) {
-            // Can't break own bed
+            // Can't break own bed / team block
             proto::ActionRejected reject;
             reject.seq = msg.seq;
             reject.reason = proto::RejectReason::ProtectedBlock;
@@ -704,11 +871,11 @@ void BedWarsServer::handle_try_break_block(engine::PlayerId id, const proto::Try
         }
         // Process bed break (enemy bed)
         process_bed_break(msg.x, msg.y, msg.z, id);
-        // Don't return - still break the block normally after processing bed destruction
+        // Fall through to break the block
     }
     
-    // Check protected blocks (beds, template blocks, etc.)
-    if (!terrain_->can_player_break(msg.x, msg.y, msg.z, cur)) {
+    // Check protected blocks — but team blocks are always breakable (handled above)
+    if (!isTeamBlock && !terrain_->can_player_break(msg.x, msg.y, msg.z, cur)) {
         proto::ActionRejected reject;
         reject.seq = msg.seq;
         reject.reason = proto::RejectReason::ProtectedBlock;
@@ -1090,16 +1257,32 @@ void BedWarsServer::update_match_phase(float dt) {
     
     switch (matchPhase_) {
         case MatchPhase::Waiting: {
-            // Count joined players
+            // Count joined players and players who have selected teams
             std::size_t joinedCount = 0;
+            std::size_t teamSelectedCount = 0;
             for (const auto& [id, player] : players_) {
-                if (player.joined) ++joinedCount;
+                if (player.joined) {
+                    ++joinedCount;
+                    if (player.teamSelected) ++teamSelectedCount;
+                }
             }
             
-            if (joinedCount >= matchConfig_.minPlayersToStart && opts_.autoStartMatch) {
-                matchPhase_ = MatchPhase::Starting;
-                phaseTimer_ = 0.0f;
-                engine_->log_info("Match starting countdown...");
+            // Need enough players AND all joined players must have selected a team
+            if (joinedCount >= matchConfig_.minPlayersToStart &&
+                teamSelectedCount == joinedCount &&
+                opts_.autoStartMatch) {
+                // Also need at least 2 different teams represented
+                std::unordered_set<std::uint8_t> teamsUsed;
+                for (const auto& [id, player] : players_) {
+                    if (player.joined && player.teamSelected) {
+                        teamsUsed.insert(static_cast<std::uint8_t>(player.team));
+                    }
+                }
+                if (teamsUsed.size() >= 2) {
+                    matchPhase_ = MatchPhase::Starting;
+                    phaseTimer_ = 0.0f;
+                    engine_->log_info("All players selected teams, match starting countdown...");
+                }
             }
             break;
         }

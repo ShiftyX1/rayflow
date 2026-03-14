@@ -20,6 +20,7 @@ enum class GameScreen {
     MainMenu,
     ConnectMenu,   // Multiplayer server address input
     Connecting,    // Connecting to server (loading state)
+    TeamSelect,    // BW-1: Team selection before match starts
     Playing,
     Paused,
     Settings,

@@ -81,6 +81,9 @@ enum class MessageType : std::uint8_t {
     ItemSpawned = 22,
     ItemPickedUp = 23,
     InventoryUpdate = 24,
+    
+    // Team selection (BW-1)
+    SelectTeam = 25,
 };
 
 // ============================================================================
@@ -116,6 +119,9 @@ struct ServerHello {
     bool hasMapTemplate{false};
     std::string mapId;
     std::uint32_t mapVersion{0};
+    
+    // BW-1: available teams on this map (determined by team blocks)
+    std::vector<TeamId> availableTeams;
 };
 
 struct JoinMatch {};
@@ -285,6 +291,11 @@ struct MatchEnded {
     TeamId winnerTeamId{Teams::None};
 };
 
+// BW-1: Client requests to join a specific team
+struct SelectTeam {
+    TeamId teamId{Teams::None};
+};
+
 // ============================================================================
 // Messages - Items
 // ============================================================================
@@ -346,7 +357,9 @@ using Message = std::variant<
     // Items
     ItemSpawned,
     ItemPickedUp,
-    InventoryUpdate
+    InventoryUpdate,
+    // BW-1
+    SelectTeam
 >;
 
 } // namespace bedwars::proto
