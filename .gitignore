@@ -45,6 +45,11 @@ rfpak_explorer/
 .idea/
 test_file
 .vs/
+*.vcxproj
+*.vcxproj.filters
+*.sln
+
+luajit_external-prefix/
 
 # Logs
 *.log
