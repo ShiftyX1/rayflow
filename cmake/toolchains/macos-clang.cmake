@@ -29,6 +29,5 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 # Uncomment for universal builds:
 # set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build architectures")
 
-# RPATH settings for macOS bundles
+# RPATH settings for macOS shared libraries
 set(CMAKE_MACOSX_RPATH ON)
-set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks")

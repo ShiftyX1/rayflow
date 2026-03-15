@@ -79,7 +79,7 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/engine/modules/
 # =============================================================================
 
 # Engine shared libraries
-install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app
+install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app glad
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}      # .lib import libraries (Windows)
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}      # .so/.dylib (Linux/macOS)
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}      # .dll (Windows)

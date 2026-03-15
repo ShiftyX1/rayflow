@@ -99,6 +99,10 @@ target_compile_definitions(glad
     PUBLIC  GLAD_API_CALL_EXPORT
     PRIVATE GLAD_API_CALL_EXPORT_BUILD
 )
+if(APPLE)
+    target_link_libraries(glad PRIVATE "-framework OpenGL")
+    target_compile_definitions(glad PRIVATE GL_SILENCE_DEPRECATION)
+endif()
 
 # -----------------------------------------------------------------------------
 # stb (image + truetype, header-only — implementation compiled in engine)

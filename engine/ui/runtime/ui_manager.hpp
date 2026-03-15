@@ -10,7 +10,7 @@ namespace ui {
 
 class RAYFLOW_UI_API UIManager {
 public:
-    UIManager() = default;
+    UIManager();
     ~UIManager();
 
     void init();

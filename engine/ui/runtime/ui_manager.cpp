@@ -13,6 +13,8 @@
 
 namespace ui {
 
+UIManager::UIManager() = default;
+
 UIManager::~UIManager() {
     main_menu_.unload();
     connect_menu_.unload();

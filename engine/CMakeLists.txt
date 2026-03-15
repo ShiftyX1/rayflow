@@ -173,6 +173,9 @@ target_include_directories(engine_client PUBLIC
 )
 
 target_compile_definitions(engine_client PRIVATE RAYFLOW_CLIENT_EXPORTS)
+if(APPLE)
+    target_compile_definitions(engine_client PRIVATE GL_SILENCE_DEPRECATION)
+endif()
 set_target_properties(engine_client PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
