@@ -19,7 +19,7 @@
 
 namespace ecs {
 
-class Physics2DSystem : public System {
+class RAYFLOW_CORE_API Physics2DSystem : public System {
 public:
     void update(entt::registry& registry, float dt) override {
         // Apply acceleration to velocity

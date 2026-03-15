@@ -6,6 +6,7 @@
 // Phase 2: Replaced raylib Shader/Model/Texture2D with GLShader/GLMesh/GLTexture.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_shader.hpp"
 #include "engine/renderer/gl_texture.hpp"
@@ -18,7 +19,7 @@
 
 namespace renderer {
 
-class Skybox {
+class RAYFLOW_CLIENT_API Skybox {
 public:
     static Skybox& instance();
 

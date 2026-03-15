@@ -8,6 +8,7 @@
 // drawText() / measureText() that use a textured quad batch internally.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 #include "gl_shader.hpp"
 
@@ -19,7 +20,7 @@
 
 namespace rf {
 
-class GLFont {
+class RAYFLOW_CLIENT_API GLFont {
 public:
     GLFont() = default;
     ~GLFont();

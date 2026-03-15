@@ -40,7 +40,7 @@ struct Camera2DState {
 
 namespace ecs {
 
-class Camera2DSystem : public System {
+class RAYFLOW_CLIENT_API Camera2DSystem : public System {
 public:
     Camera2DSystem() {
         camera_.target = {0, 0};

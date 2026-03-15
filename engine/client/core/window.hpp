@@ -7,13 +7,15 @@
 // Manages GLFW window lifecycle, OpenGL context, delta time and resize events.
 // =============================================================================
 
+#include "engine/core/export.hpp"
+
 #include <string>
 
 struct GLFWwindow;
 
 namespace rf {
 
-class Window {
+class RAYFLOW_CLIENT_API Window {
 public:
     /// Initialize GLFW, create window with OpenGL context, load glad.
     /// @return true on success.
@@ -47,6 +49,15 @@ public:
     /// Compute delta time; call once per frame at the top of the loop.
     /// Returns seconds elapsed since the previous call.
     float updateDeltaTime();
+
+    /// Set up default OpenGL state (depth test, blending, etc.).
+    void setupDefaultGLState();
+
+    /// Clear the framebuffer (color + depth). Call at the start of each frame.
+    void beginFrame();
+
+    /// Update the GL viewport to match the current framebuffer size.
+    void updateViewport();
 
     /// Get underlying GLFW handle (for input callbacks etc.)
     GLFWwindow* handle() const { return window_; }

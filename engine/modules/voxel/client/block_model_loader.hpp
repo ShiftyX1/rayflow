@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "../shared/block_shape.hpp"
 #include "block.hpp"
 #include <string>
@@ -10,7 +11,7 @@
 namespace voxel {
 
 
-class BlockModelLoader {
+class RAYFLOW_VOXEL_API BlockModelLoader {
 public:
     static BlockModelLoader& instance();
     

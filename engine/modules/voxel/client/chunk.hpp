@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "block.hpp"
 #include "../shared/block_state.hpp"
 #include "engine/core/math_types.hpp"
@@ -16,7 +17,7 @@ namespace voxel {
 
 class World;
 
-class Chunk {
+class RAYFLOW_VOXEL_API Chunk {
 public:
     Chunk(int chunk_x, int chunk_z);
     ~Chunk();

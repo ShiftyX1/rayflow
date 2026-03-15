@@ -2,6 +2,7 @@
 
 #include "transport.hpp"
 #include "enet_common.hpp"
+#include "engine/core/export.hpp"
 
 #include <memory>
 #include <mutex>
@@ -15,7 +16,7 @@ namespace engine::transport {
 // ENetClientTransport - Client-side ENet transport
 // ============================================================================
 
-class ENetClientTransport : public IClientTransport {
+class RAYFLOW_CORE_API ENetClientTransport : public IClientTransport {
 public:
     ENetClientTransport();
     ~ENetClientTransport() override;

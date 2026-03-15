@@ -17,8 +17,6 @@
 #include "engine/core/key_codes.hpp"
 #include "engine/core/logging.hpp"
 
-#include <glad/gl.h>
-
 #include <chrono>
 #include <cstdio>
 
@@ -224,10 +222,8 @@ void ClientEngine::init_window() {
     // Initialize input system with the GLFW window
     rf::Input::instance().init(win.handle());
 
-    // Set initial OpenGL state
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // Set initial OpenGL state (must be called from engine_client DLL where glad is loaded)
+    win.setupDefaultGLState();
 
     log(LogLevel::Info, "Window initialized (GLFW + OpenGL)");
 }
@@ -323,8 +319,7 @@ void ClientEngine::main_loop(IGameClient& game) {
         game.on_update(frameDt_);
 
         // --- Render frame ---
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        win.beginFrame();
 
         game.on_render();
 
@@ -334,7 +329,7 @@ void ClientEngine::main_loop(IGameClient& game) {
         if (win.isResized()) {
             config_.windowWidth = win.width();
             config_.windowHeight = win.height();
-            glViewport(0, 0, win.width(), win.height());
+            win.updateViewport();
         }
     }
 }

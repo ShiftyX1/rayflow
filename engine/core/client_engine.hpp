@@ -6,6 +6,7 @@
 // =============================================================================
 
 #include "game_interface.hpp"
+#include "export.hpp"
 #include "../transport/transport.hpp"
 
 #include <entt/entt.hpp>
@@ -37,7 +38,7 @@ namespace engine {
 // ClientEngine - Game client engine with optional voxel support
 // ============================================================================
 
-class ClientEngine : public IClientServices {
+class RAYFLOW_APP_API ClientEngine : public IClientServices {
 public:
     struct Config {
         int windowWidth = 1280;

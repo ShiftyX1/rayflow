@@ -5,6 +5,7 @@
 // New code should use rf::GLMesh directly.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/renderer/gl_mesh.hpp"
 
 namespace renderer {
@@ -14,7 +15,7 @@ struct MeshData {
     bool valid{false};
 };
 
-class MeshBuilder {
+class RAYFLOW_CLIENT_API MeshBuilder {
 public:
     static MeshData create_cube(float size = 1.0f);
     static MeshData create_plane(float width, float depth);

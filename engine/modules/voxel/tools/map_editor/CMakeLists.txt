@@ -16,9 +16,7 @@ if(RAYFLOW_BUILD_MAP_EDITOR)
     
     target_link_libraries(map_builder PRIVATE
         bedwars_server_lib
-        engine_client
-        engine_ui
-        engine_voxel
+        engine_app
     )
     
     rayflow_link_platform(map_builder)

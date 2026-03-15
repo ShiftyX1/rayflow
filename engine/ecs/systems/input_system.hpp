@@ -5,7 +5,7 @@
 
 namespace ecs {
 
-class InputSystem : public System {
+class RAYFLOW_CLIENT_API InputSystem : public System {
 public:
     void update(entt::registry& registry, float delta_time) override;
     

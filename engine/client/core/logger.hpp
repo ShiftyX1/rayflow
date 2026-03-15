@@ -1,10 +1,11 @@
 #pragma once
 
 #include "config.hpp"
+#include "engine/core/export.hpp"
 
 namespace core {
 
-class Logger {
+class RAYFLOW_CLIENT_API Logger {
 public:
     static Logger& instance();
 

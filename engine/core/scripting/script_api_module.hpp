@@ -6,6 +6,8 @@
 // via ScriptEngineBase::register_api_module().
 // =============================================================================
 
+#include "engine/core/export.hpp"
+
 #include <string>
 
 #define SOL_ALL_SAFETIES_ON 1
@@ -25,7 +27,7 @@ namespace engine::scripting {
 ///       }
 ///   };
 ///   ```
-class ScriptAPIModule {
+class RAYFLOW_CORE_API ScriptAPIModule {
 public:
     virtual ~ScriptAPIModule() = default;
 

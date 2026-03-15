@@ -17,6 +17,7 @@
 //   batch.end();   // flushes remaining geometry
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 #include "gl_shader.hpp"
 
@@ -29,7 +30,7 @@ namespace rf {
 class GLTexture;
 class GLFont;
 
-class Batch2D {
+class RAYFLOW_CLIENT_API Batch2D {
 public:
     /// Singleton accessor (only one batch renderer per process).
     static Batch2D& instance();

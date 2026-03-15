@@ -19,7 +19,7 @@ struct Camera3D {
     int projection{0};
 };
 
-class PlayerSystem : public System {
+class RAYFLOW_CLIENT_API PlayerSystem : public System {
 public:
     void update(entt::registry& registry, float delta_time) override;
     void set_world(voxel::World* world) { world_ = world; }

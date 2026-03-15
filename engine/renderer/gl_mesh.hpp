@@ -7,6 +7,7 @@
 // Supports flexible vertex attribute layout for voxel chunks and utility meshes.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 
 #include <glad/gl.h>
@@ -17,7 +18,7 @@
 
 namespace rf {
 
-class GLMesh {
+class RAYFLOW_CLIENT_API GLMesh {
 public:
     /// Vertex attribute indices (must match shader layout).
     /// These correspond to the voxel shader's `in` variables.

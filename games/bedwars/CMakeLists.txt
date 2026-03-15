@@ -111,7 +111,7 @@ add_executable(bedwars
     app/client_main.cpp
 )
 # Link with bedwars_server_lib for singleplayer embedded server support
-target_link_libraries(bedwars PRIVATE bedwars_client_lib bedwars_server_lib engine_client engine_ui)
+target_link_libraries(bedwars PRIVATE bedwars_client_lib bedwars_server_lib engine_app)
 
 set_target_properties(bedwars PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -243,6 +243,14 @@ endif()
 # Install Rules (for packaging)
 # =============================================================================
 install(TARGETS bedwars bedwars_server
+    RUNTIME DESTINATION bin
+)
+
+# Install engine shared libraries
+# LIBRARY → lib/ to match RPATH (@executable_path/../lib / $ORIGIN/../lib)
+# RUNTIME → bin/ for Windows DLLs (must be alongside .exe)
+install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app glad
+    LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 

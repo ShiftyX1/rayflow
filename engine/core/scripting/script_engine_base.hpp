@@ -9,6 +9,7 @@
 #include "sandbox.hpp"
 #include "script_types.hpp"
 #include "script_api_module.hpp"
+#include "engine/core/export.hpp"
 
 #include <functional>
 #include <memory>
@@ -30,7 +31,7 @@ struct ScriptTimer {
 // Base class for game-specific script engines.
 // Provides common infrastructure for Lua scripting with sandboxing.
 // Games inherit and implement register_game_api() to expose their specific API.
-class ScriptEngineBase {
+class RAYFLOW_CORE_API ScriptEngineBase {
 public:
     ScriptEngineBase();
     virtual ~ScriptEngineBase();

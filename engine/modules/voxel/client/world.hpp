@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "chunk.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_shader.hpp"
@@ -30,7 +31,7 @@ struct PointLight {
     float intensity;
 };
 
-class World {
+class RAYFLOW_VOXEL_API World {
 public:
     explicit World(unsigned int seed);
     ~World();

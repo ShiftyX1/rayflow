@@ -7,6 +7,7 @@
 
 #include "engine/modules/voxel/shared/block.hpp"
 #include "engine/core/scripting/script_types.hpp"
+#include "engine/core/export.hpp"
 
 #include <array>
 #include <cstdint>
@@ -135,21 +136,21 @@ struct ExportRequest {
 // - chunk records store local (lx,ly,lz) and blockType
 //
 // On failure returns false and fills outError (if provided).
-bool write_rfmap(const std::filesystem::path& path,
+RAYFLOW_CORE_API bool write_rfmap(const std::filesystem::path& path,
                 const ExportRequest& req,
                 const BlockGetter& getBlock,
                 std::string* outError);
 
 // Reads a `.rfmap` template from disk.
 // On failure returns false and fills outError (if provided).
-bool read_rfmap(const std::filesystem::path& path,
+RAYFLOW_CORE_API bool read_rfmap(const std::filesystem::path& path,
                MapTemplate* outMap,
                std::string* outError);
 
 // Reads a `.rfmap` template from memory buffer.
 // Useful for loading maps from VFS/PAK archives.
 // On failure returns false and fills outError (if provided).
-bool read_rfmap_from_memory(const void* data,
+RAYFLOW_CORE_API bool read_rfmap_from_memory(const void* data,
                             std::size_t size,
                             MapTemplate* outMap,
                             std::string* outError);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/export.hpp"
 #include "world.hpp"
 #include "engine/ecs/components.hpp"
 #include "engine/core/player_constants.hpp"
@@ -25,7 +26,7 @@ struct BlockRaycastResult {
     BlockType block_type{BlockType::Air};
 };
 
-class BlockInteraction {
+class RAYFLOW_VOXEL_API BlockInteraction {
 public:
     static constexpr float MAX_REACH_DISTANCE = engine::kBlockReachDistance;
     static constexpr int DESTROY_STAGE_COUNT = 10;

@@ -7,6 +7,7 @@
 // Loads images via stb_image, uploads to OpenGL.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 
 #include <glad/gl.h>
@@ -17,7 +18,7 @@
 
 namespace rf {
 
-class GLTexture {
+class RAYFLOW_CLIENT_API GLTexture {
 public:
     GLTexture() = default;
     ~GLTexture();

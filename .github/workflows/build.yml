@@ -78,24 +78,8 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Package artifacts (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p package
-          cp build/bedwars package/ || true
-          cp build/bedwars_server package/ || true
-          cp build/map_builder package/ || true
-          cp -r games/bedwars/resources/* package/ || true
-
-      - name: Package artifacts (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path package
-          Copy-Item -Path "build/bedwars.exe" -Destination "package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/bedwars_server.exe" -Destination "package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "build/map_builder.exe" -Destination "package/" -ErrorAction SilentlyContinue
-          Copy-Item -Path "games/bedwars/resources/*" -Destination "package/" -Recurse -ErrorAction SilentlyContinue
+      - name: Package artifacts
+        run: cmake --install build --prefix package
 
       - name: Upload artifacts (Linux)
         if: runner.os == 'Linux'

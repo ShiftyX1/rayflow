@@ -7,6 +7,7 @@
 // Compiles vertex + fragment GLSL sources, links, manages uniform locations.
 // =============================================================================
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 
 #include <glad/gl.h>
@@ -16,7 +17,7 @@
 
 namespace rf {
 
-class GLShader {
+class RAYFLOW_CLIENT_API GLShader {
 public:
     GLShader() = default;
     ~GLShader();

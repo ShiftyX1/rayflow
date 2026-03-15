@@ -17,12 +17,16 @@ message(STATUS "[Engine] Use PAK: ${ENGINE_USE_PAK}")
 # =============================================================================
 # Engine Core (headless - no raylib dependency)
 # =============================================================================
-add_library(engine_core STATIC
+add_library(engine_core SHARED
     # Core
+    core/export.hpp
     core/types.hpp
     core/game_interface.hpp
+    core/game_interface.cpp
     core/byte_buffer.hpp
     core/server_engine.hpp
+    core/server_engine.cpp
+    core/logging.cpp
     
     # Scripting (Lua via sol2)
     core/scripting/scripting.hpp
@@ -91,6 +95,9 @@ add_library(engine_core STATIC
     ecs/systems/collision2d_system.cpp
     ecs/systems/ai_system.hpp
     ecs/systems/ai_system.cpp
+
+    # Explicit EnTT type_index instantiations for cross-DLL ECS
+    ecs/ecs_type_registry.cpp
 )
 
 target_include_directories(engine_core PUBLIC 
@@ -101,6 +108,14 @@ target_include_directories(engine_core PUBLIC
 )
 
 target_compile_features(engine_core PUBLIC cxx_std_20)
+target_compile_definitions(engine_core PRIVATE RAYFLOW_CORE_EXPORTS ENTT_API_EXPORT)
+target_compile_definitions(engine_core INTERFACE ENTT_API_IMPORT)
+set_target_properties(engine_core PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
 target_link_libraries(engine_core PUBLIC enet EnTT::EnTT)
 
 # Link LuaJIT and sol2 for scripting
@@ -114,11 +129,7 @@ endif()
 # Engine Client (GLFW + OpenGL — graphical games)
 # Base client without game-specific modules
 # =============================================================================
-add_library(engine_client STATIC
-    # Core engine
-    core/client_engine.hpp
-    core/client_engine.cpp
-    
+add_library(engine_client SHARED
     # Client core
     client/core/window.cpp
     client/core/input.cpp
@@ -129,9 +140,7 @@ add_library(engine_client STATIC
     # ECS (universal - moved from client/ecs/)
     ecs/components.cpp
     ecs/systems/input_system.cpp
-    ecs/systems/physics_system.cpp
     ecs/systems/player_system.cpp
-    ecs/systems/render_system.cpp
     
     # Universal 2D rendering components and systems
     ecs/components/rendering.hpp
@@ -163,7 +172,27 @@ target_include_directories(engine_client PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT)
+target_compile_definitions(engine_client PRIVATE RAYFLOW_CLIENT_EXPORTS)
+if(APPLE)
+    target_compile_definitions(engine_client PRIVATE GL_SILENCE_DEPRECATION)
+endif()
+set_target_properties(engine_client PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
+target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT imgui)
+
+# Debug UI (Dear ImGui) - compiled in engine_client alongside GLFW/glad
+target_sources(engine_client PRIVATE
+    ui/debug/debug_ui.cpp
+)
+
+# Enable DEBUG_UI in Debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(engine_client PUBLIC DEBUG_UI=1)
+endif()
 
 # Set PAK mode compile definition
 if(ENGINE_USE_PAK)
@@ -175,7 +204,7 @@ endif()
 # =============================================================================
 # Engine UI framework
 # =============================================================================
-add_library(engine_ui STATIC
+add_library(engine_ui SHARED
     ui/runtime/ui_manager.cpp
     ui/runtime/xmlui/css_lite.cpp
     ui/runtime/xmlui/ui_document.cpp
@@ -189,17 +218,14 @@ target_include_directories(engine_ui PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(engine_ui PUBLIC engine_client tinyxml2 imgui)
-
-# Debug UI (Dear ImGui) - available in all builds
-target_sources(engine_ui PRIVATE
-    ui/debug/debug_ui.cpp
+target_compile_definitions(engine_ui PRIVATE RAYFLOW_UI_EXPORTS)
+set_target_properties(engine_ui PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
 )
-
-# Enable DEBUG_UI in Debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(engine_ui PUBLIC DEBUG_UI=1)
-endif()
+target_link_libraries(engine_ui PUBLIC engine_client tinyxml2)
 
 # =============================================================================
 # MODULES - Optional game-specific functionality
@@ -209,7 +235,7 @@ endif()
 # Voxel Module - For voxel-based games (Minecraft-style)
 # Client-side rendering only
 # -----------------------------------------------------------------------------
-add_library(engine_voxel STATIC
+add_library(engine_voxel SHARED
     # Client-side voxel rendering
     modules/voxel/client/world.cpp
     modules/voxel/client/chunk.cpp
@@ -217,6 +243,10 @@ add_library(engine_voxel STATIC
     modules/voxel/client/block_interaction.cpp
     modules/voxel/client/block_model_loader.cpp
     modules/voxel/client/texture_atlas.cpp
+    
+    # Voxel-dependent ECS systems (use voxel::World directly)
+    ecs/systems/physics_system.cpp
+    ecs/systems/render_system.cpp
 )
 
 target_include_directories(engine_voxel PUBLIC
@@ -226,7 +256,41 @@ target_include_directories(engine_voxel PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
+target_compile_definitions(engine_voxel PRIVATE RAYFLOW_VOXEL_EXPORTS)
+set_target_properties(engine_voxel PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
 target_link_libraries(engine_voxel PUBLIC engine_client)
+
+# =============================================================================
+# Engine App (glue layer — ClientEngine + all modules)
+# ClientEngine depends on core, client, ui, and voxel, so it lives in a
+# separate library that sits on top of all modules, breaking the circular
+# dependency that would otherwise exist between engine_client and engine_voxel/ui.
+# =============================================================================
+add_library(engine_app SHARED
+    core/client_engine.hpp
+    core/client_engine.cpp
+)
+
+target_include_directories(engine_app PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/engine>
+    $<INSTALL_INTERFACE:include>
+)
+
+target_compile_definitions(engine_app PRIVATE RAYFLOW_APP_EXPORTS)
+set_target_properties(engine_app PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
+target_link_libraries(engine_app PUBLIC engine_core engine_client engine_ui engine_voxel)
 
 # =============================================================================
 # Alias for backwards compatibility

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gl_texture.hpp"
 #include "engine/renderer/gl_font.hpp"
@@ -28,7 +29,7 @@ namespace ui::xmlui {
 
 using OnClickCallback = std::function<void(const std::string& id)>;
 
-class UIDocument {
+class RAYFLOW_UI_API UIDocument {
 public:
     UIDocument();
     ~UIDocument();
