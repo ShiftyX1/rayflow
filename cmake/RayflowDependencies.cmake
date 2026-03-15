@@ -6,6 +6,9 @@
 include(FetchContent)
 include(ExternalProject)
 
+# Static libraries linked into shared objects need PIC on Linux
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # FetchContent settings for better UX
 set(FETCHCONTENT_QUIET OFF)
 
