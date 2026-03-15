@@ -74,7 +74,7 @@ bool GLFont::loadFromFile(const std::string& path, float fontSize) {
     std::vector<std::uint8_t> fileData;
 
 #if RAYFLOW_USE_PAK
-    auto vfsData = engine::vfs::read_binary_file(path);
+    auto vfsData = engine::vfs::read_file(path);
     if (vfsData) {
         fileData = std::move(*vfsData);
     }
