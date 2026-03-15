@@ -241,45 +241,20 @@ jobs:
             -DRAYFLOW_BUILD_TESTS=OFF
 
       - name: Build BedWars
-        run: |
-          cmake --build build --target bedwars --parallel
-          cmake --build build --target bedwars_server --parallel
-          cmake --build build --target map_builder --parallel
-          cmake --build build --target bedwars_pack_assets --parallel || true
+        run: cmake --build build --parallel
 
-      - name: List build outputs
-        shell: bash
-        run: |
-          echo "=== Build directory contents ==="
-          find build -maxdepth 2 -type f -name "*.exe" -o -name "bedwars" -o -name "bedwars_server" -o -name "map_builder" -o -name "*.pak" 2>/dev/null || true
-          ls -la build/ || true
-
-      - name: Package assets
-        shell: bash
-        run: |
-          cd build
-          ./bedwars_pack_assets${{ matrix.ext }} -i ../games/bedwars/resources -o assets.pak
+      - name: Install BedWars
+        run: cmake --install build --prefix release-package
 
       - name: Package BedWars (Unix)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p release-package
-          cp build/bedwars release-package/
-          cp build/bedwars_server release-package/
-          cp build/map_builder release-package/
-          cp build/assets.pak release-package/
-          cd release-package && tar -czvf ../${{ matrix.artifact }}.tar.gz *
+          cd release-package && tar -czvf ../${{ matrix.artifact }}.tar.gz .
 
       - name: Package BedWars (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release-package
-          Copy-Item -Path "build/bedwars.exe" -Destination "release-package/"
-          Copy-Item -Path "build/bedwars_server.exe" -Destination "release-package/"
-          Copy-Item -Path "build/map_builder.exe" -Destination "release-package/"
-          Copy-Item -Path "build/assets.pak" -Destination "release-package/"
-          Compress-Archive -Path "release-package/*" -DestinationPath "${{ matrix.artifact }}.zip"
+        run: Compress-Archive -Path "release-package/*" -DestinationPath "${{ matrix.artifact }}.zip"
 
       - name: Upload BedWars artifact
         uses: actions/upload-artifact@v4

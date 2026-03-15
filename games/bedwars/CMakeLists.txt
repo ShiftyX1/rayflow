@@ -246,9 +246,11 @@ install(TARGETS bedwars bedwars_server
     RUNTIME DESTINATION bin
 )
 
-# Install engine DLLs alongside game executables
+# Install engine shared libraries
+# LIBRARY → lib/ to match RPATH (@executable_path/../lib / $ORIGIN/../lib)
+# RUNTIME → bin/ for Windows DLLs (must be alongside .exe)
 install(TARGETS engine_core engine_client engine_ui engine_voxel engine_app glad
-    LIBRARY DESTINATION bin
+    LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 
