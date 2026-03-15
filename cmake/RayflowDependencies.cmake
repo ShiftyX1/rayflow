@@ -267,7 +267,7 @@ else()
         SOURCE_DIR ${LUAJIT_SOURCE_DIR}
         BINARY_DIR ${LUAJIT_SOURCE_DIR}
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND make -C src BUILDMODE=static XCFLAGS=-DLUAJIT_ENABLE_LUA52COMPAT
+        BUILD_COMMAND make -C src BUILDMODE=static "XCFLAGS=-fPIC -DLUAJIT_ENABLE_LUA52COMPAT"
         INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/libluajit.a ${LUAJIT_INSTALL_DIR}/lib/libluajit-5.1.a
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/lua.h ${LUAJIT_INSTALL_DIR}/include/
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LUAJIT_SOURCE_DIR}/src/luajit.h ${LUAJIT_INSTALL_DIR}/include/
