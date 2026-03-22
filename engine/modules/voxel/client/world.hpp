@@ -7,12 +7,17 @@
 #include "engine/renderer/camera.hpp"
 #include "engine/renderer/render_pipeline.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <functional>
 #include <vector>
+#include <deque>
 #include <cstdint>
+#include <future>
+#include <mutex>
 
 #include "engine/maps/rfmap_io.hpp"
+#include "engine/core/thread_pool.hpp"
 
 #include <optional>
 
@@ -114,7 +119,10 @@ public:
 
 private:
     void generate_chunk_terrain(Chunk& chunk);
-    void load_chunks_around_player(const rf::Vec3& player_position);
+    void enqueue_chunks_around_player(const rf::Vec3& player_position);
+    void process_pending_chunks();
+    void process_dirty_chunks();
+    void collect_finished_meshes();
     void unload_distant_chunks(const rf::Vec3& player_position);
     void extract_lights_from_map();
     
@@ -161,7 +169,27 @@ private:
     int amb_col_loc_{-1};
     int view_pos_loc_{-1};
     
-    std::vector<Chunk*> dirty_chunks_;
+    std::deque<Chunk*> dirty_chunks_;
+    
+    // --- Incremental chunk loading (Phase 1) ---
+    /// Pending chunk coordinates sorted by distance from player (closest first).
+    std::deque<std::pair<int,int>> pending_chunks_;
+    /// Set for O(1) dedup of pending coords.
+    std::unordered_set<std::pair<int,int>, ChunkCoordHash> pending_set_;
+    /// Last player chunk used for enqueue (avoids re-sorting every frame).
+    std::pair<int,int> last_player_chunk_{0, 0};
+    bool needs_pending_rebuild_{true};
+    
+    // --- Background mesh generation (Phase 2) ---
+    rf::ThreadPool thread_pool_;
+    /// Number of mesh tasks currently in flight (lighter than scanning mesh_futures_).
+    int mesh_tasks_in_flight_{0};
+    struct PendingMesh {
+        Chunk* chunk;
+        std::future<ChunkMeshData> future;
+    };
+    std::vector<PendingMesh> mesh_futures_;
 };
+
 
 } // namespace voxel

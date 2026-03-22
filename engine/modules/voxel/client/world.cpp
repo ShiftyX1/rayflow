@@ -48,20 +48,36 @@ World::World(unsigned int seed) : seed_(seed) {
 }
 
 World::~World() {
+    // Wait for in-flight mesh tasks before destroying chunks.
+    mesh_futures_.clear();
+    pending_chunks_.clear();
+    pending_set_.clear();
+    dirty_chunks_.clear();
+    chunks_.clear();
     unload_voxel_shader();
-    TraceLog(LOG_INFO, "World destroyed. Total chunks generated: %zu", chunks_.size());
+    TraceLog(LOG_INFO, "World destroyed.");
 }
 
 void World::set_map_template(shared::maps::MapTemplate map) {
     map_template_ = std::move(map);
     chunks_.clear();
+    dirty_chunks_.clear();
+    pending_chunks_.clear();
+    pending_set_.clear();
+    mesh_futures_.clear();
+    needs_pending_rebuild_ = true;
     extract_lights_from_map();
 }
 
 void World::clear_map_template() {
     map_template_.reset();
     chunks_.clear();
+    dirty_chunks_.clear();
+    pending_chunks_.clear();
+    pending_set_.clear();
+    mesh_futures_.clear();
     static_lights_.clear();
+    needs_pending_rebuild_ = true;
 }
 
 float World::temperature() const {
@@ -313,7 +329,7 @@ Chunk* World::get_or_create_chunk(int chunk_x, int chunk_z) {
     
     chunk->set_dirty_callback([this](Chunk* c) {
         if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
-            dirty_chunks_.insert(dirty_chunks_.begin(), c);
+            dirty_chunks_.push_front(c);
         }
     });
     
@@ -347,7 +363,7 @@ void World::apply_chunk_data(int chunkX, int chunkZ, const std::vector<std::uint
         
         newChunk->set_dirty_callback([this](Chunk* c) {
             if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
-                dirty_chunks_.insert(dirty_chunks_.begin(), c);
+                dirty_chunks_.push_front(c);
             }
         });
         
@@ -553,56 +569,186 @@ void World::generate_chunk_terrain(Chunk& chunk) {
 }
 
 void World::update(const rf::Vec3& player_position) {
-    load_chunks_around_player(player_position);
-    unload_distant_chunks(player_position);
+    // Phase 1: Enqueue new chunks (sorted by distance, no blocking work).
+    enqueue_chunks_around_player(player_position);
     
+    // Phase 2: Collect finished background mesh builds and upload to GPU.
+    collect_finished_meshes();
+    
+    // Phase 3: Structural modifications to chunks_ map (add/remove) are only
+    // safe when no worker threads are reading via world.get_block().
+    if (mesh_tasks_in_flight_ == 0) {
+        unload_distant_chunks(player_position);
+        process_pending_chunks();
+    }
+    
+    // Phase 4: Submit dirty chunks for background mesh building.
+    process_dirty_chunks();
+    
+    last_player_position_ = player_position;
+}
+
+void World::enqueue_chunks_around_player(const rf::Vec3& player_position) {
+    int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
+    int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
+    
+    auto current_player_chunk = std::make_pair(player_chunk_x, player_chunk_z);
+    
+    // Only rebuild the pending list when the player moves to a new chunk
+    // or when explicitly requested (e.g., after set_map_template).
+    if (current_player_chunk == last_player_chunk_ && !needs_pending_rebuild_) {
+        return;
+    }
+    last_player_chunk_ = current_player_chunk;
+    needs_pending_rebuild_ = false;
+    
+    // Collect all chunk coords that need loading.
+    std::vector<std::pair<std::pair<int,int>, int>> candidates; // {coord, dist_sq}
+    
+    for (int dx = -render_distance_; dx <= render_distance_; dx++) {
+        for (int dz = -render_distance_; dz <= render_distance_; dz++) {
+            int dist_sq = dx * dx + dz * dz;
+            if (dist_sq > render_distance_ * render_distance_) continue;
+            
+            auto coord = std::make_pair(player_chunk_x + dx, player_chunk_z + dz);
+            
+            // Skip already loaded or already pending chunks.
+            if (chunks_.find(coord) != chunks_.end()) continue;
+            if (pending_set_.count(coord)) continue;
+            
+            candidates.push_back({coord, dist_sq});
+        }
+    }
+    
+    // Sort by distance (closest first = spiral-outward loading).
+    std::sort(candidates.begin(), candidates.end(),
+        [](const auto& a, const auto& b) { return a.second < b.second; });
+    
+    for (auto& [coord, dist_sq] : candidates) {
+        pending_chunks_.push_back(coord);
+        pending_set_.insert(coord);
+    }
+}
+
+void World::process_pending_chunks() {
+    if (pending_chunks_.empty()) return;
+    
+    // Budget: process up to N chunks per frame to prevent stalls.
+    // Terrain gen alone is ~0.5-1ms per chunk; keep budget low.
+    constexpr int kMaxChunksPerFrame = 2;
+    constexpr float kTerrainBudgetMs = 3.0f;
+    
+    const auto t0 = std::chrono::steady_clock::now();
+    int count = 0;
+    
+    while (!pending_chunks_.empty() && count < kMaxChunksPerFrame) {
+        auto coord = pending_chunks_.front();
+        pending_chunks_.pop_front();
+        pending_set_.erase(coord);
+        
+        // Skip if already loaded (may have been created via apply_chunk_data or set_block).
+        if (chunks_.find(coord) != chunks_.end()) continue;
+        
+        auto chunk = std::make_unique<Chunk>(coord.first, coord.second);
+        generate_chunk_terrain(*chunk);
+        chunk->set_generated(true);
+        
+        auto* ptr = chunk.get();
+        
+        chunk->set_dirty_callback([this](Chunk* c) {
+            if (std::find(dirty_chunks_.begin(), dirty_chunks_.end(), c) == dirty_chunks_.end()) {
+                dirty_chunks_.push_front(c);
+            }
+        });
+        
+        chunks_[coord] = std::move(chunk);
+        recompute_chunk_states(coord.first, coord.second);
+        
+        ++count;
+        
+        const auto t1 = std::chrono::steady_clock::now();
+        const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+        if (ms >= kTerrainBudgetMs) break;
+    }
+}
+
+void World::process_dirty_chunks() {
+    // Scan for dirty chunks if our list is empty.
     if (dirty_chunks_.empty()) {
         for (auto& [key, chunk] : chunks_) {
             (void)key;
-            if (chunk->needs_mesh_update()) {
+            if (chunk->needs_mesh_update() && !chunk->is_meshing()) {
                 dirty_chunks_.push_back(chunk.get());
             }
         }
     }
     
-    if (!dirty_chunks_.empty()) {
-        // IMPORTANT: generating many chunk meshes in a single frame can stall for seconds.
-        // Keep mesh rebuild work budgeted per-frame so lighting/chunk streaming stays responsive.
-        constexpr float kMeshBudgetMs = 4.0f;
-        const auto t0 = std::chrono::steady_clock::now();
-        
-        auto it = dirty_chunks_.begin();
-        while (it != dirty_chunks_.end()) {
-            Chunk* chunk = *it;
-            
-            if (chunk->needs_mesh_update()) {
-                chunk->generate_mesh(*this);
-                
-                const auto t1 = std::chrono::steady_clock::now();
-                const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
-                
-                it = dirty_chunks_.erase(it);
-                
-                if (ms >= kMeshBudgetMs) break;
-            } else {
-                it = dirty_chunks_.erase(it);
-            }
-        }
-    }
+    if (dirty_chunks_.empty()) return;
     
-    last_player_position_ = player_position;
+    // Submit dirty chunks to thread pool for background mesh building.
+    // Keep in-flight count reasonable to limit memory usage and latency.
+    constexpr int kMaxSubmitsPerFrame = 4;
+    constexpr int kMaxInFlight = 8;
+    int submitted = 0;
+
+    while (!dirty_chunks_.empty() && submitted < kMaxSubmitsPerFrame
+           && mesh_tasks_in_flight_ < kMaxInFlight) {
+        Chunk* chunk = dirty_chunks_.front();
+        dirty_chunks_.pop_front();
+        
+        if (!chunk->needs_mesh_update() || chunk->is_meshing()) {
+            continue;
+        }
+        
+        // Mark as in-flight so we don't re-submit.
+        chunk->set_meshing(true);
+        
+        // Submit both lighting + mesh build to thread pool.
+        // calculate_lighting writes only this chunk's light_map_ (no structural
+        // changes to the world) and reads neighbor blocks via get_block (read-only).
+        // build_mesh_data similarly only reads.
+        auto future = thread_pool_.submit([chunk, this]() -> ChunkMeshData {
+            chunk->calculate_lighting(*this);
+            return chunk->build_mesh_data(*this);
+        });
+        
+        mesh_futures_.push_back({chunk, std::move(future)});
+        ++mesh_tasks_in_flight_;
+        ++submitted;
+    }
 }
 
-void World::load_chunks_around_player(const rf::Vec3& player_position) {
-    int player_chunk_x = static_cast<int>(std::floor(player_position.x / CHUNK_WIDTH));
-    int player_chunk_z = static_cast<int>(std::floor(player_position.z / CHUNK_DEPTH));
+void World::collect_finished_meshes() {
+    // Upload completed mesh data to GPU (must happen on main/GL thread).
+    // Budget to avoid upload stalls.
+    constexpr float kUploadBudgetMs = 4.0f;
+    const auto t0 = std::chrono::steady_clock::now();
     
-    for (int dx = -render_distance_; dx <= render_distance_; dx++) {
-        for (int dz = -render_distance_; dz <= render_distance_; dz++) {
-            if (dx * dx + dz * dz <= render_distance_ * render_distance_) {
-                get_or_create_chunk(player_chunk_x + dx, player_chunk_z + dz);
-            }
+    auto it = mesh_futures_.begin();
+    while (it != mesh_futures_.end()) {
+        // Check if the future is ready (non-blocking).
+        if (it->future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            ++it;
+            continue;
         }
+        
+        ChunkMeshData data = it->future.get();
+        Chunk* chunk = it->chunk;
+        --mesh_tasks_in_flight_;
+        
+        // Verify the chunk still exists in our map (might have been unloaded).
+        auto key = std::make_pair(chunk->get_chunk_x(), chunk->get_chunk_z());
+        auto map_it = chunks_.find(key);
+        if (map_it != chunks_.end() && map_it->second.get() == chunk) {
+            chunk->upload_mesh(std::move(data));
+            chunk->set_meshing(false);
+        }
+        
+        it = mesh_futures_.erase(it);
+        
+        const auto t1 = std::chrono::steady_clock::now();
+        const float ms = std::chrono::duration<float, std::milli>(t1 - t0).count();
+        if (ms >= kUploadBudgetMs) break;
     }
 }
 
@@ -617,10 +763,27 @@ void World::unload_distant_chunks(const rf::Vec3& player_position) {
         int dz = it->first.second - player_chunk_z;
         
         if (dx * dx + dz * dz > UNLOAD_DIST_SQ) {
-            auto dirty_it = std::find(dirty_chunks_.begin(), dirty_chunks_.end(), it->second.get());
+            Chunk* ptr = it->second.get();
+            
+            // Remove from dirty queue.
+            auto dirty_it = std::find(dirty_chunks_.begin(), dirty_chunks_.end(), ptr);
             if (dirty_it != dirty_chunks_.end()) {
                 dirty_chunks_.erase(dirty_it);
             }
+            
+            // Remove pending mesh futures for this chunk.
+            // The future will just be discarded; the thread pool task will finish
+            // harmlessly and its result ignored.
+            auto old_size = mesh_futures_.size();
+            mesh_futures_.erase(
+                std::remove_if(mesh_futures_.begin(), mesh_futures_.end(),
+                    [ptr](const PendingMesh& pm) { return pm.chunk == ptr; }),
+                mesh_futures_.end());
+            mesh_tasks_in_flight_ -= static_cast<int>(old_size - mesh_futures_.size());
+            
+            // Remove from pending queue if present.
+            pending_set_.erase(it->first);
+            
             it = chunks_.erase(it);
         } else {
             ++it;

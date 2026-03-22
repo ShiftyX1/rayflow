@@ -12,10 +12,25 @@
 #include <unordered_map>
 #include <functional>
 #include <algorithm>
+#include <atomic>
+#include <mutex>
 
 namespace voxel {
 
 class World;
+
+/// CPU-side mesh vertex data built off the main thread.
+struct ChunkMeshData {
+    std::vector<float> vertices;
+    std::vector<float> texcoords;
+    std::vector<float> texcoords2;
+    std::vector<float> normals;
+    std::vector<unsigned char> colors;
+    std::vector<rf::Vec3> light_markers;
+    bool is_empty{true};
+    int chunk_x{0};
+    int chunk_z{0};
+};
 
 class RAYFLOW_VOXEL_API Chunk {
 public:
@@ -42,6 +57,13 @@ public:
 
     void generate_mesh(const World& world);
     
+    /// Build mesh vertex data on any thread (CPU only, no OpenGL calls).
+    /// Caller must call calculate_lighting() first.
+    ChunkMeshData build_mesh_data(const World& world);
+    
+    /// Upload pre-built mesh data to GPU (must be called on main/GL thread).
+    void upload_mesh(ChunkMeshData&& data);
+    
     /// Draw this chunk's mesh (shader must already be bound).
     void render() const;
     
@@ -60,6 +82,10 @@ public:
         if (on_marked_dirty_) on_marked_dirty_(this);
     }
     void set_generated(bool value) { is_generated_ = value; }
+    
+    /// Thread-safe flag: is a background mesh build in flight?
+    bool is_meshing() const { return meshing_.load(std::memory_order_relaxed); }
+    void set_meshing(bool v) { meshing_.store(v, std::memory_order_relaxed); }
     
     void set_dirty_callback(std::function<void(Chunk*)> callback) { on_marked_dirty_ = callback; }
     
@@ -82,6 +108,7 @@ private:
     bool is_generated_{false};
     bool has_mesh_{false};
     bool is_empty_{false};
+    std::atomic<bool> meshing_{false};
     
     // GPU mesh (Phase 2: real OpenGL VAO/VBO)
     rf::GLMesh mesh_;

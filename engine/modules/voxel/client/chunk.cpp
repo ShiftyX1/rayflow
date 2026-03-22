@@ -271,6 +271,16 @@ void Chunk::calculate_lighting(const World& world) {
 }
 
 void Chunk::generate_mesh(const World& world) {
+    calculate_lighting(world);
+    auto data = build_mesh_data(world);
+    upload_mesh(std::move(data));
+}
+
+ChunkMeshData Chunk::build_mesh_data(const World& world) {
+    ChunkMeshData result;
+    result.chunk_x = chunk_x_;
+    result.chunk_z = chunk_z_;
+
     bool has_solid_blocks = false;
     for (const auto& block : blocks_) {
         if (block != static_cast<Block>(BlockType::Air)) {
@@ -280,36 +290,25 @@ void Chunk::generate_mesh(const World& world) {
     }
     
     if (!has_solid_blocks) {
-        cleanup_mesh();
-        has_mesh_ = false;
-        needs_mesh_update_ = false;
-        is_empty_ = true;
-        light_markers_ws_.clear();
-        return;
+        result.is_empty = true;
+        return result;
     }
     
-    is_empty_ = false;
-    calculate_lighting(world);
-
-    const auto t_total0 = std::chrono::steady_clock::now();
+    result.is_empty = false;
 
     const float temperature = std::clamp(world.temperature(), 0.0f, 1.0f);
     const float humidity = std::clamp(world.humidity(), 0.0f, 1.0f);
     const rf::Color grass_tint = BlockRegistry::instance().sample_grass_color(temperature, humidity);
     const rf::Color foliage_tint = BlockRegistry::instance().sample_foliage_color(temperature, humidity);
-
-    cleanup_mesh();
-
-    light_markers_ws_.clear();
     
     constexpr size_t ESTIMATED_FACES = CHUNK_SIZE / 3;
     constexpr size_t ESTIMATED_VERTS = ESTIMATED_FACES * 6;
     
-    std::vector<float> vertices;
-    std::vector<float> texcoords;
-    std::vector<float> texcoords2;
-    std::vector<float> normals;
-    std::vector<unsigned char> colors;
+    auto& vertices = result.vertices;
+    auto& texcoords = result.texcoords;
+    auto& texcoords2 = result.texcoords2;
+    auto& normals = result.normals;
+    auto& colors = result.colors;
     
     vertices.reserve(ESTIMATED_VERTS * 3);
     texcoords.reserve(ESTIMATED_VERTS * 2);
@@ -691,7 +690,7 @@ void Chunk::generate_mesh(const World& world) {
                 auto block_type = static_cast<BlockType>(block);
 
                 if (block_type == BlockType::Light) {
-                    light_markers_ws_.push_back(rf::Vec3{
+                    result.light_markers.push_back(rf::Vec3{
                         world_position_.x + static_cast<float>(x) + 0.5f,
                         static_cast<float>(y) + 0.5f,
                         world_position_.z + static_cast<float>(z) + 0.5f,
@@ -865,37 +864,40 @@ void Chunk::generate_mesh(const World& world) {
     }
     
     if (vertices.empty()) {
-        has_mesh_ = false;
-        needs_mesh_update_ = false;
-
-        const auto t_total1 = std::chrono::steady_clock::now();
-        const float total_ms = std::chrono::duration<float, std::milli>(t_total1 - t_total0).count();
-        const auto& prof = core::Config::instance().profiling();
-        if (prof.enabled && prof.chunk_mesh) {
-            static double last_log_s = 0.0;
-            const double now_s = GetTime();
-            const bool interval_ok = prof.log_every_event || ((now_s - last_log_s) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
-            if (total_ms >= prof.warn_chunk_mesh_ms && interval_ok) {
-                TraceLog(LOG_INFO, "[prof] chunk mesh (empty): %.2f ms (chunk=%d,%d)", total_ms, chunk_x_, chunk_z_);
-                last_log_s = now_s;
-            }
-        }
-        return;
+        result.is_empty = true;
     }
     
-    TraceLog(LOG_DEBUG, "Chunk (%d, %d) mesh: %zu vertices", chunk_x_, chunk_z_, vertices.size() / 3);
+    return result;
+}
 
-    // Upload mesh data to GPU via GLMesh
-    int vtxCount = static_cast<int>(vertices.size() / 3);
+void Chunk::upload_mesh(ChunkMeshData&& data) {
+    const auto t_total0 = std::chrono::steady_clock::now();
+
+    light_markers_ws_ = std::move(data.light_markers);
+
+    if (data.is_empty || data.vertices.empty()) {
+        cleanup_mesh();
+        has_mesh_ = false;
+        needs_mesh_update_ = false;
+        is_empty_ = data.is_empty;
+        return;
+    }
+
+    is_empty_ = false;
+    cleanup_mesh();
+    
+    TraceLog(LOG_DEBUG, "Chunk (%d, %d) mesh: %zu vertices", chunk_x_, chunk_z_, data.vertices.size() / 3);
+
+    int vtxCount = static_cast<int>(data.vertices.size() / 3);
 
     const auto t_up0 = std::chrono::steady_clock::now();
     mesh_.upload(vtxCount,
-                 vertices.data(),
-                 texcoords.data(),
-                 texcoords2.data(),
-                 normals.data(),
-                 colors.data(),
-                 false /* static draw — chunks rebuild rarely */);
+                 data.vertices.data(),
+                 data.texcoords.data(),
+                 data.texcoords2.data(),
+                 data.normals.data(),
+                 data.colors.data(),
+                 false);
     const auto t_up1 = std::chrono::steady_clock::now();
 
     const float upload_ms = std::chrono::duration<float, std::milli>(t_up1 - t_up0).count();
@@ -924,7 +926,6 @@ void Chunk::generate_mesh(const World& world) {
             const double now_s = GetTime();
             const bool interval_ok = prof.log_every_event || ((now_s - last_log_s_total) * 1000.0 >= static_cast<double>(std::max(0, prof.log_interval_ms)));
             if (total_ms >= prof.warn_chunk_mesh_ms && interval_ok) {
-                // TODO Phase 2: restore vtx count from GLMesh
                 TraceLog(LOG_INFO, "[prof] chunk mesh: %.2f ms (chunk=%d,%d)", total_ms, chunk_x_, chunk_z_);
                 last_log_s_total = now_s;
             }

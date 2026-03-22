@@ -182,9 +182,39 @@ set_target_properties(engine_client PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
-target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT imgui)
+target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT)
 
-# Debug UI (Dear ImGui) - compiled in engine_client alongside GLFW/glad
+# Dear ImGui — compiled directly into engine_client so that all ImGui global
+# state (GImGui, backend data) lives in a single DLL.  Symbols are exported
+# via IMGUI_API so that game executables can call ImGui functions.
+target_sources(engine_client PRIVATE
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(engine_client PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+# When compiling engine_client, export ImGui symbols; consumers import them.
+if(WIN32)
+    target_compile_definitions(engine_client
+        PRIVATE "IMGUI_API=__declspec(dllexport)"
+    )
+    target_compile_definitions(engine_client
+        INTERFACE "IMGUI_API=__declspec(dllimport)"
+    )
+else()
+    target_compile_definitions(engine_client
+        PUBLIC "IMGUI_API=__attribute__((visibility(\"default\")))"
+    )
+endif()
+
+# Debug UI (Dear ImGui panels) - compiled in engine_client alongside GLFW/glad
 target_sources(engine_client PRIVATE
     ui/debug/debug_ui.cpp
 )
