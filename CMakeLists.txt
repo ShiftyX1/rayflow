@@ -79,6 +79,7 @@ message(STATUS "  Options:")
 message(STATUS "    USE_PAK:        ${RAYFLOW_USE_PAK}")
 message(STATUS "    BUILD_TESTS:    ${RAYFLOW_BUILD_TESTS}")
 message(STATUS "    MAP_EDITOR:     ${RAYFLOW_BUILD_MAP_EDITOR}")
+message(STATUS "    DX11 backend:   ${RAYFLOW_RENDERER_DX11}")
 message(STATUS "========================================")
 message(STATUS "")
 

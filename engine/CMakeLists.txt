@@ -14,6 +14,14 @@ endif()
 
 message(STATUS "[Engine] Use PAK: ${ENGINE_USE_PAK}")
 
+# DX11 renderer — Windows only, auto-detected
+if(WIN32)
+    option(RAYFLOW_RENDERER_DX11 "Build DirectX 11 render backend" ON)
+else()
+    set(RAYFLOW_RENDERER_DX11 OFF)
+endif()
+message(STATUS "[Engine] DirectX 11: ${RAYFLOW_RENDERER_DX11}")
+
 # =============================================================================
 # Engine Core (headless - no raylib dependency)
 # =============================================================================
@@ -186,6 +194,19 @@ set_target_properties(engine_client PROPERTIES
 )
 target_link_libraries(engine_client PUBLIC engine_core glfw glad glm::glm stb_headers EnTT::EnTT)
 
+# DX11 render backend (Windows only)
+if(RAYFLOW_RENDERER_DX11)
+    target_sources(engine_client PRIVATE
+        renderer/dx11/dx11_render_device.cpp
+        renderer/dx11/dx11_shader.cpp
+        renderer/dx11/dx11_texture.cpp
+        renderer/dx11/dx11_mesh.cpp
+        renderer/dx11/dx11_framebuffer.cpp
+    )
+    target_compile_definitions(engine_client PUBLIC RAYFLOW_HAS_DX11=1)
+    target_link_libraries(engine_client PUBLIC d3d11 dxgi d3dcompiler)
+endif()
+
 # Dear ImGui — compiled directly into engine_client so that all ImGui global
 # state (GImGui, backend data) lives in a single DLL.  Symbols are exported
 # via IMGUI_API so that game executables can call ImGui functions.
@@ -198,6 +219,11 @@ target_sources(engine_client PRIVATE
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
+if(RAYFLOW_RENDERER_DX11)
+    target_sources(engine_client PRIVATE
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
+    )
+endif()
 target_include_directories(engine_client PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
