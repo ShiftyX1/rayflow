@@ -2,7 +2,8 @@
 
 #include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
+#include <memory>
 
 namespace voxel {
 
@@ -11,7 +12,8 @@ public:
     bool load(const char* path);
     void unload();
     
-    const rf::GLTexture& get_texture() const { return texture_; }
+    const rf::ITexture& get_texture() const { return *texture_; }
+    bool has_texture() const { return texture_ && texture_->isValid(); }
     int get_tile_size() const { return tile_size_; }
     int get_tiles_per_row() const { return tiles_per_row_; }
     
@@ -20,7 +22,7 @@ public:
     void get_tile_uvs(int tile_index, float* u0, float* v0, float* u1, float* v1) const;
     
 private:
-    rf::GLTexture texture_;
+    std::unique_ptr<rf::ITexture> texture_;
     int tile_size_{16};
     int tiles_per_row_{16};
     bool loaded_{false};

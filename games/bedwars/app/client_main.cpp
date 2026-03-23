@@ -47,6 +47,7 @@ int main(int argc, char* argv[]) {
     std::string playerName = "Player";
     int windowWidth = 1280;
     int windowHeight = 720;
+    bool useDX11 = false;
     
     // Parse arguments
     for (int i = 1; i < argc; ++i) {
@@ -62,6 +63,9 @@ int main(int argc, char* argv[]) {
         }
         else if (std::strcmp(argv[i], "--height") == 0 && i + 1 < argc) {
             windowHeight = std::atoi(argv[++i]);
+        }
+        else if (std::strcmp(argv[i], "--dx11") == 0) {
+            useDX11 = true;
         }
     }
     
@@ -83,6 +87,7 @@ int main(int argc, char* argv[]) {
     config.targetFps = 60;
     config.vsync = true;
     config.logging = true;
+    if (useDX11) config.backend = rf::Backend::DirectX11;
     
     engine::ClientEngine engine(config);
     

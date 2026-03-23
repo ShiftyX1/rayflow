@@ -92,6 +92,12 @@ public:
     /// Handle window resize (recreate swap chain, etc.).
     virtual void onResize(int width, int height) = 0;
 
+    /// Return the native graphics device pointer (ID3D11Device*, etc.) or nullptr.
+    virtual void* nativeDevice() const { return nullptr; }
+
+    /// Return the native device context pointer (ID3D11DeviceContext*, etc.) or nullptr.
+    virtual void* nativeContext() const { return nullptr; }
+
 protected:
     RenderDevice() = default;
 };

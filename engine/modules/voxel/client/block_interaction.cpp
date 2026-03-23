@@ -5,21 +5,22 @@
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gpu/gpu_types.hpp"
-#include <glad/gl.h>
+#include "engine/renderer/gpu/render_device.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
 #include <cstdio>
 
 namespace voxel {
 
-bool BlockInteraction::init() {
+bool BlockInteraction::init(rf::RenderDevice* device) {
     if (textures_loaded_) return true;
+    device_ = device;
 
     for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
         char path[128];
         snprintf(path, sizeof(path), "textures/destroy_stages/destroy_stage_%d.png", i);
         destroy_textures_[i] = resources::load_texture(path);
-        if (!destroy_textures_[i].isValid()) {
+        if (!destroy_textures_[i] || !destroy_textures_[i]->isValid()) {
             TraceLog(LOG_ERROR, "Failed to load destroy texture: %s", path);
             return false;
         }
@@ -30,15 +31,17 @@ bool BlockInteraction::init() {
 
     // Load rendering resources for highlight + destroy overlay
     if (!render_resources_loaded_) {
-        if (!solidShader_.loadFromFiles("shaders/solid.vs", "shaders/solid.fs")) {
+        solidShader_ = resources::load_shader("shaders/solid.vs", "shaders/solid.fs");
+        if (!solidShader_) {
             TraceLog(LOG_WARNING, "BlockInteraction: failed to load solid shader");
         }
-        if (!overlayShader_.loadFromFiles("shaders/overlay.vs", "shaders/overlay.fs")) {
+        overlayShader_ = resources::load_shader("shaders/overlay.vs", "shaders/overlay.fs");
+        if (!overlayShader_) {
             TraceLog(LOG_WARNING, "BlockInteraction: failed to load overlay shader");
         }
 
-        wireframeCube_ = rf::GLMesh::createWireframeCube(1.0f);
-        overlayCube_ = rf::GLMesh::createCubeWithUVs(1.0f);
+        wireframeCube_ = resources::create_wireframe_cube(1.0f);
+        overlayCube_ = resources::create_cube_with_uvs(1.0f);
         render_resources_loaded_ = true;
         TraceLog(LOG_INFO, "BlockInteraction render resources loaded");
     }
@@ -49,17 +52,18 @@ bool BlockInteraction::init() {
 void BlockInteraction::destroy() {
     if (textures_loaded_) {
         for (int i = 0; i < DESTROY_STAGE_COUNT; i++) {
-            destroy_textures_[i].destroy();
+            destroy_textures_[i].reset();
         }
         textures_loaded_ = false;
     }
     if (render_resources_loaded_) {
-        solidShader_.destroy();
-        overlayShader_.destroy();
-        wireframeCube_.destroy();
-        overlayCube_.destroy();
+        solidShader_.reset();
+        overlayShader_.reset();
+        wireframeCube_.reset();
+        overlayCube_.reset();
         render_resources_loaded_ = false;
     }
+    device_ = nullptr;
 }
 
 static void face_to_offset(int face, int& ox, int& oy, int& oz) {
@@ -291,7 +295,7 @@ float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::To
 
 void BlockInteraction::render_highlight(const rf::Camera& camera) const {
     if (!target_.hit) return;
-    if (!render_resources_loaded_ || !solidShader_.isValid() || !wireframeCube_.isValid()) return;
+    if (!render_resources_loaded_ || !solidShader_ || !solidShader_->isValid() || !wireframeCube_ || !wireframeCube_->isValid()) return;
 
     rf::Vec3 pos = {
         static_cast<float>(target_.block_x) + 0.5f,
@@ -304,18 +308,16 @@ void BlockInteraction::render_highlight(const rf::Camera& camera) const {
                    * glm::scale(rf::Mat4(1.0f), rf::Vec3(1.005f));
     rf::Mat4 mvp = camera.viewProjectionMatrix() * model;
 
-    glLineWidth(2.0f);
-    solidShader_.bind();
-    solidShader_.setMat4("mvp", mvp);
-    solidShader_.setVec4("color", rf::Vec4(0.0f, 0.0f, 0.0f, 0.8f));
-    wireframeCube_.draw(rf::PrimitiveType::Lines);
-    solidShader_.unbind();
-    glLineWidth(1.0f);
+    solidShader_->bind();
+    solidShader_->setMat4("mvp", mvp);
+    solidShader_->setVec4("color", rf::Vec4(0.0f, 0.0f, 0.0f, 0.8f));
+    wireframeCube_->draw(rf::PrimitiveType::Lines);
+    solidShader_->unbind();
 }
 
 void BlockInteraction::render_break_overlay(const rf::Camera& camera) const {
     if (!target_.hit || break_progress_ <= 0.0f) return;
-    if (!render_resources_loaded_ || !overlayShader_.isValid() || !overlayCube_.isValid()) return;
+    if (!render_resources_loaded_ || !overlayShader_ || !overlayShader_->isValid() || !overlayCube_ || !overlayCube_->isValid()) return;
     if (!textures_loaded_) return;
 
     int stage = static_cast<int>(std::floor(break_progress_ * 10.0f));
@@ -333,21 +335,23 @@ void BlockInteraction::render_break_overlay(const rf::Camera& camera) const {
                    * glm::scale(rf::Mat4(1.0f), rf::Vec3(1.002f));
     rf::Mat4 mvp = camera.viewProjectionMatrix() * model;
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.0f, -1.0f);
+    if (device_) {
+        device_->setBlendMode(rf::BlendMode::Alpha);
+        device_->setPolygonOffset(true, -1.0f, -1.0f);
+    }
 
-    overlayShader_.bind();
-    overlayShader_.setMat4("mvp", mvp);
-    overlayShader_.setVec4("tintColor", rf::Vec4(1.0f, 1.0f, 1.0f, 0.7f));
-    overlayShader_.setInt("tex", 0);
-    destroy_textures_[stage].bind(0);
-    overlayCube_.draw();
-    destroy_textures_[stage].unbind(0);
-    overlayShader_.unbind();
+    overlayShader_->bind();
+    overlayShader_->setMat4("mvp", mvp);
+    overlayShader_->setVec4("tintColor", rf::Vec4(1.0f, 1.0f, 1.0f, 0.7f));
+    overlayShader_->setInt("tex", 0);
+    destroy_textures_[stage]->bind(0);
+    overlayCube_->draw();
+    destroy_textures_[stage]->unbind(0);
+    overlayShader_->unbind();
 
-    glDisable(GL_POLYGON_OFFSET_FILL);
+    if (device_) {
+        device_->setPolygonOffset(false);
+    }
 }
 
 void BlockInteraction::render_crosshair(int screen_width, int screen_height) {

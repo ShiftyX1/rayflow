@@ -21,22 +21,22 @@ bool BlockRegistry::init(const std::string& atlas_path) {
     if (initialized_) return true;
     
     atlas_texture_ = resources::load_texture(atlas_path);
-    if (!atlas_texture_.isValid()) {
+    if (!atlas_texture_ || !atlas_texture_->isValid()) {
         TraceLog(LOG_ERROR, "Failed to load texture atlas: %s", atlas_path.c_str());
         return false;
     }
     
     atlas_tile_size_ = 16;
-    atlas_tiles_per_row_ = atlas_texture_.width() / atlas_tile_size_;
+    atlas_tiles_per_row_ = atlas_texture_->width() / atlas_tile_size_;
 
     // Load colormaps with CPU pixel retention for biome tinting
     grass_colormap_ = resources::load_image("textures/grasscolor.png");
-    if (!grass_colormap_.isValid()) {
+    if (!grass_colormap_ || !grass_colormap_->isValid()) {
         TraceLog(LOG_WARNING, "[voxel] grasscolor.png not found; grass recolor will use fallback");
     }
 
     foliage_colormap_ = resources::load_image("textures/foliagecolor.png");
-    if (!foliage_colormap_.isValid()) {
+    if (!foliage_colormap_ || !foliage_colormap_->isValid()) {
         TraceLog(LOG_WARNING, "[voxel] foliagecolor.png not found; foliage recolor will use fallback");
     }
     
@@ -50,14 +50,14 @@ bool BlockRegistry::init(const std::string& atlas_path) {
 
 void BlockRegistry::destroy() {
     if (initialized_) {
-        atlas_texture_.destroy();
-        grass_colormap_.destroy();
-        foliage_colormap_.destroy();
+        atlas_texture_.reset();
+        grass_colormap_.reset();
+        foliage_colormap_.reset();
         initialized_ = false;
     }
 }
 
-rf::Color BlockRegistry::sample_colormap_(const rf::GLTexture& tex, float temperature, float humidity, rf::Color fallback) {
+rf::Color BlockRegistry::sample_colormap_(const rf::ITexture& tex, float temperature, float humidity, rf::Color fallback) {
     if (!tex.isValid()) {
         return fallback;
     }
@@ -82,12 +82,14 @@ rf::Color BlockRegistry::sample_colormap_(const rf::GLTexture& tex, float temper
 
 rf::Color BlockRegistry::sample_grass_color(float temperature, float humidity) const {
     const rf::Color fallback{120, 200, 80, 255};
-    return sample_colormap_(grass_colormap_, temperature, humidity, fallback);
+    if (!grass_colormap_) return fallback;
+    return sample_colormap_(*grass_colormap_, temperature, humidity, fallback);
 }
 
 rf::Color BlockRegistry::sample_foliage_color(float temperature, float humidity) const {
     const rf::Color fallback{90, 180, 70, 255};
-    return sample_colormap_(foliage_colormap_, temperature, humidity, fallback);
+    if (!foliage_colormap_) return fallback;
+    return sample_colormap_(*foliage_colormap_, temperature, humidity, fallback);
 }
 
 void BlockRegistry::register_blocks() {

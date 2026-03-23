@@ -9,7 +9,7 @@
 //
 
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
 #include <cstdint>
 
 namespace ecs {
@@ -20,7 +20,7 @@ namespace ecs {
 
 /// Static sprite component
 struct Sprite {
-    rf::GLTexture* texture{nullptr};   // non-owning pointer to a loaded texture
+    rf::ITexture* texture{nullptr};   // non-owning pointer to a loaded texture
     rf::Rect source{0, 0, 0, 0};      // source rect in texture (0,0,0,0 = full texture)
     rf::Vec2 origin{0, 0};            // pivot point (0,0 = top-left)
     rf::Color tint{rf::Color::White()};
@@ -32,7 +32,7 @@ struct Sprite {
 
 /// Animated sprite component
 struct AnimatedSprite {
-    rf::GLTexture* spritesheet{nullptr};
+    rf::ITexture* spritesheet{nullptr};
     int frame_width{0};            // width of single frame
     int frame_height{0};           // height of single frame
     int frame{0};                  // current frame

@@ -13,7 +13,7 @@ public:
     UIManager();
     ~UIManager();
 
-    void init();
+    void init(void* dx11Device = nullptr, void* dx11Context = nullptr);
 
     // Update UI state for the frame (input capture + queued commands).
     UIFrameOutput update(const UIFrameInput& in, const UIViewModel& vm);

@@ -4,6 +4,7 @@
 #include "engine/maps/runtime_paths.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/core/logging.hpp"
+#include "engine/renderer/gpu/render_device.hpp"
 
 #include <cstring>
 #include <filesystem>
@@ -21,6 +22,8 @@
 namespace resources {
 
 namespace {
+
+rf::RenderDevice* s_device = nullptr;
 
 const char* get_extension(const std::string& path) {
     auto dot = path.rfind('.');
@@ -56,6 +59,14 @@ std::filesystem::path get_executable_dir() {
 
 } // namespace
 
+void set_render_device(rf::RenderDevice* device) {
+    s_device = device;
+}
+
+rf::RenderDevice* render_device() {
+    return s_device;
+}
+
 void init() {
     std::filesystem::path gameDir = get_executable_dir();
     
@@ -82,6 +93,7 @@ void init() {
 }
 
 void shutdown() {
+    s_device = nullptr;
     engine::vfs::shutdown();
 }
 
@@ -93,30 +105,131 @@ bool is_pak_mode() {
 #endif
 }
 
-rf::GLTexture load_texture(const std::string& path) {
-    rf::GLTexture tex;
-    if (!tex.loadFromFile(path)) {
+std::unique_ptr<rf::ITexture> load_texture(const std::string& path) {
+    if (!s_device) {
+        TraceLog(LOG_ERROR, "[resources] No render device set, cannot load texture: %s", path.c_str());
+        return nullptr;
+    }
+    auto tex = s_device->createTexture();
+    if (!tex->loadFromFile(path)) {
         TraceLog(LOG_WARNING, "[resources] Failed to load texture: %s", path.c_str());
+        return nullptr;
     }
     return tex;
 }
 
-rf::GLTexture load_image(const std::string& path) {
-    rf::GLTexture tex;
-    tex.retainPixelData(true);
-    if (!tex.loadFromFile(path)) {
+std::unique_ptr<rf::ITexture> load_image(const std::string& path) {
+    if (!s_device) {
+        TraceLog(LOG_ERROR, "[resources] No render device set, cannot load image: %s", path.c_str());
+        return nullptr;
+    }
+    auto tex = s_device->createTexture();
+    tex->retainPixelData(true);
+    if (!tex->loadFromFile(path)) {
         TraceLog(LOG_WARNING, "[resources] Failed to load image: %s", path.c_str());
+        return nullptr;
     }
     return tex;
 }
 
-rf::GLShader load_shader(const char* vsPath, const char* fsPath) {
-    rf::GLShader shader;
-    if (!shader.loadFromFiles(vsPath ? vsPath : "", fsPath ? fsPath : "")) {
+std::unique_ptr<rf::IShader> load_shader(const char* vsPath, const char* fsPath) {
+    if (!s_device) {
+        TraceLog(LOG_ERROR, "[resources] No render device set, cannot load shader");
+        return nullptr;
+    }
+    auto shader = s_device->createShader();
+    if (!shader->loadFromFiles(vsPath ? vsPath : "", fsPath ? fsPath : "")) {
         TraceLog(LOG_WARNING, "[resources] Failed to load shader: vs=%s fs=%s",
                    vsPath ? vsPath : "(null)", fsPath ? fsPath : "(null)");
+        return nullptr;
     }
     return shader;
+}
+
+std::unique_ptr<rf::IMesh> create_cube(float size) {
+    if (!s_device) return nullptr;
+    float s = size * 0.5f;
+    // clang-format off
+    float positions[] = {
+        s, -s, -s,  s,  s, -s,  s,  s,  s,
+        s, -s, -s,  s,  s,  s,  s, -s,  s,
+       -s, -s,  s, -s,  s,  s, -s,  s, -s,
+       -s, -s,  s, -s,  s, -s, -s, -s, -s,
+       -s,  s, -s, -s,  s,  s,  s,  s,  s,
+       -s,  s, -s,  s,  s,  s,  s,  s, -s,
+       -s, -s,  s, -s, -s, -s,  s, -s, -s,
+       -s, -s,  s,  s, -s, -s,  s, -s,  s,
+       -s, -s,  s,  s, -s,  s,  s,  s,  s,
+       -s, -s,  s,  s,  s,  s, -s,  s,  s,
+        s, -s, -s, -s, -s, -s, -s,  s, -s,
+        s, -s, -s, -s,  s, -s,  s,  s, -s,
+    };
+    // clang-format on
+    auto mesh = s_device->createMesh();
+    mesh->uploadPositionOnly(positions, 36);
+    return mesh;
+}
+
+std::unique_ptr<rf::IMesh> create_wireframe_cube(float size) {
+    if (!s_device) return nullptr;
+    float s = size * 0.5f;
+    // clang-format off
+    float positions[] = {
+        -s, -s, -s,   s, -s, -s,
+         s, -s, -s,   s, -s,  s,
+         s, -s,  s,  -s, -s,  s,
+        -s, -s,  s,  -s, -s, -s,
+        -s,  s, -s,   s,  s, -s,
+         s,  s, -s,   s,  s,  s,
+         s,  s,  s,  -s,  s,  s,
+        -s,  s,  s,  -s,  s, -s,
+        -s, -s, -s,  -s,  s, -s,
+         s, -s, -s,   s,  s, -s,
+         s, -s,  s,   s,  s,  s,
+        -s, -s,  s,  -s,  s,  s,
+    };
+    // clang-format on
+    auto mesh = s_device->createMesh();
+    mesh->uploadPositionOnly(positions, 24);
+    return mesh;
+}
+
+std::unique_ptr<rf::IMesh> create_cube_with_uvs(float size) {
+    if (!s_device) return nullptr;
+    float s = size * 0.5f;
+    // clang-format off
+    float positions[] = {
+        s, -s, -s,  s,  s, -s,  s,  s,  s,
+        s, -s, -s,  s,  s,  s,  s, -s,  s,
+       -s, -s,  s, -s,  s,  s, -s,  s, -s,
+       -s, -s,  s, -s,  s, -s, -s, -s, -s,
+       -s,  s, -s, -s,  s,  s,  s,  s,  s,
+       -s,  s, -s,  s,  s,  s,  s,  s, -s,
+       -s, -s,  s, -s, -s, -s,  s, -s, -s,
+       -s, -s,  s,  s, -s, -s,  s, -s,  s,
+       -s, -s,  s,  s, -s,  s,  s,  s,  s,
+       -s, -s,  s,  s,  s,  s, -s,  s,  s,
+        s, -s, -s, -s, -s, -s, -s,  s, -s,
+        s, -s, -s, -s,  s, -s,  s,  s, -s,
+    };
+    float texcoords[] = {
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        0.0f, 1.0f,  0.0f, 0.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,
+        0.0f, 1.0f,  1.0f, 1.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  0.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 1.0f,  1.0f, 0.0f,
+        0.0f, 1.0f,  1.0f, 0.0f,  0.0f, 0.0f,
+    };
+    // clang-format on
+    auto mesh = s_device->createMesh();
+    mesh->upload(36, positions, texcoords);
+    return mesh;
 }
 
 rf::GLFont load_font(const std::string& path, int fontSize) {

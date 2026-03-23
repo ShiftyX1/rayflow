@@ -796,9 +796,9 @@ void World::unload_distant_chunks(const rf::Vec3& player_position) {
 // =============================================================================
 
 void World::render(const rf::Camera& camera) const {
-    if (!voxel_shader_.isValid()) return;
+    if (!voxel_shader_ || !voxel_shader_->isValid()) return;
 
-    auto& shader = const_cast<rf::GLShader&>(voxel_shader_);
+    auto& shader = *voxel_shader_;
     shader.bind();
 
     // MVP = projection * view (model is identity for chunks — vertices are in world space)
@@ -878,9 +878,9 @@ void World::render(const rf::Camera& camera) const {
 // -----------------------------------------------------------------------------
 
 void World::render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const {
-    if (!voxel_shader_.isValid()) return;
+    if (!voxel_shader_ || !voxel_shader_->isValid()) return;
 
-    auto& shader = const_cast<rf::GLShader&>(voxel_shader_);
+    auto& shader = *voxel_shader_;
     shader.bind();
 
     // MVP
@@ -997,26 +997,26 @@ float World::get_fog_end() const {
 }
 
 void World::load_voxel_shader() {
-    if (voxel_shader_.isValid()) return;
+    if (voxel_shader_ && voxel_shader_->isValid()) return;
 
-    bool ok = voxel_shader_.loadFromFiles("shaders/voxel.vs", "shaders/voxel.fs");
-    if (ok) {
+    voxel_shader_ = resources::load_shader("shaders/voxel.vs", "shaders/voxel.fs");
+    if (voxel_shader_ && voxel_shader_->isValid()) {
         // Cache uniform locations
-        light_count_loc_ = voxel_shader_.getUniformLocation("lightCount");
-        sun_dir_loc_ = voxel_shader_.getUniformLocation("sunDir");
-        sun_col_loc_ = voxel_shader_.getUniformLocation("sunColor");
-        amb_col_loc_ = voxel_shader_.getUniformLocation("ambientColor");
-        view_pos_loc_ = voxel_shader_.getUniformLocation("viewPos");
+        light_count_loc_ = voxel_shader_->getUniformLocation("lightCount");
+        sun_dir_loc_ = voxel_shader_->getUniformLocation("sunDir");
+        sun_col_loc_ = voxel_shader_->getUniformLocation("sunColor");
+        amb_col_loc_ = voxel_shader_->getUniformLocation("ambientColor");
+        view_pos_loc_ = voxel_shader_->getUniformLocation("viewPos");
 
         light_locs_.clear();
         light_locs_.reserve(32);
         for (int i = 0; i < 32; i++) {
             std::string base = "lights[" + std::to_string(i) + "]";
             LightLocations locs;
-            locs.position = voxel_shader_.getUniformLocation(base + ".position");
-            locs.color = voxel_shader_.getUniformLocation(base + ".color");
-            locs.radius = voxel_shader_.getUniformLocation(base + ".radius");
-            locs.intensity = voxel_shader_.getUniformLocation(base + ".intensity");
+            locs.position = voxel_shader_->getUniformLocation(base + ".position");
+            locs.color = voxel_shader_->getUniformLocation(base + ".color");
+            locs.radius = voxel_shader_->getUniformLocation(base + ".radius");
+            locs.intensity = voxel_shader_->getUniformLocation(base + ".intensity");
             light_locs_.push_back(locs);
         }
 
@@ -1027,7 +1027,7 @@ void World::load_voxel_shader() {
 }
 
 void World::unload_voxel_shader() {
-    voxel_shader_.destroy();
+    voxel_shader_.reset();
     light_locs_.clear();
     TraceLog(LOG_INFO, "Voxel shader unloaded");
 }

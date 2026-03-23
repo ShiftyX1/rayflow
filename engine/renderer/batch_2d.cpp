@@ -1,6 +1,7 @@
 #include "batch_2d.hpp"
 
 #include "engine/renderer/gpu/gpu_texture.hpp"
+#include "engine/client/core/window.hpp"
 #include "gl_font.hpp"
 #include "engine/core/logging.hpp"
 
@@ -58,6 +59,7 @@ Batch2D& Batch2D::instance() {
 }
 
 Batch2D::~Batch2D() {
+    if (!available_) return;
     if (vao_) glDeleteVertexArrays(1, &vao_);
     if (vbo_) glDeleteBuffers(1, &vbo_);
     if (whiteTexture_) glDeleteTextures(1, &whiteTexture_);
@@ -70,6 +72,14 @@ Batch2D::~Batch2D() {
 
 void Batch2D::ensureInitialised() {
     if (initialised_) return;
+
+    // Batch2D is currently OpenGL-only; skip init on other backends
+    if (Window::instance().backend() != Backend::OpenGL) {
+        initialised_ = true;
+        available_ = false;
+        TraceLog(LOG_INFO, "[Batch2D] Skipped (non-GL backend)");
+        return;
+    }
 
     // Compile shader
     if (!shader_.loadFromSource(kBatch2DVertSrc, kBatch2DFragSrc)) {
@@ -120,6 +130,7 @@ void Batch2D::ensureInitialised() {
     vertices_.reserve(4096);
 
     initialised_ = true;
+    available_ = true;
     TraceLog(LOG_INFO, "[Batch2D] Initialised (max %d vertices)", kMaxVertices);
 }
 
@@ -129,6 +140,7 @@ void Batch2D::ensureInitialised() {
 
 void Batch2D::begin(int screenWidth, int screenHeight) {
     ensureInitialised();
+    if (!available_) return;
 
     projection_ = glm::ortho(0.0f, static_cast<float>(screenWidth),
                               static_cast<float>(screenHeight), 0.0f,
@@ -150,6 +162,7 @@ void Batch2D::begin(int screenWidth, int screenHeight) {
 
 void Batch2D::end() {
     if (!inFrame_) return;
+    if (!available_) { inFrame_ = false; return; }
     flush();
     inFrame_ = false;
 
@@ -162,7 +175,7 @@ void Batch2D::end() {
 // ============================================================================
 
 void Batch2D::flush() {
-    if (vertices_.empty()) return;
+    if (!available_ || vertices_.empty()) return;
 
     shader_.bind();
     shader_.setMat4("uProjection", projection_);
@@ -190,6 +203,7 @@ void Batch2D::flush() {
 }
 
 void Batch2D::setTexture(GLuint texId) {
+    if (!available_) return;
     if (texId == 0) texId = whiteTexture_;
     if (texId != currentTexture_) {
         flush();
@@ -207,6 +221,7 @@ void Batch2D::pushQuad(float x0, float y0, float u0, float v0,
                        float x3, float y3, float u3, float v3,
                        float r, float g, float b, float a)
 {
+    if (!available_) return;
     if (static_cast<int>(vertices_.size()) + 6 > kMaxVertices) {
         flush();
     }
@@ -226,6 +241,7 @@ void Batch2D::pushTriangle(float x0, float y0, float u0, float v0,
                            float x2, float y2, float u2, float v2,
                            float r, float g, float b, float a)
 {
+    if (!available_) return;
     if (static_cast<int>(vertices_.size()) + 3 > kMaxVertices) {
         flush();
     }
@@ -625,6 +641,7 @@ void Batch2D::drawLine(float x1, float y1, float x2, float y2,
 void Batch2D::drawText(const GLFont* font, const std::string& text,
                        float x, float y, float size, const Color& color)
 {
+    if (!available_) return;
     if (!font || !font->isValid()) {
         // Fallback to default font
         if (auto* def = GLFont::defaultFont()) {
@@ -645,10 +662,12 @@ void Batch2D::drawText(const GLFont* font, const std::string& text,
 void Batch2D::drawText(const std::string& text, float x, float y,
                        float size, const Color& color)
 {
+    if (!available_) return;
     drawText(GLFont::defaultFont(), text, x, y, size, color);
 }
 
 float Batch2D::measureText(const GLFont* font, const std::string& text, float size) {
+    if (!available_) return 0.0f;
     if (!font || !font->isValid()) {
         font = GLFont::defaultFont();
         if (!font) return 0.0f;
@@ -657,6 +676,7 @@ float Batch2D::measureText(const GLFont* font, const std::string& text, float si
 }
 
 float Batch2D::measureText(const std::string& text, float size) {
+    if (!available_) return 0.0f;
     return measureText(GLFont::defaultFont(), text, size);
 }
 

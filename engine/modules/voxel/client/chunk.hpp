@@ -4,8 +4,8 @@
 #include "block.hpp"
 #include "../shared/block_state.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_mesh.hpp"
-#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
 #include <array>
 #include <memory>
 #include <vector>
@@ -68,7 +68,7 @@ public:
     void render() const;
     
     /// Draw with a specific shader (binds uniform for model matrix).
-    void render(rf::GLShader& shader) const;
+    void render(rf::IShader& shader) const;
     
     int get_chunk_x() const { return chunk_x_; }
     int get_chunk_z() const { return chunk_z_; }
@@ -110,8 +110,8 @@ private:
     bool is_empty_{false};
     std::atomic<bool> meshing_{false};
     
-    // GPU mesh (Phase 2: real OpenGL VAO/VBO)
-    rf::GLMesh mesh_;
+    // GPU mesh
+    std::unique_ptr<rf::IMesh> mesh_;
 
     std::vector<rf::Vec3> light_markers_ws_{};
 };

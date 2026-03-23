@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstdio>
 
-#include <glad/gl.h>
 #include <tinyxml2.h>
 
 #include "../ui_view_model.hpp"
@@ -225,7 +224,7 @@ void UIDocument::unload() {
     }
 
     for (auto& [_, ref] : texture_cache_) {
-        ref.tex.destroy();
+        ref.tex.reset();
     }
     texture_cache_.clear();
 
@@ -235,20 +234,20 @@ void UIDocument::unload() {
     font_cache_.clear();
 }
 
-GLuint UIDocument::load_texture_cached(const std::string& path) {
+rf::ITexture* UIDocument::load_texture_cached(const std::string& path) {
     if (path.empty()) {
-        return 0;
+        return nullptr;
     }
     auto it = texture_cache_.find(path);
     if (it != texture_cache_.end()) {
-        return it->second.tex.id();
+        return it->second.tex.get();
     }
 
     TextureRef ref;
     ref.tex = resources::load_texture(path);
-    GLuint id = ref.tex.id();
+    rf::ITexture* ptr = ref.tex.get();
     texture_cache_.emplace(path, std::move(ref));
-    return id;
+    return ptr;
 }
 
 rf::GLFont* UIDocument::load_font_cached(int size) {
@@ -540,9 +539,15 @@ void UIDocument::render(const UIViewModel& vm) {
         return;
     }
 
+    TraceLog(LOG_INFO, "[UIDocument::render] children=%d", static_cast<int>(root_.children.size()));
+    int idx = 0;
     for (const auto& child : root_.children) {
+        TraceLog(LOG_INFO, "[UIDocument::render] child[%d] type=%s", idx, child.type.c_str());
         render_node(child, vm);
+        TraceLog(LOG_INFO, "[UIDocument::render] child[%d] done", idx);
+        idx++;
     }
+    TraceLog(LOG_INFO, "[UIDocument::render] all done");
 }
 
 void UIDocument::render_node(const Node& node, const UIViewModel& vm) {
@@ -584,12 +589,14 @@ void UIDocument::render_node(const Node& node, const UIViewModel& vm) {
 void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
     const rf::Rect& r = node.computed_rect;
 
+    TraceLog(LOG_INFO, "[UIDocument::render_panel] shadow");
     draw_box_shadow(r, node.style);
 
     auto& batch = rf::Batch2D::instance();
 
     // Background
     if (node.style.background_color.has_value()) {
+        TraceLog(LOG_INFO, "[UIDocument::render_panel] bg");
         rf::Color bgColor = apply_opacity(*node.style.background_color, node.style.opacity);
         if (node.style.border_radius > 0) {
             float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
@@ -601,6 +608,7 @@ void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
 
     // Border
     if (node.style.border_width > 0) {
+        TraceLog(LOG_INFO, "[UIDocument::render_panel] border");
         rf::Color borderColor = apply_opacity(node.style.border_color, node.style.opacity);
         if (node.style.border_radius > 0) {
             float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
@@ -611,13 +619,18 @@ void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
     }
 
     // Render children
+    TraceLog(LOG_INFO, "[UIDocument::render_panel] children=%d", static_cast<int>(node.children.size()));
+    int ci = 0;
     for (const auto& child : node.children) {
+        TraceLog(LOG_INFO, "[UIDocument::render_panel] child[%d] type=%s", ci, child.type.c_str());
         render_node(child, vm);
+        ci++;
     }
 }
 
 void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
     (void)vm;
+    TraceLog(LOG_INFO, "[UIDocument::render_text] '%s'", node.text.c_str());
 
     if (node.text.empty()) {
         return;
@@ -662,6 +675,7 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
 
 void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
     (void)vm;
+    TraceLog(LOG_INFO, "[UIDocument::render_button] '%s'", node.text.c_str());
 
     const rf::Rect& r = node.computed_rect;
 
@@ -747,11 +761,11 @@ void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
 }
 
 void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
-    const GLuint full = load_texture_cached(node.full);
-    const GLuint half = load_texture_cached(node.half);
-    const GLuint empty_tex = load_texture_cached(node.empty);
+    rf::ITexture* full = load_texture_cached(node.full);
+    rf::ITexture* half = load_texture_cached(node.half);
+    rf::ITexture* empty_tex = load_texture_cached(node.empty);
 
-    if (full == 0 || half == 0 || empty_tex == 0) {
+    if (!full || !half || !empty_tex) {
         return;
     }
 
@@ -786,7 +800,7 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
 
         const rf::Rect src{0.0f, 0.0f, static_cast<float>(heartW), static_cast<float>(heartH)};
         const rf::Rect dst{static_cast<float>(x), static_cast<float>(y), static_cast<float>(heartW), static_cast<float>(heartH)};
-        rf::Batch2D::instance().drawTextureRaw(tex, heartW, heartH, src, dst);
+        rf::Batch2D::instance().drawTexture(tex, src, dst);
     }
 }
 

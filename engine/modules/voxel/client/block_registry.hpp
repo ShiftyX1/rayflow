@@ -3,8 +3,9 @@
 #include "engine/core/export.hpp"
 #include "block.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
 #include <array>
+#include <memory>
 #include <string>
 
 namespace voxel {
@@ -30,7 +31,7 @@ public:
     rf::Rect get_texture_rect(BlockType type, int face) const;
 
     /// Returns the atlas GPU texture (for binding during voxel rendering).
-    const rf::GLTexture& get_atlas_texture() const { return atlas_texture_; }
+    const rf::ITexture& get_atlas_texture() const { return *atlas_texture_; }
 
     rf::Color sample_grass_color(float temperature, float humidity) const;
     rf::Color sample_foliage_color(float temperature, float humidity) const;
@@ -47,14 +48,14 @@ private:
     void register_blocks();
     
     std::array<BlockInfo, static_cast<size_t>(BlockType::Count)> blocks_{};
-    rf::GLTexture atlas_texture_;
+    std::unique_ptr<rf::ITexture> atlas_texture_;
     int atlas_tile_size_{16};
     int atlas_tiles_per_row_{16};
 
-    rf::GLTexture grass_colormap_;
-    rf::GLTexture foliage_colormap_;
+    std::unique_ptr<rf::ITexture> grass_colormap_;
+    std::unique_ptr<rf::ITexture> foliage_colormap_;
 
-    static rf::Color sample_colormap_(const rf::GLTexture& tex, float temperature, float humidity, rf::Color fallback);
+    static rf::Color sample_colormap_(const rf::ITexture& tex, float temperature, float humidity, rf::Color fallback);
     bool initialized_{false};
 };
 

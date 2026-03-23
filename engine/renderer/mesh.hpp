@@ -1,17 +1,18 @@
 #pragma once
 
 // =============================================================================
-// Legacy MeshBuilder — thin wrapper around GLMesh for backwards compatibility.
-// New code should use rf::GLMesh directly.
+// Legacy MeshBuilder — thin wrapper around IMesh for backwards compatibility.
+// New code should use resources::create_cube() or RenderDevice directly.
 // =============================================================================
 
 #include "engine/core/export.hpp"
-#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
+#include <memory>
 
 namespace renderer {
 
 struct MeshData {
-    rf::GLMesh mesh{};
+    std::unique_ptr<rf::IMesh> mesh{};
     bool valid{false};
 };
 

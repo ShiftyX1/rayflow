@@ -4,8 +4,9 @@
 #include "../components.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/camera.hpp"
-#include "engine/renderer/gl_shader.hpp"
-#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
+#include <memory>
 
 namespace voxel {
     class World;
@@ -32,8 +33,8 @@ public:
     void render_ui(entt::registry& registry, int screen_width, int screen_height);
 
     /// Access the built-in solid shader (other systems can borrow it).
-    rf::GLShader& solidShader() { return solidShader_; }
-    rf::GLMesh& defaultCube() { return defaultCube_; }
+    rf::IShader& solidShader() { return *solidShader_; }
+    rf::IMesh& defaultCube() { return *defaultCube_; }
     
 private:
     void render_crosshair(int screen_width, int screen_height);
@@ -41,8 +42,8 @@ private:
     
     voxel::World* world_{nullptr};
 
-    rf::GLShader solidShader_;
-    rf::GLMesh   defaultCube_;
+    std::unique_ptr<rf::IShader> solidShader_;
+    std::unique_ptr<rf::IMesh>   defaultCube_;
     bool         initialized_{false};
 };
 

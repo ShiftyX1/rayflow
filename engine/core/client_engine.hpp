@@ -8,6 +8,7 @@
 #include "game_interface.hpp"
 #include "export.hpp"
 #include "../transport/transport.hpp"
+#include "engine/renderer/gpu/gpu_types.hpp"
 
 #include <entt/entt.hpp>
 
@@ -48,6 +49,7 @@ public:
         bool vsync = true;
         bool logging = true;
         std::string configFile = "rayflow.conf";
+        rf::Backend backend = rf::Backend::OpenGL;
     };
 
     ClientEngine();

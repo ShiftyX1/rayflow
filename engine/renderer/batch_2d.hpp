@@ -147,6 +147,7 @@ private:
 
     static constexpr int kMaxVertices = 65536;
 
+    bool available_{false};  // false when backend is not OpenGL
     bool initialised_{false};
     bool inFrame_{false};
 

@@ -11,12 +11,12 @@ bool TextureAtlas::load(const char* path) {
     }
     
     texture_ = resources::load_texture(path);
-    if (!texture_.isValid()) {
+    if (!texture_ || !texture_->isValid()) {
         return false;
     }
     
     tile_size_ = 16;
-    tiles_per_row_ = texture_.width() / tile_size_;
+    tiles_per_row_ = texture_->width() / tile_size_;
     loaded_ = true;
     
     return true;
@@ -24,7 +24,7 @@ bool TextureAtlas::load(const char* path) {
 
 void TextureAtlas::unload() {
     if (loaded_) {
-        texture_.destroy();
+        texture_.reset();
         loaded_ = false;
     }
 }
@@ -45,8 +45,8 @@ void TextureAtlas::get_tile_uvs(int tile_index, float* u0, float* v0, float* u1,
     int x = tile_index % tiles_per_row_;
     int y = tile_index / tiles_per_row_;
     
-    float tex_width = static_cast<float>(texture_.width());
-    float tex_height = static_cast<float>(texture_.height());
+    float tex_width = static_cast<float>(texture_->width());
+    float tex_height = static_cast<float>(texture_->height());
     
     *u0 = (x * tile_size_) / tex_width;
     *v0 = (y * tile_size_) / tex_height;

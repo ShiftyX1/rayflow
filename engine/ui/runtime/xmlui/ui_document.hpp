@@ -8,7 +8,7 @@
 
 #include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_texture.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
 #include "engine/renderer/gl_font.hpp"
 
 #include "css_lite.hpp"
@@ -75,14 +75,14 @@ private:
 
     // Texture cache — stores loaded textures by path
     struct TextureRef {
-        rf::GLTexture tex{};
+        std::unique_ptr<rf::ITexture> tex{};
     };
 
     // Font cache — stores loaded fonts by pixel size
     rf::GLFont* load_font_cached(int size);
 
-    /// Load a texture (or return cached). Returns the GL texture ID (0 if failed).
-    GLuint load_texture_cached(const std::string& path);
+    /// Load a texture (or return cached). Returns pointer to the texture (nullptr if failed).
+    rf::ITexture* load_texture_cached(const std::string& path);
 
     Node parse_node_rec(tinyxml2::XMLElement* el);
     void apply_styles_rec(Node& n);

@@ -3,9 +3,10 @@
 #include "engine/core/export.hpp"
 #include "chunk.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_shader.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
 #include "engine/renderer/camera.hpp"
 #include "engine/renderer/render_pipeline.hpp"
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
@@ -103,9 +104,9 @@ public:
 
     void load_voxel_shader();
     void unload_voxel_shader();
-    rf::GLShader& get_voxel_shader() { return voxel_shader_; }
-    const rf::GLShader& get_voxel_shader() const { return voxel_shader_; }
-    bool has_voxel_shader() const { return voxel_shader_.isValid(); }
+    rf::IShader& get_voxel_shader() { return *voxel_shader_; }
+    const rf::IShader& get_voxel_shader() const { return *voxel_shader_; }
+    bool has_voxel_shader() const { return voxel_shader_ && voxel_shader_->isValid(); }
     
     void set_environment(float timeOfDay, float sunIntensity, float ambientIntensity) {
         time_of_day_ = timeOfDay;
@@ -150,7 +151,7 @@ private:
     mutable bool perm_initialized_{false};
     void init_perlin() const;
 
-    rf::GLShader voxel_shader_;
+    std::unique_ptr<rf::IShader> voxel_shader_;
 
     std::vector<PointLight> scene_lights_;
     std::vector<PointLight> static_lights_;

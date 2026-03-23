@@ -159,7 +159,7 @@ void ClientEngine::init_world(std::uint32_t seed) {
     // Create block interaction if not yet created (lazy init)
     if (!blockInteraction_) {
         blockInteraction_ = std::make_unique<voxel::BlockInteraction>();
-        if (!blockInteraction_->init()) {
+        if (!blockInteraction_->init(renderDevice_.get())) {
             log(LogLevel::Error, "Failed to initialize block interaction");
         }
     }
@@ -214,7 +214,7 @@ void ClientEngine::log(LogLevel level, std::string_view msg) {
 
 void ClientEngine::init_window() {
     auto& win = rf::Window::instance();
-    if (!win.init(config_.windowWidth, config_.windowHeight, config_.windowTitle, config_.vsync)) {
+    if (!win.init(config_.windowWidth, config_.windowHeight, config_.windowTitle, config_.vsync, config_.backend)) {
         log(LogLevel::Error, "Failed to create window");
         running_ = false;
         return;
@@ -259,6 +259,9 @@ void ClientEngine::init_subsystems() {
     
     // Initialize resource system
     resources::init();
+    if (renderDevice_) {
+        resources::set_render_device(renderDevice_.get());
+    }
     
     // Load config
     const bool cfg_ok = core::Config::instance().load_from_file(config_.configFile);
@@ -285,7 +288,11 @@ void ClientEngine::init_subsystems() {
     
     // Initialize UI (UIManager owns Dear ImGui lifecycle)
     uiManager_ = std::make_unique<ui::UIManager>();
-    uiManager_->init();
+    if (renderDevice_) {
+        uiManager_->init(renderDevice_->nativeDevice(), renderDevice_->nativeContext());
+    } else {
+        uiManager_->init();
+    }
     
     log(LogLevel::Info, "Engine subsystems initialized");
 }
@@ -322,7 +329,12 @@ void ClientEngine::main_loop(IGameClient& game) {
     auto& win = rf::Window::instance();
     auto& input = rf::Input::instance();
 
+    log(LogLevel::Info, "[main_loop] Entering main loop");
+    int frameNum = 0;
+
     while (running_ && !win.shouldClose()) {
+        if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " begin");
+
         // Begin frame: snapshot previous input state, then poll new events
         input.beginFrame();
         win.pollEvents();
@@ -336,19 +348,23 @@ void ClientEngine::main_loop(IGameClient& game) {
         }
 
         // Update game logic
+        if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " on_update");
         game.on_update(frameDt_);
 
         // --- Render frame ---
         if (renderDevice_) {
+            if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " clear");
             renderDevice_->setClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             renderDevice_->clear(true, true);
         } else {
             win.beginFrame();
         }
 
+        if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " on_render");
         game.on_render();
 
         if (renderDevice_ && win.backend() != rf::Backend::OpenGL) {
+            if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " present");
             renderDevice_->present();
         } else {
             win.swapBuffers();
@@ -363,7 +379,13 @@ void ClientEngine::main_loop(IGameClient& game) {
             }
             win.updateViewport();
         }
+
+        if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " end");
+        frameNum++;
     }
+
+    log(LogLevel::Info, "[main_loop] Exited loop (running=" + std::to_string(running_) + 
+        " shouldClose=" + std::to_string(win.shouldClose()) + ")");
 }
 
 } // namespace engine

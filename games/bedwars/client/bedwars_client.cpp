@@ -22,8 +22,9 @@
 #include "engine/renderer/batch_2d.hpp"
 #include "engine/renderer/gl_font.hpp"
 #include "engine/client/core/window.hpp"
+#include "engine/client/core/resources.hpp"
+#include "engine/renderer/gpu/render_device.hpp"
 #include <filesystem>
-#include <glad/gl.h>
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -88,9 +89,10 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
     }
 
     // Initialize solid shader and cube mesh for entity rendering (players, items)
-    if (solidShader_.loadFromFiles("shaders/solid.vs", "shaders/solid.fs")) {
-        entityCube_ = rf::GLMesh::createCube(1.0f);
-        entityRenderReady_ = entityCube_.isValid();
+    solidShader_ = resources::load_shader("shaders/solid.vs", "shaders/solid.fs");
+    if (solidShader_ && solidShader_->isValid()) {
+        entityCube_ = resources::create_cube(1.0f);
+        entityRenderReady_ = entityCube_ && entityCube_->isValid();
     }
     if (!entityRenderReady_) {
         engine_->log(engine::LogLevel::Warning, "Entity render resources failed to load");
@@ -104,8 +106,8 @@ void BedWarsClient::on_shutdown() {
     clientScriptEngine_.reset();
     renderPipeline_.shutdown();
     pipelineInitialized_ = false;
-    solidShader_.destroy();
-    entityCube_.destroy();
+    solidShader_.reset();
+    entityCube_.reset();
     entityRenderReady_ = false;
     inputSystem_.reset();
     playerSystem_.reset();
@@ -298,9 +300,10 @@ void BedWarsClient::on_render() {
 
     if (pipelineInitialized_) {
         // ===== PIPELINE PATH: Shadow → HDR Scene → Tone Map =====
+        auto* dev = engine_->render_device();
 
         // 1. Shadow pass
-        glDisable(GL_BLEND);  // No blending during shadow depth
+        if (dev) dev->setBlendMode(rf::BlendMode::None);
         renderPipeline_.beginShadowPass(camera, sunDir);
         if (auto* world = engine_->world()) {
             world->renderShadowPass(*renderPipeline_.shadowShader(), renderPipeline_);
@@ -309,24 +312,26 @@ void BedWarsClient::on_render() {
 
         // 2. HDR scene pass
         renderPipeline_.beginScene();
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
+        if (dev) {
+            dev->setDepthTest(true);
+            dev->setDepthFunc(rf::DepthFunc::Less);
+        }
 
         // Skybox (alpha blending OK for skybox)
-        glEnable(GL_BLEND);
+        if (dev) dev->setBlendMode(rf::BlendMode::Alpha);
         renderer::Skybox::instance().draw(camera);
 
         // Voxel world — disable blending, rely on alpha-test (discard)
-        // This prevents transparent texture edges from causing
-        // order-dependent blending artifacts when camera moves.
-        glDisable(GL_BLEND);
+        if (dev) dev->setBlendMode(rf::BlendMode::None);
         if (auto* world = engine_->world()) {
             world->render(camera, renderPipeline_);
         }
 
         // Render player/item entities and block interaction overlays
-        glEnable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
+        if (dev) {
+            dev->setBlendMode(rf::BlendMode::Alpha);
+            dev->setDepthTest(true);
+        }
         render_players(camera);
         render_items(camera);
         if (auto* bi = engine_->block_interaction()) {
@@ -334,7 +339,7 @@ void BedWarsClient::on_render() {
             bi->render_break_overlay(camera);
         }
 
-        glDisable(GL_DEPTH_TEST);
+        if (dev) dev->setDepthTest(false);
         renderPipeline_.endScene();
 
         // 3. Tone mapping (HDR → LDR)
@@ -342,8 +347,11 @@ void BedWarsClient::on_render() {
 
     } else {
         // ===== FALLBACK: Legacy forward rendering =====
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
+        auto* dev = engine_->render_device();
+        if (dev) {
+            dev->setDepthTest(true);
+            dev->setDepthFunc(rf::DepthFunc::Less);
+        }
 
         renderer::Skybox::instance().draw(camera);
 
@@ -359,7 +367,7 @@ void BedWarsClient::on_render() {
             bi->render_break_overlay(camera);
         }
 
-        glDisable(GL_DEPTH_TEST);
+        if (dev) dev->setDepthTest(false);
     }
     
     // 2D overlay: crosshair + debug info (game-specific)
@@ -394,7 +402,7 @@ void BedWarsClient::render_players(const rf::Camera& camera) {
 
     rf::Mat4 vp = camera.viewProjectionMatrix();
 
-    solidShader_.bind();
+    solidShader_->bind();
 
     for (const auto& [id, player] : players_) {
         if (id == localPlayerId_) continue;  // Don't render self
@@ -409,12 +417,12 @@ void BedWarsClient::render_players(const rf::Camera& camera) {
                        * glm::scale(rf::Mat4(1.0f), rf::Vec3(0.6f, 1.8f, 0.6f));
         rf::Mat4 mvp = vp * model;
 
-        solidShader_.setMat4("mvp", mvp);
-        solidShader_.setVec4("color", color.normalized());
-        entityCube_.draw();
+        solidShader_->setMat4("mvp", mvp);
+        solidShader_->setVec4("color", color.normalized());
+        entityCube_->draw();
     }
 
-    solidShader_.unbind();
+    solidShader_->unbind();
 }
 
 void BedWarsClient::render_items(const rf::Camera& camera) {
@@ -422,7 +430,7 @@ void BedWarsClient::render_items(const rf::Camera& camera) {
 
     rf::Mat4 vp = camera.viewProjectionMatrix();
 
-    solidShader_.bind();
+    solidShader_->bind();
 
     for (const auto& [id, item] : items_) {
         rf::Color color = rf::Color{255, 203, 0, 255};  // GOLD
@@ -432,12 +440,12 @@ void BedWarsClient::render_items(const rf::Camera& camera) {
                        * glm::scale(rf::Mat4(1.0f), rf::Vec3(0.3f, 0.3f, 0.3f));
         rf::Mat4 mvp = vp * model;
 
-        solidShader_.setMat4("mvp", mvp);
-        solidShader_.setVec4("color", color.normalized());
-        entityCube_.draw();
+        solidShader_->setMat4("mvp", mvp);
+        solidShader_->setVec4("color", color.normalized());
+        entityCube_->draw();
     }
 
-    solidShader_.unbind();
+    solidShader_->unbind();
 }
 
 void BedWarsClient::render_debug_info() {

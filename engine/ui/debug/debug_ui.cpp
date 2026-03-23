@@ -10,12 +10,19 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#if RAYFLOW_HAS_DX11
+#include <imgui_impl_dx11.h>
+#include <d3d11.h>
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include <cmath>
 #include <cstdio>
 
 namespace ui::debug {
+
+static rf::Backend s_activeBackend = rf::Backend::OpenGL;
 
 // ============================================================================
 // Cached frame stats (updated twice per second to avoid flicker)
@@ -42,7 +49,9 @@ static void update_frame_stats(const UIViewModel& vm) {
 // Lifecycle
 // ============================================================================
 
-void init(GLFWwindow* window) {
+void init(GLFWwindow* window, rf::Backend backend, void* dx11Device, void* dx11Context) {
+    s_activeBackend = backend;
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
@@ -61,28 +70,60 @@ void init(GLFWwindow* window) {
     style.WindowBorderSize = 1.0f;
     style.Alpha = 0.95f;
 
-    // GLFW + OpenGL3 backends (GL 4.1 core on macOS)
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 410 core");
+    if (backend == rf::Backend::OpenGL) {
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+        ImGui_ImplOpenGL3_Init("#version 410 core");
+    }
+#if RAYFLOW_HAS_DX11
+    else if (backend == rf::Backend::DirectX11) {
+        ImGui_ImplGlfw_InitForOther(window, true);
+        if (dx11Device && dx11Context) {
+            ImGui_ImplDX11_Init(static_cast<ID3D11Device*>(dx11Device),
+                                static_cast<ID3D11DeviceContext*>(dx11Context));
+        }
+    }
+#endif
 
-    std::fprintf(stderr, "[DebugUI] Dear ImGui %s initialized\n", IMGUI_VERSION);
+    std::fprintf(stderr, "[DebugUI] Dear ImGui %s initialized (backend: %s)\n",
+                 IMGUI_VERSION, backend == rf::Backend::OpenGL ? "OpenGL" : "DX11");
 }
 
 void shutdown() {
-    ImGui_ImplOpenGL3_Shutdown();
+    if (s_activeBackend == rf::Backend::OpenGL) {
+        ImGui_ImplOpenGL3_Shutdown();
+    }
+#if RAYFLOW_HAS_DX11
+    else if (s_activeBackend == rf::Backend::DirectX11) {
+        ImGui_ImplDX11_Shutdown();
+    }
+#endif
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 }
 
 void new_frame() {
-    ImGui_ImplOpenGL3_NewFrame();
+    if (s_activeBackend == rf::Backend::OpenGL) {
+        ImGui_ImplOpenGL3_NewFrame();
+    }
+#if RAYFLOW_HAS_DX11
+    else if (s_activeBackend == rf::Backend::DirectX11) {
+        ImGui_ImplDX11_NewFrame();
+    }
+#endif
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
 void render_draw_data() {
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (s_activeBackend == rf::Backend::OpenGL) {
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
+#if RAYFLOW_HAS_DX11
+    else if (s_activeBackend == rf::Backend::DirectX11) {
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    }
+#endif
 }
 
 // ============================================================================

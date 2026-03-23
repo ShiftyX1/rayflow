@@ -3,6 +3,7 @@
 #include "block_model_loader.hpp"
 #include "world.hpp"
 #include "engine/client/core/config.hpp"
+#include "engine/client/core/resources.hpp"
 #include "../shared/block_shape.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/core/logging.hpp"
@@ -65,7 +66,7 @@ Chunk& Chunk::operator=(Chunk&& other) noexcept {
 
 void Chunk::cleanup_mesh() {
     if (has_mesh_) {
-        mesh_.destroy();
+        mesh_.reset();
         has_mesh_ = false;
     }
 }
@@ -891,13 +892,19 @@ void Chunk::upload_mesh(ChunkMeshData&& data) {
     int vtxCount = static_cast<int>(data.vertices.size() / 3);
 
     const auto t_up0 = std::chrono::steady_clock::now();
-    mesh_.upload(vtxCount,
-                 data.vertices.data(),
-                 data.texcoords.data(),
-                 data.texcoords2.data(),
-                 data.normals.data(),
-                 data.colors.data(),
-                 false);
+    if (!mesh_) {
+        auto* dev = resources::render_device();
+        if (dev) mesh_ = dev->createMesh();
+    }
+    if (mesh_) {
+        mesh_->upload(vtxCount,
+                     data.vertices.data(),
+                     data.texcoords.data(),
+                     data.texcoords2.data(),
+                     data.normals.data(),
+                     data.colors.data(),
+                     false);
+    }
     const auto t_up1 = std::chrono::steady_clock::now();
 
     const float upload_ms = std::chrono::duration<float, std::milli>(t_up1 - t_up0).count();
@@ -934,13 +941,13 @@ void Chunk::upload_mesh(ChunkMeshData&& data) {
 }
 
 void Chunk::render() const {
-    if (has_mesh_) {
-        mesh_.draw();
+    if (has_mesh_ && mesh_) {
+        mesh_->draw();
     }
 }
 
-void Chunk::render(rf::GLShader& shader) const {
-    if (has_mesh_) {
+void Chunk::render(rf::IShader& shader) const {
+    if (has_mesh_ && mesh_) {
         // Set model matrix (chunk is at world_position_, no rotation/scale)
         rf::Mat4 model = glm::translate(rf::Mat4(1.0f), rf::Vec3(0.0f)); // already in world coords
         shader.setMat4("matModel", model);
@@ -948,7 +955,7 @@ void Chunk::render(rf::GLShader& shader) const {
         rf::Mat4 normalMat = glm::transpose(glm::inverse(model));
         shader.setMat4("matNormal", normalMat);
         
-        mesh_.draw();
+        mesh_->draw();
     }
 }
 

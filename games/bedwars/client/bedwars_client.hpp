@@ -9,8 +9,8 @@
 #include "engine/ui/runtime/ui_view_model.hpp"
 #include "engine/ui/runtime/ui_frame.hpp"
 #include "engine/renderer/render_pipeline.hpp"
-#include "engine/renderer/gl_shader.hpp"
-#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
 
 #include "../shared/protocol/messages.hpp"
 
@@ -250,8 +250,8 @@ private:
     bool pipelineInitialized_{false};
     
     // Solid color shader + cube mesh for entity rendering
-    rf::GLShader solidShader_;
-    rf::GLMesh   entityCube_;
+    std::unique_ptr<rf::IShader> solidShader_;
+    std::unique_ptr<rf::IMesh>   entityCube_;
     bool         entityRenderReady_{false};
     
     // Debug

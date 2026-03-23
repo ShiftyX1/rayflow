@@ -5,13 +5,16 @@
 #include "engine/ecs/components.hpp"
 #include "engine/core/player_constants.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_texture.hpp"
-#include "engine/renderer/gl_shader.hpp"
-#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
 #include "engine/renderer/camera.hpp"
 
 #include <optional>
 #include <array>
+#include <memory>
+
+namespace rf { class RenderDevice; }
 
 namespace voxel {
 
@@ -46,7 +49,7 @@ public:
         std::uint8_t face{0};
     };
 
-    bool init();
+    bool init(rf::RenderDevice* device);
     void destroy();
     
     void update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir, 
@@ -85,14 +88,15 @@ private:
     std::optional<BreakRequest> outgoing_break_;
     std::optional<PlaceRequest> outgoing_place_;
 
-    std::array<rf::GLTexture, DESTROY_STAGE_COUNT> destroy_textures_;
+    std::array<std::unique_ptr<rf::ITexture>, DESTROY_STAGE_COUNT> destroy_textures_;
     bool textures_loaded_{false};
 
     // Rendering resources (loaded in init())
-    rf::GLShader solidShader_;
-    rf::GLShader overlayShader_;
-    rf::GLMesh   wireframeCube_;
-    rf::GLMesh   overlayCube_;    // Solid cube with UVs for destroy overlay
+    rf::RenderDevice* device_{nullptr};
+    std::unique_ptr<rf::IShader> solidShader_;
+    std::unique_ptr<rf::IShader> overlayShader_;
+    std::unique_ptr<rf::IMesh>   wireframeCube_;
+    std::unique_ptr<rf::IMesh>   overlayCube_;
     bool         render_resources_loaded_{false};
 };
 
