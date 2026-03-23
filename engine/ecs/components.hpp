@@ -7,8 +7,8 @@
 #include "engine/core/player_constants.hpp"
 
 namespace rf {
-    class GLMesh;
-    class GLShader;
+    class IMesh;
+    class IShader;
 }
 
 namespace ecs {
@@ -75,16 +75,16 @@ struct RigidBody {
 // mesh/shader pointers are non-owning — the resource system owns the lifetime.
 
 struct MeshComponent {
-    rf::GLMesh*   mesh{nullptr};      // If null, RenderSystem uses default cube
-    rf::GLShader* shader{nullptr};    // If null, RenderSystem uses solid-color shader
+    rf::IMesh*    mesh{nullptr};      // If null, RenderSystem uses default cube
+    rf::IShader*  shader{nullptr};    // If null, RenderSystem uses solid-color shader
     rf::Color     color{rf::Color::White()};
     bool          cast_shadow{true};
     bool          visible{true};
 };
 
 struct ModelComponent {
-    rf::GLMesh*   mesh{nullptr};
-    rf::GLShader* shader{nullptr};
+    rf::IMesh*    mesh{nullptr};
+    rf::IShader*  shader{nullptr};
     rf::Color     color{rf::Color::White()};
     bool          visible{true};
 };

@@ -9,6 +9,7 @@
 
 #include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
 
 #include <glad/gl.h>
 
@@ -18,20 +19,10 @@
 
 namespace rf {
 
-class RAYFLOW_CLIENT_API GLMesh {
+class RAYFLOW_CLIENT_API GLMesh : public IMesh {
 public:
-    /// Vertex attribute indices (must match shader layout).
-    /// These correspond to the voxel shader's `in` variables.
-    enum Attrib : GLuint {
-        ATTRIB_POSITION   = 0,  // vec3 vertexPosition
-        ATTRIB_TEXCOORD   = 1,  // vec2 vertexTexCoord
-        ATTRIB_TEXCOORD2  = 2,  // vec2 vertexTexCoord2 (foliageMask, AO)
-        ATTRIB_NORMAL     = 3,  // vec3 vertexNormal
-        ATTRIB_COLOR      = 4,  // vec4 vertexColor (RGBA ubyte, normalized)
-    };
-
     GLMesh() = default;
-    ~GLMesh();
+    ~GLMesh() override;
 
     // Non-copyable, movable
     GLMesh(const GLMesh&) = delete;
@@ -39,7 +30,7 @@ public:
     GLMesh(GLMesh&& other) noexcept;
     GLMesh& operator=(GLMesh&& other) noexcept;
 
-    // ----- Upload methods -----
+    // ----- Upload methods (IMesh interface) -----
 
     /// Upload interleaved or separate-buffer voxel chunk data.
     /// Uses the 5-attribute layout: position(3f), texcoord(2f), texcoord2(2f), normal(3f), color(4ub).
@@ -56,7 +47,7 @@ public:
                 const float* texcoords2 = nullptr,
                 const float* normals = nullptr,
                 const std::uint8_t* colors = nullptr,
-                bool dynamic = false);
+                bool dynamic = false) override;
 
     /// Re-upload all data to existing VBOs (orphaning for dynamic meshes).
     /// Same parameter layout as upload(). Only valid if upload() was called previously.
@@ -65,24 +56,26 @@ public:
                 const float* texcoords = nullptr,
                 const float* texcoords2 = nullptr,
                 const float* normals = nullptr,
-                const std::uint8_t* colors = nullptr);
+                const std::uint8_t* colors = nullptr) override;
 
     /// Upload a simple position-only mesh (e.g. skybox cube, fullscreen quad).
-    void uploadPositionOnly(const float* positions, int vertexCount);
+    void uploadPositionOnly(const float* positions, int vertexCount) override;
 
     /// Destroy VAO and all VBOs.
-    void destroy();
+    void destroy() override;
 
     // ----- Drawing -----
 
-    /// Draw the mesh (assumes shader is already bound).
-    /// @param mode  GL primitive mode (GL_TRIANGLES by default).
-    void draw(GLenum mode = GL_TRIANGLES) const;
+    /// Draw the mesh with abstract primitive type (IMesh interface).
+    void draw(PrimitiveType mode = PrimitiveType::Triangles) const override;
+
+    /// Draw with raw OpenGL primitive mode (GL-specific, for backward compat).
+    void drawGL(GLenum mode = GL_TRIANGLES) const;
 
     // ----- Accessors -----
 
-    bool isValid() const { return vao_ != 0; }
-    int vertexCount() const { return vertexCount_; }
+    bool isValid() const override { return vao_ != 0; }
+    int vertexCount() const override { return vertexCount_; }
     GLuint vao() const { return vao_; }
 
     // ----- Utility mesh generators -----

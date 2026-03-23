@@ -21,6 +21,10 @@ namespace voxel {
     class BlockInteraction;
 }
 
+namespace rf {
+    class RenderDevice;
+}
+
 namespace ui {
     class UIManager;
     struct UIViewModel;
@@ -148,6 +152,11 @@ public:
     virtual int window_height() const = 0;
 
     virtual void request_shutdown() = 0;
+
+    // --- Rendering ---
+
+    /// Get the render device. Returns nullptr if rendering not initialized.
+    virtual rf::RenderDevice* render_device() { return nullptr; }
 
     // --- Voxel World (optional module) ---
     

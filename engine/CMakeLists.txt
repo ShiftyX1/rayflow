@@ -152,6 +152,8 @@ add_library(engine_client SHARED
     ecs/systems/camera2d_system.cpp
     
     # Renderer (universal - moved from client/renderer/)
+    renderer/gpu/render_device.cpp
+    renderer/gl_render_device.cpp
     renderer/gl_shader.cpp
     renderer/gl_texture.cpp
     renderer/gl_framebuffer.cpp

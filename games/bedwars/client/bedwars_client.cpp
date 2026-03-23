@@ -78,11 +78,13 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
 
     // Initialize render pipeline (HDR + shadows + tone mapping)
     auto& win = rf::Window::instance();
-    if (renderPipeline_.init(win.width(), win.height())) {
-        pipelineInitialized_ = true;
-        engine_->log(engine::LogLevel::Info, "Render pipeline initialized");
-    } else {
-        engine_->log(engine::LogLevel::Warning, "Render pipeline failed — falling back to legacy");
+    if (auto* device = engine_->render_device()) {
+        if (renderPipeline_.init(*device, win.width(), win.height())) {
+            pipelineInitialized_ = true;
+            engine_->log(engine::LogLevel::Info, "Render pipeline initialized");
+        } else {
+            engine_->log(engine::LogLevel::Warning, "Render pipeline failed — falling back to legacy");
+        }
     }
 
     // Initialize solid shader and cube mesh for entity rendering (players, items)
@@ -301,7 +303,7 @@ void BedWarsClient::on_render() {
         glDisable(GL_BLEND);  // No blending during shadow depth
         renderPipeline_.beginShadowPass(camera, sunDir);
         if (auto* world = engine_->world()) {
-            world->renderShadowPass(renderPipeline_.shadowShader(), renderPipeline_);
+            world->renderShadowPass(*renderPipeline_.shadowShader(), renderPipeline_);
         }
         renderPipeline_.endShadowPass();
 
@@ -412,7 +414,7 @@ void BedWarsClient::render_players(const rf::Camera& camera) {
         entityCube_.draw();
     }
 
-    rf::GLShader::unbind();
+    solidShader_.unbind();
 }
 
 void BedWarsClient::render_items(const rf::Camera& camera) {
@@ -435,7 +437,7 @@ void BedWarsClient::render_items(const rf::Camera& camera) {
         entityCube_.draw();
     }
 
-    rf::GLShader::unbind();
+    solidShader_.unbind();
 }
 
 void BedWarsClient::render_debug_info() {

@@ -57,38 +57,51 @@ bool Frustum::testAABB(const Vec3& minPt, const Vec3& maxPt) const {
 // Init / Shutdown
 // =============================================================================
 
-bool RenderPipeline::init(int width, int height) {
+bool RenderPipeline::init(RenderDevice& device, int width, int height) {
+    device_ = &device;
     width_ = width;
     height_ = height;
 
     // Create HDR scene FBO (RGBA16F + depth texture)
-    FBAttachment hdrAtt;
-    hdrAtt.internalFormat = GL_RGBA16F;
-    hdrAtt.filter = GL_LINEAR;
-    if (!sceneFBO_.createMRT(width, height, {hdrAtt}, true)) {
+    sceneFBO_ = device.createFramebuffer();
+    AttachmentDesc hdrAtt;
+    hdrAtt.format = TextureFormat::RGBA16F;
+    hdrAtt.filter = TextureFilter::Linear;
+    if (!sceneFBO_->createMRT(width, height, {hdrAtt}, true)) {
         TraceLog(LOG_ERROR, "[RenderPipeline] Failed to create HDR scene FBO");
         return false;
     }
 
     // Create shadow map FBO (depth-only)
-    if (!shadowFBO_.createDepthOnly(shadowMapSize_, shadowMapSize_)) {
+    shadowFBO_ = device.createFramebuffer();
+    if (!shadowFBO_->createDepthOnly(shadowMapSize_, shadowMapSize_)) {
         TraceLog(LOG_ERROR, "[RenderPipeline] Failed to create shadow FBO");
         return false;
     }
 
     // Load shadow shader
-    if (!shadowShader_.loadFromFiles("shaders/shadow.vs", "shaders/shadow.fs")) {
+    shadowShader_ = device.createShader();
+    if (!shadowShader_->loadFromFiles("shaders/shadow.vs", "shaders/shadow.fs")) {
         TraceLog(LOG_WARNING, "[RenderPipeline] Shadow shader failed to load — shadows disabled");
     }
 
     // Load tonemap shader
-    if (!tonemapShader_.loadFromFiles("shaders/tonemap.vs", "shaders/tonemap.fs")) {
+    tonemapShader_ = device.createShader();
+    if (!tonemapShader_->loadFromFiles("shaders/tonemap.vs", "shaders/tonemap.fs")) {
         TraceLog(LOG_ERROR, "[RenderPipeline] Tonemap shader failed to load");
         return false;
     }
 
-    // Create fullscreen triangle
-    fullscreenTriangle_ = GLMesh::createFullscreenTriangle();
+    // Create fullscreen triangle (one large triangle covering clip space)
+    fullscreenTriangle_ = device.createMesh();
+    {
+        float positions[] = {
+            -1.0f, -1.0f, 0.0f,
+             3.0f, -1.0f, 0.0f,
+            -1.0f,  3.0f, 0.0f,
+        };
+        fullscreenTriangle_->uploadPositionOnly(positions, 3);
+    }
 
     initialized_ = true;
     TraceLog(LOG_INFO, "[RenderPipeline] Initialized (%dx%d, shadow=%d)", width, height, shadowMapSize_);
@@ -96,11 +109,12 @@ bool RenderPipeline::init(int width, int height) {
 }
 
 void RenderPipeline::shutdown() {
-    sceneFBO_.destroy();
-    shadowFBO_.destroy();
-    shadowShader_.destroy();
-    tonemapShader_.destroy();
-    fullscreenTriangle_.destroy();
+    sceneFBO_.reset();
+    shadowFBO_.reset();
+    shadowShader_.reset();
+    tonemapShader_.reset();
+    fullscreenTriangle_.reset();
+    device_ = nullptr;
     initialized_ = false;
 }
 
@@ -108,7 +122,7 @@ void RenderPipeline::resize(int width, int height) {
     if (width == width_ && height == height_) return;
     width_ = width;
     height_ = height;
-    sceneFBO_.resize(width, height);
+    sceneFBO_->resize(width, height);
     TraceLog(LOG_INFO, "[RenderPipeline] Resized to %dx%d", width, height);
 }
 
@@ -117,7 +131,7 @@ void RenderPipeline::resize(int width, int height) {
 // =============================================================================
 
 void RenderPipeline::beginShadowPass(const Camera& camera, const Vec3& sunDir) {
-    if (!shadowShader_.isValid()) return;
+    if (!shadowShader_ || !shadowShader_->isValid()) return;
 
 
     Vec3 lightDir = glm::normalize(sunDir);
@@ -146,35 +160,34 @@ void RenderPipeline::beginShadowPass(const Camera& camera, const Vec3& sunDir) {
     lightSpaceMatrix_ = lightProj * lightView;
 
     // Bind shadow FBO
-    glGetIntegerv(GL_VIEWPORT, savedViewport_);
-    shadowFBO_.begin();
-    glClear(GL_DEPTH_BUFFER_BIT);
+    device_->getViewport(savedViewport_);
+    shadowFBO_->begin();
+    device_->clear(false, true);
 
     // Depth testing for shadow
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+    device_->setDepthTest(true);
+    device_->setDepthFunc(DepthFunc::Less);
 
     // Slight polygon offset to reduce shadow acne
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0f, 4.0f);
+    device_->setPolygonOffset(true, 2.0f, 4.0f);
 
-    shadowShader_.bind();
-    shadowShader_.setMat4("lightSpaceMatrix", lightSpaceMatrix_);
+    shadowShader_->bind();
+    shadowShader_->setMat4("lightSpaceMatrix", lightSpaceMatrix_);
 }
 
 void RenderPipeline::endShadowPass() {
-    if (!shadowShader_.isValid()) return;
+    if (!shadowShader_ || !shadowShader_->isValid()) return;
 
-    GLShader::unbind();
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    shadowFBO_.end();
+    shadowShader_->unbind();
+    device_->setPolygonOffset(false);
+    shadowFBO_->end();
 
     // Restore viewport
-    glViewport(savedViewport_[0], savedViewport_[1], savedViewport_[2], savedViewport_[3]);
+    device_->setViewport(savedViewport_[0], savedViewport_[1], savedViewport_[2], savedViewport_[3]);
 }
 
 void RenderPipeline::bindShadowMap(int unit) const {
-    shadowFBO_.bindDepthTexture(unit);
+    shadowFBO_->bindDepthTexture(unit);
 }
 
 // =============================================================================
@@ -182,15 +195,15 @@ void RenderPipeline::bindShadowMap(int unit) const {
 // =============================================================================
 
 void RenderPipeline::beginScene() {
-    glGetIntegerv(GL_VIEWPORT, savedViewport_);
-    sceneFBO_.begin();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    device_->getViewport(savedViewport_);
+    sceneFBO_->begin();
+    device_->setClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    device_->clear(true, true);
 }
 
 void RenderPipeline::endScene() {
-    sceneFBO_.end();
-    glViewport(savedViewport_[0], savedViewport_[1], savedViewport_[2], savedViewport_[3]);
+    sceneFBO_->end();
+    device_->setViewport(savedViewport_[0], savedViewport_[1], savedViewport_[2], savedViewport_[3]);
 }
 
 // =============================================================================
@@ -198,20 +211,20 @@ void RenderPipeline::endScene() {
 // =============================================================================
 
 void RenderPipeline::postProcess(float exposure) {
-    glDisable(GL_DEPTH_TEST);
+    device_->setDepthTest(false);
 
     // Bind tonemap shader
-    tonemapShader_.bind();
-    tonemapShader_.setFloat("exposure", exposure);
-    tonemapShader_.setInt("hdrBuffer", 0);
+    tonemapShader_->bind();
+    tonemapShader_->setFloat("exposure", exposure);
+    tonemapShader_->setInt("hdrBuffer", 0);
 
     // Bind HDR scene color texture
-    sceneFBO_.bindColorTexture(0, 0);
+    sceneFBO_->bindColorTexture(0, 0);
 
     // Draw fullscreen triangle
-    fullscreenTriangle_.draw();
+    fullscreenTriangle_->draw();
 
-    GLShader::unbind();
+    tonemapShader_->unbind();
 }
 
 // =============================================================================

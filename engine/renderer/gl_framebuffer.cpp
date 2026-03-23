@@ -52,6 +52,53 @@ GLFramebuffer& GLFramebuffer::operator=(GLFramebuffer&& other) noexcept {
 }
 
 // ============================================================================
+// Format conversion helpers (abstract ↔ GL)
+// ============================================================================
+
+namespace {
+    GLenum toGLInternalFormat(TextureFormat fmt) {
+        switch (fmt) {
+            case TextureFormat::RGBA8:   return GL_RGBA8;
+            case TextureFormat::RGBA16F: return GL_RGBA16F;
+            case TextureFormat::RGBA32F: return GL_RGBA32F;
+            case TextureFormat::RGB8:    return GL_RGB8;
+            case TextureFormat::R8:      return GL_R8;
+            case TextureFormat::RG8:     return GL_RG8;
+        }
+        return GL_RGBA8;
+    }
+
+    GLenum toGLFilter(TextureFilter f) {
+        switch (f) {
+            case TextureFilter::Nearest:       return GL_NEAREST;
+            case TextureFilter::Linear:        return GL_LINEAR;
+            case TextureFilter::NearestMipmap: return GL_NEAREST_MIPMAP_LINEAR;
+            case TextureFilter::LinearMipmap:  return GL_LINEAR_MIPMAP_LINEAR;
+        }
+        return GL_LINEAR;
+    }
+
+    GLenum toGLWrap(TextureWrap w) {
+        switch (w) {
+            case TextureWrap::Repeat:         return GL_REPEAT;
+            case TextureWrap::ClampToEdge:    return GL_CLAMP_TO_EDGE;
+            case TextureWrap::MirroredRepeat: return GL_MIRRORED_REPEAT;
+        }
+        return GL_CLAMP_TO_EDGE;
+    }
+
+    GLenum toGLDepthFormat(DepthFormat df) {
+        switch (df) {
+            case DepthFormat::Depth16:         return GL_DEPTH_COMPONENT16;
+            case DepthFormat::Depth24:         return GL_DEPTH_COMPONENT24;
+            case DepthFormat::Depth32F:        return GL_DEPTH_COMPONENT32F;
+            case DepthFormat::Depth24Stencil8: return GL_DEPTH24_STENCIL8;
+        }
+        return GL_DEPTH_COMPONENT24;
+    }
+} // anonymous namespace
+
+// ============================================================================
 // Simple single-attachment create (backwards compatible)
 // ============================================================================
 
@@ -59,16 +106,44 @@ bool GLFramebuffer::create(int width, int height, bool /*withDepth*/) {
     FBAttachment att;
     att.internalFormat = GL_RGBA8;
     att.filter = GL_LINEAR;
-    return createMRT(width, height, {att}, false);
+    return createMRT_GL(width, height, {att}, false);
 }
 
 // ============================================================================
-// MRT / HDR create
+// Interface MRT create (converts AttachmentDesc → FBAttachment)
 // ============================================================================
 
 bool GLFramebuffer::createMRT(int width, int height,
-                               const std::vector<FBAttachment>& attachments,
+                               const std::vector<AttachmentDesc>& attachments,
                                bool depthAsTexture)
+{
+    std::vector<FBAttachment> glAtts;
+    glAtts.reserve(attachments.size());
+    for (const auto& a : attachments) {
+        FBAttachment ga;
+        ga.internalFormat = toGLInternalFormat(a.format);
+        ga.filter         = toGLFilter(a.filter);
+        ga.wrap           = toGLWrap(a.wrap);
+        glAtts.push_back(ga);
+    }
+    return createMRT_GL(width, height, glAtts, depthAsTexture);
+}
+
+// ============================================================================
+// Interface depth-only create (converts DepthFormat → GLenum)
+// ============================================================================
+
+bool GLFramebuffer::createDepthOnly(int width, int height, DepthFormat depthFormat) {
+    return createDepthOnly_GL(width, height, toGLDepthFormat(depthFormat));
+}
+
+// ============================================================================
+// GL-specific MRT create
+// ============================================================================
+
+bool GLFramebuffer::createMRT_GL(int width, int height,
+                                  const std::vector<FBAttachment>& attachments,
+                                  bool depthAsTexture)
 {
     destroy();
 
@@ -157,7 +232,7 @@ bool GLFramebuffer::createMRT(int width, int height,
 // Depth-only create (shadow maps)
 // ============================================================================
 
-bool GLFramebuffer::createDepthOnly(int width, int height, GLenum depthFormat) {
+bool GLFramebuffer::createDepthOnly_GL(int width, int height, GLenum depthFormat) {
     destroy();
 
     width_ = width;
@@ -212,10 +287,10 @@ bool GLFramebuffer::createDepthOnly(int width, int height, GLenum depthFormat) {
 
 bool GLFramebuffer::resize(int width, int height) {
     if (depthOnly_) {
-        return createDepthOnly(width, height, depthFormat_);
+        return createDepthOnly_GL(width, height, depthFormat_);
     }
     if (!attachmentDescs_.empty()) {
-        return createMRT(width, height, attachmentDescs_, depthAsTexture_);
+        return createMRT_GL(width, height, attachmentDescs_, depthAsTexture_);
     }
     return create(width, height, hasDepth_);
 }
@@ -249,7 +324,7 @@ void GLFramebuffer::bind() const {
     glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
 }
 
-void GLFramebuffer::unbind() {
+void GLFramebuffer::unbind() const {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -285,6 +360,10 @@ GLuint GLFramebuffer::colorTexture(int index) const {
         return colorTextures_[index];
     }
     return 0;
+}
+
+std::uintptr_t GLFramebuffer::nativeColorHandle(int index) const {
+    return static_cast<std::uintptr_t>(colorTexture(index));
 }
 
 } // namespace rf

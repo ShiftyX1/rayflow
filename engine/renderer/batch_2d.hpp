@@ -27,7 +27,7 @@
 
 namespace rf {
 
-class GLTexture;
+class ITexture;
 class GLFont;
 
 class RAYFLOW_CLIENT_API Batch2D {
@@ -70,13 +70,13 @@ public:
     // ----- Textures / Sprites -----
 
     /// Draw a textured quad (source rect → destination rect) with tint.
-    /// @param texture  Pointer to bound GLTexture.
+    /// @param texture  Pointer to any ITexture (GLTexture, DX11Texture, etc.).
     /// @param src      Source rectangle in texture-pixel coords.
     /// @param dst      Destination rectangle in screen-pixel coords.
     /// @param origin   Pivot for rotation (relative to dst).
     /// @param rotation Rotation in degrees.
     /// @param tint     Multiplicative tint.
-    void drawTexture(const GLTexture* texture,
+    void drawTexture(const ITexture* texture,
                      Rect src, Rect dst,
                      Vec2 origin = {0,0}, float rotation = 0.0f,
                      const Color& tint = Color::White());

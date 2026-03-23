@@ -71,7 +71,7 @@ public:
     void render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const;
 
     /// Render shadow depth pass (call between pipeline.beginShadowPass/endShadowPass).
-    void renderShadowPass(rf::GLShader& shadowShader, rf::RenderPipeline& pipeline) const;
+    void renderShadowPass(rf::IShader& shadowShader, rf::RenderPipeline& pipeline) const;
     
     void set_render_distance(int distance) { render_distance_ = distance; }
     int get_render_distance() const { return render_distance_; }

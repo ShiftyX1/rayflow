@@ -8,6 +8,7 @@
 #include "engine/modules/voxel/client/block_registry.hpp"
 #include "engine/modules/voxel/client/block_model_loader.hpp"
 #include "engine/renderer/skybox.hpp"
+#include "engine/renderer/gpu/render_device.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
 
 #include "engine/client/core/window.hpp"
@@ -222,13 +223,30 @@ void ClientEngine::init_window() {
     // Initialize input system with the GLFW window
     rf::Input::instance().init(win.handle());
 
-    // Set initial OpenGL state (must be called from engine_client DLL where glad is loaded)
-    win.setupDefaultGLState();
+    renderDevice_ = rf::createRenderDevice(win.backend());
+    if (!renderDevice_) {
+        log(LogLevel::Error, "Failed to create render device");
+        running_ = false;
+        return;
+    }
+    renderDevice_->init(win.nativeWindowHandle(), win.width(), win.height());
 
-    log(LogLevel::Info, "Window initialized (GLFW + OpenGL)");
+    // Set initial GPU state (depth test, blending)
+    if (win.backend() == rf::Backend::OpenGL) {
+        win.setupDefaultGLState();
+    } else {
+        renderDevice_->setDepthTest(true);
+        renderDevice_->setBlendMode(rf::BlendMode::Alpha);
+    }
+
+    log(LogLevel::Info, "Window and render device initialized");
 }
 
 void ClientEngine::close_window() {
+    if (renderDevice_) {
+        renderDevice_->shutdown();
+        renderDevice_.reset();
+    }
     rf::Window::instance().shutdown();
 }
 
@@ -258,7 +276,9 @@ void ClientEngine::init_subsystems() {
     }
     
     // Initialize skybox
-    renderer::Skybox::instance().init();
+    if (renderDevice_) {
+        renderer::Skybox::instance().init(*renderDevice_);
+    }
     
     // Voxel: block interaction created lazily on init_world()
     // (will be initialized when the game calls init_world())
@@ -319,16 +339,28 @@ void ClientEngine::main_loop(IGameClient& game) {
         game.on_update(frameDt_);
 
         // --- Render frame ---
-        win.beginFrame();
+        if (renderDevice_) {
+            renderDevice_->setClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            renderDevice_->clear(true, true);
+        } else {
+            win.beginFrame();
+        }
 
         game.on_render();
 
-        win.swapBuffers();
+        if (renderDevice_ && win.backend() != rf::Backend::OpenGL) {
+            renderDevice_->present();
+        } else {
+            win.swapBuffers();
+        }
 
         // Handle window resize
         if (win.isResized()) {
             config_.windowWidth = win.width();
             config_.windowHeight = win.height();
+            if (renderDevice_) {
+                renderDevice_->onResize(win.width(), win.height());
+            }
             win.updateViewport();
         }
     }

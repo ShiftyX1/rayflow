@@ -75,6 +75,8 @@ public:
     int window_height() const override { return config_.windowHeight; }
     
     void request_shutdown() override { stop(); }
+
+    rf::RenderDevice* render_device() override { return renderDevice_.get(); }
     
     voxel::World* world() override;
     const voxel::World* world() const override;
@@ -114,6 +116,9 @@ private:
     
     // UI subsystem (owned by engine)
     std::unique_ptr<ui::UIManager> uiManager_;
+
+    // Render device (owned by engine)
+    std::unique_ptr<rf::RenderDevice> renderDevice_;
 };
 
 } // namespace engine

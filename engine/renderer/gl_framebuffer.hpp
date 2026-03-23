@@ -11,6 +11,7 @@
 // =============================================================================
 
 #include "engine/core/export.hpp"
+#include "engine/renderer/gpu/gpu_framebuffer.hpp"
 
 #include <glad/gl.h>
 #include <vector>
@@ -19,17 +20,17 @@ namespace rf {
 
 class GLTexture; // forward decl — we expose raw texture IDs, not owning ptrs
 
-/// Describes a single color attachment.
+/// Describes a single color attachment (GL-specific).
 struct FBAttachment {
     GLenum internalFormat = GL_RGBA8;       ///< e.g. GL_RGBA16F, GL_RGBA8
     GLenum filter         = GL_LINEAR;      ///< GL_LINEAR or GL_NEAREST
     GLenum wrap           = GL_CLAMP_TO_EDGE;
 };
 
-class RAYFLOW_CLIENT_API GLFramebuffer {
+class RAYFLOW_CLIENT_API GLFramebuffer : public IFramebuffer {
 public:
     GLFramebuffer() = default;
-    ~GLFramebuffer();
+    ~GLFramebuffer() override;
 
     // Non-copyable, movable
     GLFramebuffer(const GLFramebuffer&) = delete;
@@ -37,66 +38,49 @@ public:
     GLFramebuffer(GLFramebuffer&& other) noexcept;
     GLFramebuffer& operator=(GLFramebuffer&& other) noexcept;
 
-    // ---- Simple single-attachment create (backwards compatible) ----
+    // ---- IFramebuffer interface ----
 
-    /// Create an FBO with a color attachment and optional depth attachment.
-    /// @param width, height   Dimensions in pixels.
-    /// @param withDepth       Create a depth renderbuffer.
-    /// @return true on success.
-    bool create(int width, int height, bool withDepth = true);
+    bool create(int width, int height, bool withDepth = true) override;
 
-    // ---- MRT / HDR create ----
-
-    /// Create an FBO with multiple color attachments.
-    /// @param attachments  Vector of attachment descriptors (format, filter).
-    /// @param depthAsTexture  If true, depth is stored as a texture (readable in shaders).
-    ///                        If false, depth is a renderbuffer (faster, write-only).
+    /// IFramebuffer MRT create with abstract attachment descriptors.
     bool createMRT(int width, int height,
-                   const std::vector<FBAttachment>& attachments,
-                   bool depthAsTexture = false);
+                   const std::vector<AttachmentDesc>& attachments,
+                   bool depthAsTexture = false) override;
 
-    // ---- Depth-only create (shadow maps) ----
-
-    /// Create a depth-only FBO (no color attachment).
-    /// @param depthFormat  GL_DEPTH_COMPONENT16 / 24 / 32F.
+    /// IFramebuffer depth-only create with abstract depth format.
     bool createDepthOnly(int width, int height,
-                         GLenum depthFormat = GL_DEPTH_COMPONENT24);
+                         DepthFormat depthFormat = DepthFormat::Depth24) override;
 
-    /// Resize the FBO (destroys and recreates attachments).
-    bool resize(int width, int height);
+    bool resize(int width, int height) override;
+    void destroy() override;
+    void bind() const override;
+    void unbind() const override;
+    void begin() const override;
+    void end() const override;
+    void bindColorTexture(int index, int unit) const override;
+    void bindDepthTexture(int unit) const override;
 
-    /// Destroy the FBO and all attachments.
-    void destroy();
+    bool isValid() const override { return fbo_ != 0; }
+    int width() const override { return width_; }
+    int height() const override { return height_; }
+    int colorAttachmentCount() const override { return static_cast<int>(colorTextures_.size()); }
+    std::uintptr_t nativeColorHandle(int index = 0) const override;
+    std::uintptr_t nativeDepthHandle() const override { return static_cast<std::uintptr_t>(depthTex_); }
 
-    /// Bind this FBO (all subsequent draws go here).
-    void bind() const;
+    // ---- GL-specific API (for backward compatibility / internal use) ----
 
-    /// Unbind — revert to default framebuffer.
-    static void unbind();
+    /// Create MRT with GL-specific attachment descriptors.
+    bool createMRT_GL(int width, int height,
+                      const std::vector<FBAttachment>& attachments,
+                      bool depthAsTexture = false);
 
-    /// Begin rendering (bind + set viewport). Convenience wrapper.
-    void begin() const;
+    /// Create depth-only with raw GL format.
+    bool createDepthOnly_GL(int width, int height,
+                            GLenum depthFormat = GL_DEPTH_COMPONENT24);
 
-    /// End rendering (unbind). Caller should restore viewport.
-    void end() const;
-
-    // ---- Texture binding helpers ----
-
-    /// Bind color attachment `index` to texture unit `unit`.
-    void bindColorTexture(int index, int unit) const;
-
-    /// Bind the depth texture to a texture unit (only if created with depthAsTexture).
-    void bindDepthTexture(int unit) const;
-
-    // ----- Accessors -----
-
-    bool isValid() const { return fbo_ != 0; }
     GLuint id() const { return fbo_; }
     GLuint colorTexture(int index = 0) const;
     GLuint depthTexture() const { return depthTex_; }
-    int width() const { return width_; }
-    int height() const { return height_; }
-    int colorAttachmentCount() const { return static_cast<int>(colorTextures_.size()); }
 
 private:
     GLuint fbo_{0};

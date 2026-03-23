@@ -2,7 +2,6 @@
 #include "engine/client/core/resources.hpp"
 #include "engine/core/logging.hpp"
 
-#include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cstdio>
@@ -14,23 +13,45 @@ Skybox& Skybox::instance() {
     return g;
 }
 
-bool Skybox::init() {
+bool Skybox::init(rf::RenderDevice& device) {
     if (ready_) return true;
+    device_ = &device;
 
     // Load skybox shader
-    if (!shader_.loadFromFiles("shaders/skybox.vs", "shaders/skybox.fs")) {
+    shader_ = device.createShader();
+    if (!shader_->loadFromFiles("shaders/skybox.vs", "shaders/skybox.fs")) {
         TraceLog(LOG_WARNING, "[Skybox] Shader not found, skybox disabled");
         ready_ = false;
         return false;
     }
 
     // Create unit cube mesh (position-only)
-    cubeMesh_ = rf::GLMesh::createCube(1.0f);
+    cubeMesh_ = device.createMesh();
+    {
+        float s = 0.5f;
+        // clang-format off
+        float positions[] = {
+            s, -s, -s,  s,  s, -s,  s,  s,  s,
+            s, -s, -s,  s,  s,  s,  s, -s,  s,
+           -s, -s,  s, -s,  s,  s, -s,  s, -s,
+           -s, -s,  s, -s,  s, -s, -s, -s, -s,
+           -s,  s, -s, -s,  s,  s,  s,  s,  s,
+           -s,  s, -s,  s,  s,  s,  s,  s, -s,
+           -s, -s,  s, -s, -s, -s,  s, -s, -s,
+           -s, -s,  s,  s, -s, -s,  s, -s,  s,
+           -s, -s,  s,  s, -s,  s,  s,  s,  s,
+           -s, -s,  s,  s,  s,  s, -s,  s,  s,
+            s, -s, -s, -s, -s, -s, -s,  s, -s,
+            s, -s, -s, -s,  s, -s,  s,  s, -s,
+        };
+        // clang-format on
+        cubeMesh_->uploadPositionOnly(positions, 36);
+    }
 
     // Set cubemap sampler uniform
-    shader_.bind();
-    shader_.setInt("environmentMap", 0);
-    rf::GLShader::unbind();
+    shader_->bind();
+    shader_->setInt("environmentMap", 0);
+    shader_->unbind();
 
     ready_ = true;
     loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
@@ -40,9 +61,10 @@ bool Skybox::init() {
 }
 
 void Skybox::shutdown() {
-    cubemap_.destroy();
-    cubeMesh_.destroy();
-    shader_.destroy();
+    cubemap_.reset();
+    cubeMesh_.reset();
+    shader_.reset();
+    device_ = nullptr;
     ready_ = false;
     loaded_kind_ = shared::maps::MapTemplate::SkyboxKind::None;
     TraceLog(LOG_INFO, "[Skybox] Shutdown");
@@ -53,11 +75,11 @@ void Skybox::set_kind(shared::maps::MapTemplate::SkyboxKind kind) {
 }
 
 void Skybox::draw(const rf::Camera& camera) {
-    if (!ready_ || !shader_.isValid()) return;
+    if (!ready_ || !shader_ || !shader_->isValid()) return;
     if (kind_ == shared::maps::MapTemplate::SkyboxKind::None) return;
 
     ensure_cubemap_loaded_();
-    if (!cubemap_.isValid()) return;
+    if (!cubemap_ || !cubemap_->isValid()) return;
 
     // Strip translation from view matrix so skybox stays centred on the camera
     rf::Mat4 view = rf::Mat4(rf::Mat3(camera.viewMatrix()));
@@ -65,20 +87,20 @@ void Skybox::draw(const rf::Camera& camera) {
     rf::Mat4 mvp  = proj * view;
 
     // Draw behind everything
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(GL_FALSE);
+    device_->setDepthFunc(rf::DepthFunc::LessEqual);
+    device_->setDepthWrite(false);
 
-    shader_.bind();
-    shader_.setMat4("mvp", mvp);
+    shader_->bind();
+    shader_->setMat4("mvp", mvp);
 
-    cubemap_.bind(0);
-    cubeMesh_.draw();
-    rf::GLTexture::unbind(0);
+    cubemap_->bind(0);
+    cubeMesh_->draw();
+    cubemap_->unbind(0);
 
-    rf::GLShader::unbind();
+    shader_->unbind();
 
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
+    device_->setDepthWrite(true);
+    device_->setDepthFunc(rf::DepthFunc::Less);
 }
 
 const char* Skybox::panorama_path_for_kind_(shared::maps::MapTemplate::SkyboxKind kind) {
@@ -104,18 +126,31 @@ const char* Skybox::cubemap_path_for_kind_(shared::maps::MapTemplate::SkyboxKind
 }
 
 void Skybox::ensure_cubemap_loaded_() {
-    if (!ready_) return;
-    if (kind_ == loaded_kind_ && cubemap_.isValid()) return;
+    if (!ready_ || !device_) return;
+    if (kind_ == loaded_kind_ && cubemap_ && cubemap_->isValid()) return;
 
     // Destroy previous cubemap
-    cubemap_.destroy();
+    cubemap_.reset();
 
     // Try loading from equirectangular panorama
     const char* pano = panorama_path_for_kind_(kind_);
     if (pano) {
-        if (cubemap_.loadCubemapFromPanorama(pano, 512)) {
+        cubemap_ = device_->createTexture();
+        if (cubemap_->loadCubemapFromPanorama(pano, 512)) {
             loaded_kind_ = kind_;
             TraceLog(LOG_INFO, "[Skybox] Cubemap loaded from panorama: %s", pano);
+            return;
+        }
+    }
+
+    // Try loading from 6-face cubemap
+    const char* cube = cubemap_path_for_kind_(kind_);
+    if (cube) {
+        cubemap_ = device_->createTexture();
+        std::string faces[6] = { cube, cube, cube, cube, cube, cube };
+        if (cubemap_->loadCubemap(faces)) {
+            loaded_kind_ = kind_;
+            TraceLog(LOG_INFO, "[Skybox] Cubemap loaded from cubemap: %s", cube);
             return;
         }
     }

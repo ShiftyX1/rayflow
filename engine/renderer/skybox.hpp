@@ -8,13 +8,15 @@
 
 #include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
-#include "engine/renderer/gl_shader.hpp"
-#include "engine/renderer/gl_texture.hpp"
-#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
+#include "engine/renderer/gpu/render_device.hpp"
 #include "engine/renderer/camera.hpp"
 #include "engine/maps/rfmap_io.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace renderer {
@@ -23,7 +25,7 @@ class RAYFLOW_CLIENT_API Skybox {
 public:
     static Skybox& instance();
 
-    bool init();
+    bool init(rf::RenderDevice& device);
     void shutdown();
 
     void set_kind(shared::maps::MapTemplate::SkyboxKind kind);
@@ -49,9 +51,10 @@ private:
     std::string pano_path_;
     std::string cube_path_;
 
-    rf::GLShader shader_;
-    rf::GLMesh cubeMesh_;
-    rf::GLTexture cubemap_;
+    rf::RenderDevice* device_{nullptr};
+    std::unique_ptr<rf::IShader> shader_;
+    std::unique_ptr<rf::IMesh> cubeMesh_;
+    std::unique_ptr<rf::ITexture> cubemap_;
 };
 
 } // namespace renderer

@@ -3,6 +3,11 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#ifdef _WIN32
+#  define GLFW_EXPOSE_NATIVE_WIN32
+#  include <GLFW/glfw3native.h>
+#endif
+
 #include <cstdio>
 #include <cstdlib>
 
@@ -25,24 +30,32 @@ Window::~Window() {
 // Lifecycle
 // ============================================================================
 
-bool Window::init(int width, int height, const std::string& title, bool vsync) {
+bool Window::init(int width, int height, const std::string& title,
+                  bool vsync, Backend backend) {
     if (window_) {
         std::fprintf(stderr, "[Window] Already initialized\n");
         return false;
     }
+
+    backend_ = backend;
 
     if (!glfwInit()) {
         std::fprintf(stderr, "[Window] Failed to initialize GLFW\n");
         return false;
     }
 
-    // Require OpenGL 4.1 core (max supported on macOS)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    if (backend == Backend::OpenGL) {
+        // Require OpenGL 4.1 core (max supported on macOS)
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
+    } else {
+        // DirectX 11: no GL context, we'll use the native window handle
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    }
 
     window_ = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
     if (!window_) {
@@ -51,19 +64,21 @@ bool Window::init(int width, int height, const std::string& title, bool vsync) {
         return false;
     }
 
-    glfwMakeContextCurrent(window_);
+    if (backend == Backend::OpenGL) {
+        glfwMakeContextCurrent(window_);
 
-    // Load OpenGL functions via glad2
-    if (!gladLoadGL(glfwGetProcAddress)) {
-        std::fprintf(stderr, "[Window] Failed to initialize glad (OpenGL loader)\n");
-        glfwDestroyWindow(window_);
-        window_ = nullptr;
-        glfwTerminate();
-        return false;
+        // Load OpenGL functions via glad2
+        if (!gladLoadGL(glfwGetProcAddress)) {
+            std::fprintf(stderr, "[Window] Failed to initialize glad (OpenGL loader)\n");
+            glfwDestroyWindow(window_);
+            window_ = nullptr;
+            glfwTerminate();
+            return false;
+        }
+
+        // VSync
+        glfwSwapInterval(vsync ? 1 : 0);
     }
-
-    // VSync
-    glfwSwapInterval(vsync ? 1 : 0);
 
     // Store the initial framebuffer size (may differ from window size on HiDPI)
     glfwGetFramebufferSize(window_, &fbWidth_, &fbHeight_);
@@ -75,8 +90,13 @@ bool Window::init(int width, int height, const std::string& title, bool vsync) {
     // Initialize timer
     lastFrameTime_ = glfwGetTime();
 
-    std::fprintf(stderr, "[Window] Created %dx%d  OpenGL %s\n",
-                 fbWidth_, fbHeight_, reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    if (backend == Backend::OpenGL) {
+        std::fprintf(stderr, "[Window] Created %dx%d  OpenGL %s\n",
+                     fbWidth_, fbHeight_, reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    } else {
+        std::fprintf(stderr, "[Window] Created %dx%d  DirectX 11 (GLFW_NO_API)\n",
+                     fbWidth_, fbHeight_);
+    }
 
     return true;
 }
@@ -109,7 +129,7 @@ void Window::pollEvents() {
 }
 
 void Window::swapBuffers() {
-    if (window_) {
+    if (window_ && backend_ == Backend::OpenGL) {
         glfwSwapBuffers(window_);
     }
 }
@@ -136,6 +156,13 @@ void Window::beginFrame() {
 
 void Window::updateViewport() {
     glViewport(0, 0, fbWidth_, fbHeight_);
+}
+
+void* Window::nativeWindowHandle() const {
+#ifdef _WIN32
+    if (window_) return static_cast<void*>(glfwGetWin32Window(window_));
+#endif
+    return static_cast<void*>(window_);
 }
 
 // ============================================================================

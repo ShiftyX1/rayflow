@@ -6,6 +6,18 @@
 
 namespace rf {
 
+namespace {
+    GLenum toGLPrimitive(PrimitiveType mode) {
+        switch (mode) {
+            case PrimitiveType::Triangles: return GL_TRIANGLES;
+            case PrimitiveType::Lines:     return GL_LINES;
+            case PrimitiveType::LineStrip: return GL_LINE_STRIP;
+            case PrimitiveType::Points:    return GL_POINTS;
+        }
+        return GL_TRIANGLES;
+    }
+} // anonymous namespace
+
 // ============================================================================
 // Move semantics
 // ============================================================================
@@ -212,7 +224,11 @@ void GLMesh::destroy() {
 // Draw
 // ============================================================================
 
-void GLMesh::draw(GLenum mode) const {
+void GLMesh::draw(PrimitiveType mode) const {
+    drawGL(toGLPrimitive(mode));
+}
+
+void GLMesh::drawGL(GLenum mode) const {
     if (!vao_ || vertexCount_ <= 0) return;
     glBindVertexArray(vao_);
     glDrawArrays(mode, 0, vertexCount_);

@@ -4,6 +4,8 @@
 #include "engine/core/logging.hpp"
 #include "engine/renderer/batch_2d.hpp"
 #include "engine/renderer/gl_font.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
 #include <glad/gl.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -72,8 +74,8 @@ void RenderSystem::render(entt::registry& registry, const rf::Camera& camera) {
             if (!mesh_comp.visible) continue;
 
             // Pick shader & mesh (use defaults if not set)
-            rf::GLShader& shader = mesh_comp.shader ? *mesh_comp.shader : solidShader_;
-            rf::GLMesh&   mesh   = mesh_comp.mesh   ? *mesh_comp.mesh   : defaultCube_;
+            rf::IShader& shader = mesh_comp.shader ? *mesh_comp.shader : solidShader_;
+            rf::IMesh&   mesh   = mesh_comp.mesh   ? *mesh_comp.mesh   : defaultCube_;
 
             rf::Mat4 model = glm::translate(rf::Mat4(1.0f), transform.position)
                            * glm::scale(rf::Mat4(1.0f), transform.scale);
@@ -95,8 +97,8 @@ void RenderSystem::render(entt::registry& registry, const rf::Camera& camera) {
 
             if (!model_comp.visible) continue;
 
-            rf::GLShader& shader = model_comp.shader ? *model_comp.shader : solidShader_;
-            rf::GLMesh&   mesh   = model_comp.mesh   ? *model_comp.mesh   : defaultCube_;
+            rf::IShader& shader = model_comp.shader ? *model_comp.shader : solidShader_;
+            rf::IMesh&   mesh   = model_comp.mesh   ? *model_comp.mesh   : defaultCube_;
 
             rf::Mat4 model = glm::translate(rf::Mat4(1.0f), transform.position)
                            * glm::scale(rf::Mat4(1.0f), transform.scale);
@@ -109,7 +111,7 @@ void RenderSystem::render(entt::registry& registry, const rf::Camera& camera) {
         }
     }
 
-    rf::GLShader::unbind();
+    solidShader_.unbind();
 }
 
 void RenderSystem::render_ui(entt::registry& registry, int screen_width, int screen_height) {

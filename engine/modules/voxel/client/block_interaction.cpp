@@ -4,6 +4,7 @@
 #include "../shared/block_state.hpp"
 #include "engine/core/logging.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gpu/gpu_types.hpp"
 #include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
@@ -307,8 +308,8 @@ void BlockInteraction::render_highlight(const rf::Camera& camera) const {
     solidShader_.bind();
     solidShader_.setMat4("mvp", mvp);
     solidShader_.setVec4("color", rf::Vec4(0.0f, 0.0f, 0.0f, 0.8f));
-    wireframeCube_.draw(GL_LINES);
-    rf::GLShader::unbind();
+    wireframeCube_.draw(rf::PrimitiveType::Lines);
+    solidShader_.unbind();
     glLineWidth(1.0f);
 }
 
@@ -343,8 +344,8 @@ void BlockInteraction::render_break_overlay(const rf::Camera& camera) const {
     overlayShader_.setInt("tex", 0);
     destroy_textures_[stage].bind(0);
     overlayCube_.draw();
-    rf::GLTexture::unbind(0);
-    rf::GLShader::unbind();
+    destroy_textures_[stage].unbind(0);
+    overlayShader_.unbind();
 
     glDisable(GL_POLYGON_OFFSET_FILL);
 }

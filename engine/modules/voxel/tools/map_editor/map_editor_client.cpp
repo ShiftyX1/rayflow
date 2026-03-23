@@ -217,11 +217,13 @@ void MapEditorClient::on_init(engine::IClientServices& engine) {
 
     // Initialize render pipeline
     auto& win = rf::Window::instance();
-    if (renderPipeline_.init(win.width(), win.height())) {
-        pipelineInitialized_ = true;
-        engine_->log(engine::LogLevel::Info, "Editor render pipeline initialized");
-    } else {
-        engine_->log(engine::LogLevel::Warning, "Render pipeline failed — fallback active");
+    if (auto* device = engine_->render_device()) {
+        if (renderPipeline_.init(*device, win.width(), win.height())) {
+            pipelineInitialized_ = true;
+            engine_->log(engine::LogLevel::Info, "Editor render pipeline initialized");
+        } else {
+            engine_->log(engine::LogLevel::Warning, "Render pipeline failed — fallback active");
+        }
     }
 
     // Initialize wireframe highlight resources
@@ -488,7 +490,7 @@ void MapEditorClient::render_3d_scene() {
         glDisable(GL_BLEND);
         renderPipeline_.beginShadowPass(camera, sunDir);
         if (auto* world = engine_->world()) {
-            world->renderShadowPass(renderPipeline_.shadowShader(), renderPipeline_);
+            world->renderShadowPass(*renderPipeline_.shadowShader(), renderPipeline_);
         }
         renderPipeline_.endShadowPass();
 
@@ -577,7 +579,7 @@ void MapEditorClient::render_block_highlight(const rf::Camera& camera) {
     wireShader_.setMat4("mvp", mvp);
     wireShader_.setVec4("color", rf::Vec4(0.0f, 0.0f, 0.0f, 1.0f));
     wireCube_.draw();
-    rf::GLShader::unbind();
+    wireShader_.unbind();
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }

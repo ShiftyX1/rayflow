@@ -288,7 +288,7 @@ void GLTexture::bind(int unit) const {
     }
 }
 
-void GLTexture::unbind(int unit) {
+void GLTexture::unbind(int unit) const {
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -297,26 +297,26 @@ void GLTexture::unbind(int unit) {
 // Filtering
 // ============================================================================
 
-void GLTexture::setFilter(Filter filter) {
+void GLTexture::setFilter(TextureFilter filter) {
     if (!id_) return;
 
     GLenum target = isCubemap_ ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
     glBindTexture(target, id_);
 
     switch (filter) {
-        case Filter::Nearest:
+        case TextureFilter::Nearest:
             glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             break;
-        case Filter::Linear:
+        case TextureFilter::Linear:
             glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             break;
-        case Filter::NearestMipmap:
+        case TextureFilter::NearestMipmap:
             glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
             glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             break;
-        case Filter::LinearMipmap:
+        case TextureFilter::LinearMipmap:
             glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
             glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             break;

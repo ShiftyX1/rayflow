@@ -8,6 +8,7 @@
 // =============================================================================
 
 #include "engine/core/export.hpp"
+#include "engine/renderer/gpu/gpu_types.hpp"
 
 #include <string>
 
@@ -17,9 +18,12 @@ namespace rf {
 
 class RAYFLOW_CLIENT_API Window {
 public:
-    /// Initialize GLFW, create window with OpenGL context, load glad.
+    /// Initialize GLFW, create window.
+    /// For OpenGL: creates GL context + loads GLAD.
+    /// For DirectX11: creates window with GLFW_NO_API (no GL context).
     /// @return true on success.
-    bool init(int width, int height, const std::string& title, bool vsync = true);
+    bool init(int width, int height, const std::string& title,
+              bool vsync = true, Backend backend = Backend::OpenGL);
 
     /// Destroy window and terminate GLFW.
     void shutdown();
@@ -62,6 +66,12 @@ public:
     /// Get underlying GLFW handle (for input callbacks etc.)
     GLFWwindow* handle() const { return window_; }
 
+    /// Get native window handle (HWND on Windows, GLFWwindow* for GL).
+    void* nativeWindowHandle() const;
+
+    /// Which backend the window was created for.
+    Backend backend() const { return backend_; }
+
     /// Singleton-style access (only one window per process).
     static Window& instance();
 
@@ -75,6 +85,7 @@ private:
     static void framebufferSizeCallback(GLFWwindow* window, int w, int h);
 
     GLFWwindow* window_{nullptr};
+    Backend backend_{Backend::OpenGL};
     int fbWidth_{0};
     int fbHeight_{0};
     bool resized_{false};

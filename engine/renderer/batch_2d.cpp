@@ -1,9 +1,10 @@
 #include "batch_2d.hpp"
 
-#include "gl_texture.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
 #include "gl_font.hpp"
 #include "engine/core/logging.hpp"
 
+#include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cmath>
@@ -183,7 +184,7 @@ void Batch2D::flush() {
     glDrawArrays(GL_TRIANGLES, 0, count);
 
     glBindVertexArray(0);
-    GLShader::unbind();
+    shader_.unbind();
 
     vertices_.clear();
 }
@@ -416,14 +417,14 @@ void Batch2D::drawRectRoundedLines(float x, float y, float w, float h,
 // drawTexture
 // ============================================================================
 
-void Batch2D::drawTexture(const GLTexture* texture,
+void Batch2D::drawTexture(const ITexture* texture,
                           Rect src, Rect dst,
                           Vec2 origin, float rotation,
                           const Color& tint)
 {
     if (!texture || !texture->isValid()) return;
 
-    setTexture(texture->id());
+    setTexture(static_cast<GLuint>(texture->nativeHandle()));
 
     float tw = static_cast<float>(texture->width());
     float th = static_cast<float>(texture->height());

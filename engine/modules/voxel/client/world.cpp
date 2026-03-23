@@ -870,7 +870,7 @@ void World::render(const rf::Camera& camera) const {
         }
     }
 
-    rf::GLShader::unbind();
+    shader.unbind();
 }
 
 // -----------------------------------------------------------------------------
@@ -953,14 +953,14 @@ void World::render(const rf::Camera& camera, rf::RenderPipeline& pipeline) const
         }
     }
 
-    rf::GLShader::unbind();
+    shader.unbind();
 }
 
 // -----------------------------------------------------------------------------
 // Shadow depth pass
 // -----------------------------------------------------------------------------
 
-void World::renderShadowPass(rf::GLShader& shadowShader, rf::RenderPipeline& /*pipeline*/) const {
+void World::renderShadowPass(rf::IShader& shadowShader, rf::RenderPipeline& /*pipeline*/) const {
     // Bind atlas for alpha-test on foliage
     if (BlockRegistry::instance().is_initialized()) {
         BlockRegistry::instance().get_atlas_texture().bind(0);

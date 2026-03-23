@@ -9,6 +9,7 @@
 
 #include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
+#include "engine/renderer/gpu/gpu_texture.hpp"
 
 #include <glad/gl.h>
 
@@ -18,10 +19,10 @@
 
 namespace rf {
 
-class RAYFLOW_CLIENT_API GLTexture {
+class RAYFLOW_CLIENT_API GLTexture : public ITexture {
 public:
     GLTexture() = default;
-    ~GLTexture();
+    ~GLTexture() override;
 
     // Non-copyable, movable
     GLTexture(const GLTexture&) = delete;
@@ -32,60 +33,59 @@ public:
     // ----- Loading -----
 
     /// Load a 2D texture from a file path (uses stb_image).
-    bool loadFromFile(const std::string& path);
+    bool loadFromFile(const std::string& path) override;
 
     /// Load a 2D texture from raw pixel data already in memory.
     /// @param data   Pixel data (RGBA by default).
     /// @param width  Texture width.
     /// @param height Texture height.
     /// @param channels Number of channels (3 = RGB, 4 = RGBA).
-    bool loadFromMemory(const std::uint8_t* data, int width, int height, int channels = 4);
+    bool loadFromMemory(const std::uint8_t* data, int width, int height, int channels = 4) override;
 
     /// Load a cubemap from 6 individual face image paths.
     /// Order: +X, -X, +Y, -Y, +Z, -Z
-    bool loadCubemap(const std::string faces[6]);
+    bool loadCubemap(const std::string faces[6]) override;
 
     /// Load a cubemap from a single equirectangular panorama image.
-    bool loadCubemapFromPanorama(const std::string& panoramaPath, int faceSize = 512);
+    bool loadCubemapFromPanorama(const std::string& panoramaPath, int faceSize = 512) override;
 
     /// Destroy the GL texture.
-    void destroy();
+    void destroy() override;
 
     // ----- Binding -----
 
     /// Bind to a specific texture unit (0-based).
-    void bind(int unit = 0) const;
+    void bind(int unit = 0) const override;
 
     /// Unbind the given texture unit.
-    static void unbind(int unit = 0);
+    void unbind(int unit = 0) const override;
 
     // ----- Filtering -----
 
-    enum class Filter {
-        Nearest,        ///< Pixel-art style
-        Linear,         ///< Bilinear
-        NearestMipmap,  ///< Nearest + mipmap
-        LinearMipmap,   ///< Trilinear
-    };
+    /// Legacy alias for backward compatibility.
+    using Filter = TextureFilter;
 
-    void setFilter(Filter filter);
+    void setFilter(TextureFilter filter) override;
 
     // ----- Accessors -----
 
-    bool isValid() const { return id_ != 0; }
+    bool isValid() const override { return id_ != 0; }
     GLuint id() const { return id_; }
-    int width() const { return width_; }
-    int height() const { return height_; }
-    bool isCubemap() const { return isCubemap_; }
+    int width() const override { return width_; }
+    int height() const override { return height_; }
+    bool isCubemap() const override { return isCubemap_; }
 
     // ----- Image CPU access -----
 
     /// Sample a pixel color from the CPU-side image data (if retained).
     /// Returns Color::Blank() if pixel data is not available.
-    Color samplePixel(int x, int y) const;
+    Color samplePixel(int x, int y) const override;
 
     /// Keep CPU pixel data after upload (needed for colormap sampling).
-    void retainPixelData(bool retain) { retainPixels_ = retain; }
+    void retainPixelData(bool retain) override { retainPixels_ = retain; }
+
+    /// Native OpenGL texture handle.
+    std::uintptr_t nativeHandle() const override { return static_cast<std::uintptr_t>(id_); }
 
 private:
     GLuint id_{0};

@@ -372,7 +372,7 @@ void GLFont::drawText(const std::string& text, float x, float y,
     if (depthWasEnabled) glEnable(GL_DEPTH_TEST);
 
     glBindVertexArray(0);
-    GLShader::unbind();
+    shader.unbind();
 }
 
 // ============================================================================

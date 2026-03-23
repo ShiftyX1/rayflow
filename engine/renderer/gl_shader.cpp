@@ -132,7 +132,7 @@ void GLShader::bind() const {
     }
 }
 
-void GLShader::unbind() {
+void GLShader::unbind() const {
     glUseProgram(0);
 }
 
@@ -140,7 +140,7 @@ void GLShader::unbind() {
 // Uniform locations
 // ============================================================================
 
-GLint GLShader::getUniformLocation(const std::string& name) const {
+int GLShader::getUniformLocation(const std::string& name) const {
     auto it = uniformCache_.find(name);
     if (it != uniformCache_.end()) {
         return it->second;
@@ -182,27 +182,27 @@ void GLShader::setMat4(const std::string& name, const Mat4& m) const {
 // Uniform setters (by location — avoids cache lookup)
 // ============================================================================
 
-void GLShader::setInt(GLint loc, int value) const {
+void GLShader::setInt(int loc, int value) const {
     if (loc >= 0) glUniform1i(loc, value);
 }
 
-void GLShader::setFloat(GLint loc, float value) const {
+void GLShader::setFloat(int loc, float value) const {
     if (loc >= 0) glUniform1f(loc, value);
 }
 
-void GLShader::setVec2(GLint loc, const Vec2& v) const {
+void GLShader::setVec2(int loc, const Vec2& v) const {
     if (loc >= 0) glUniform2fv(loc, 1, glm::value_ptr(v));
 }
 
-void GLShader::setVec3(GLint loc, const Vec3& v) const {
+void GLShader::setVec3(int loc, const Vec3& v) const {
     if (loc >= 0) glUniform3fv(loc, 1, glm::value_ptr(v));
 }
 
-void GLShader::setVec4(GLint loc, const Vec4& v) const {
+void GLShader::setVec4(int loc, const Vec4& v) const {
     if (loc >= 0) glUniform4fv(loc, 1, glm::value_ptr(v));
 }
 
-void GLShader::setMat4(GLint loc, const Mat4& m) const {
+void GLShader::setMat4(int loc, const Mat4& m) const {
     if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(m));
 }
 

@@ -11,14 +11,15 @@
 // =============================================================================
 
 #include "engine/core/export.hpp"
-#include "engine/renderer/gl_framebuffer.hpp"
-#include "engine/renderer/gl_shader.hpp"
-#include "engine/renderer/gl_mesh.hpp"
+#include "engine/renderer/gpu/gpu_framebuffer.hpp"
+#include "engine/renderer/gpu/gpu_shader.hpp"
+#include "engine/renderer/gpu/gpu_mesh.hpp"
+#include "engine/renderer/gpu/render_device.hpp"
 #include "engine/renderer/camera.hpp"
 #include "engine/core/math_types.hpp"
 
-#include <glad/gl.h>
 #include <array>
+#include <memory>
 
 namespace rf {
 
@@ -45,8 +46,9 @@ public:
     RenderPipeline& operator=(const RenderPipeline&) = delete;
 
     /// Initialize the pipeline (creates FBOs, loads shaders).
+    /// @param device       Render device for resource creation.
     /// @param width, height  Initial framebuffer dimensions.
-    bool init(int width, int height);
+    bool init(RenderDevice& device, int width, int height);
 
     /// Shutdown and release all GPU resources.
     void shutdown();
@@ -65,7 +67,7 @@ public:
     void endShadowPass();
 
     /// Get the shadow depth shader (for external chunk rendering).
-    GLShader& shadowShader() { return shadowShader_; }
+    IShader* shadowShader() { return shadowShader_.get(); }
 
     /// Light-space VP matrix (valid after beginShadowPass).
     const Mat4& lightSpaceMatrix() const { return lightSpaceMatrix_; }
@@ -113,20 +115,21 @@ private:
     bool initialized_{false};
     int width_{0};
     int height_{0};
+    RenderDevice* device_{nullptr};
 
     // ---- HDR Scene FBO ----
-    GLFramebuffer sceneFBO_;
+    std::unique_ptr<IFramebuffer> sceneFBO_;
 
     // ---- Shadow map ----
-    GLFramebuffer shadowFBO_;
-    GLShader shadowShader_;
+    std::unique_ptr<IFramebuffer> shadowFBO_;
+    std::unique_ptr<IShader> shadowShader_;
     Mat4 lightSpaceMatrix_{1.0f};
     int shadowMapSize_{2048};
     float shadowDistance_{128.0f};
 
     // ---- Tone mapping ----
-    GLShader tonemapShader_;
-    GLMesh fullscreenTriangle_;
+    std::unique_ptr<IShader> tonemapShader_;
+    std::unique_ptr<IMesh> fullscreenTriangle_;
 
     // ---- Frustum ----
     Frustum frustum_;
