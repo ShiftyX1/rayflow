@@ -290,7 +290,11 @@ void GLTexture::bind(int unit) const {
 
 void GLTexture::unbind(int unit) const {
     glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    if (isCubemap_) {
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 }
 
 // ============================================================================

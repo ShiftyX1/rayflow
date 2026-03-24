@@ -100,7 +100,7 @@ void Skybox::draw(const rf::Camera& camera) {
 
     shader_->unbind();
 
-    device_->setCullMode(rf::CullMode::None);
+    device_->setCullMode(rf::CullMode::Back);
     device_->setDepthWrite(true);
     device_->setDepthFunc(rf::DepthFunc::Less);
 }

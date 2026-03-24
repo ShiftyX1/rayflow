@@ -195,6 +195,7 @@ void Batch2D::begin(int screenWidth, int screenHeight) {
 
         // Setup GL state for 2D
         glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
@@ -217,6 +218,8 @@ void Batch2D::end() {
     if (backend_ == Backend::OpenGL) {
         // Restore common state
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
     }
 #if RAYFLOW_HAS_DX11
     else if (backend_ == Backend::DirectX11) {
