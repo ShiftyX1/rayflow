@@ -134,6 +134,7 @@ target_link_libraries(bedwars PRIVATE bedwars_client_lib bedwars_server_lib engi
 
 set_target_properties(bedwars PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    WIN32_EXECUTABLE ON
 )
 
 # Note: RAYFLOW_USE_PAK is inherited from engine_client via bedwars_client

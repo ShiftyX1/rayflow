@@ -7,6 +7,7 @@
 
 #include "engine/core/client_engine.hpp"
 #include "engine/core/server_engine.hpp"
+#include "engine/core/logging.hpp"
 #include "engine/transport/local_transport.hpp"
 #include "engine/transport/enet_client.hpp"
 #include "engine/transport/enet_common.hpp"
@@ -98,7 +99,7 @@ int main(int argc, char* argv[]) {
     
     // Setup callbacks for connection management
     game.set_start_singleplayer_callback([&]() {
-        std::printf("[INFO] Starting singleplayer...\n");
+        TraceLog(LOG_INFO, "Starting singleplayer...");
         
         // Create LocalTransport pair
         auto pair = engine::transport::create_local_transport_pair();
@@ -126,17 +127,17 @@ int main(int argc, char* argv[]) {
         engine.set_transport(clientTransport);
         clientTransport->poll(0);
         
-        std::printf("[INFO] Embedded server started.\n");
+        TraceLog(LOG_INFO, "Embedded server started.");
     });
     
     game.set_connect_multiplayer_callback([&](const std::string& host, std::uint16_t port) -> bool {
-        std::printf("[INFO] Connecting to %s:%u...\n", host.c_str(), port);
+        TraceLog(LOG_INFO, "Connecting to %s:%u...", host.c_str(), port);
         
         // Initialize ENet if needed
         if (!enetInit) {
             enetInit = std::make_unique<engine::transport::ENetInitializer>();
             if (!enetInit->is_initialized()) {
-                std::fprintf(stderr, "[ERROR] Failed to initialize ENet\n");
+                TraceLog(LOG_ERROR, "Failed to initialize ENet");
                 return false;
             }
         }
@@ -145,7 +146,7 @@ int main(int argc, char* argv[]) {
         enetTransport = std::make_shared<engine::transport::ENetClientTransport>();
         
         if (!enetTransport->connect(host, port, 5000)) {
-            std::fprintf(stderr, "[ERROR] Failed to connect to %s:%u\n", host.c_str(), port);
+            TraceLog(LOG_ERROR, "Failed to connect to %s:%u", host.c_str(), port);
             enetTransport.reset();
             return false;
         }
@@ -153,12 +154,12 @@ int main(int argc, char* argv[]) {
         clientTransport = enetTransport;
         engine.set_transport(clientTransport);
         
-        std::printf("[INFO] Connected to %s:%u\n", host.c_str(), port);
+        TraceLog(LOG_INFO, "Connected to %s:%u", host.c_str(), port);
         return true;
     });
     
     game.set_disconnect_callback([&]() {
-        std::printf("[INFO] Disconnecting...\n");
+        TraceLog(LOG_INFO, "Disconnecting...");
         
         // Disconnect ENet transport
         if (enetTransport) {
@@ -179,11 +180,11 @@ int main(int argc, char* argv[]) {
         clientTransport.reset();
         engine.set_transport(nullptr);
         
-        std::printf("[INFO] Disconnected.\n");
+        TraceLog(LOG_INFO, "Disconnected.");
     });
     
     // Run (starts in main menu)
-    std::printf("[INFO] Starting game...\n");
+    TraceLog(LOG_INFO, "Starting game...");
     engine.run(game);
     
     // Cleanup on exit
@@ -197,6 +198,13 @@ int main(int argc, char* argv[]) {
         serverThread.join();
     }
     
-    std::printf("[INFO] Client exited cleanly\n");
+    TraceLog(LOG_INFO, "Client exited cleanly");
     return 0;
 }
+
+#ifdef _WIN32
+#include <windows.h>
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+    return main(__argc, __argv);
+}
+#endif

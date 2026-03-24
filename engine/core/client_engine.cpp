@@ -199,15 +199,15 @@ ui::UIManager& ClientEngine::ui_manager() {
 void ClientEngine::log(LogLevel level, std::string_view msg) {
     if (!config_.logging) return;
     
-    const char* prefix = "";
+    int traceLevel = LOG_INFO;
     switch (level) {
-        case LogLevel::Debug:   prefix = "[DEBUG] "; break;
-        case LogLevel::Info:    prefix = "[INFO]  "; break;
-        case LogLevel::Warning: prefix = "[WARN]  "; break;
-        case LogLevel::Error:   prefix = "[ERROR] "; break;
+        case LogLevel::Debug:   traceLevel = LOG_DEBUG;   break;
+        case LogLevel::Info:    traceLevel = LOG_INFO;    break;
+        case LogLevel::Warning: traceLevel = LOG_WARNING; break;
+        case LogLevel::Error:   traceLevel = LOG_ERROR;   break;
     }
     
-    std::printf("%s%.*s\n", prefix, static_cast<int>(msg.size()), msg.data());
+    TraceLog(traceLevel, "%.*s", static_cast<int>(msg.size()), msg.data());
 }
 
 // ============================================================================

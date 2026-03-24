@@ -1,4 +1,5 @@
 #include "server_engine.hpp"
+#include "logging.hpp"
 
 #include <cstdio>
 #include <string>
@@ -87,17 +88,15 @@ void ServerEngine::disconnect(PlayerId id) {
 void ServerEngine::log(LogLevel level, std::string_view msg) {
     if (!config_.logging) return;
     
-    const char* prefix = "";
+    int traceLevel = LOG_INFO;
     switch (level) {
-        case LogLevel::Debug:   prefix = "[DEBUG] "; break;
-        case LogLevel::Info:    prefix = "[INFO]  "; break;
-        case LogLevel::Warning: prefix = "[WARN]  "; break;
-        case LogLevel::Error:   prefix = "[ERROR] "; break;
+        case LogLevel::Debug:   traceLevel = LOG_DEBUG;   break;
+        case LogLevel::Info:    traceLevel = LOG_INFO;    break;
+        case LogLevel::Warning: traceLevel = LOG_WARNING; break;
+        case LogLevel::Error:   traceLevel = LOG_ERROR;   break;
     }
     
-    // Simple console logging
-    std::printf("%s%.*s\n", prefix, static_cast<int>(msg.size()), msg.data());
-    std::fflush(stdout);
+    TraceLog(traceLevel, "%.*s", static_cast<int>(msg.size()), msg.data());
 }
 
 void ServerEngine::tick_loop(IGameServer& game) {
