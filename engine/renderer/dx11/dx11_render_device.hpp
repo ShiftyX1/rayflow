@@ -57,9 +57,8 @@ public:
     /// Bind the default (backbuffer) render target.
     void bindDefaultRenderTarget();
 
-    /// Immediately apply all dirty GPU states (depth, rasterizer, blend).
-    /// Normally deferred until present(), but needed by Batch2D to ensure correct
-    /// state before draw calls.
+    /// No-op — state changes are now applied immediately.
+    /// Kept for API compatibility (called by Batch2D).
     void flushState();
 
 private:
@@ -83,16 +82,13 @@ private:
     bool      depthTestEnabled_  = true;
     bool      depthWriteEnabled_ = true;
     DepthFunc depthFunc_         = DepthFunc::Less;
-    bool      depthStateDirty_   = true;
 
     CullMode  cullMode_          = CullMode::Back;
     bool      polyOffsetEnabled_ = false;
     float     polyOffsetFactor_  = 0.0f;
     float     polyOffsetUnits_   = 0.0f;
-    bool      rasterStateDirty_  = true;
 
     BlendMode blendMode_         = BlendMode::None;
-    bool      blendStateDirty_   = true;
 
     int backbufferWidth_  = 0;
     int backbufferHeight_ = 0;

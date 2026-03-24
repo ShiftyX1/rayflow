@@ -62,14 +62,31 @@ void DX11RenderDevice::getViewport(int outViewport[4]) const {
 }
 
 void DX11RenderDevice::clear(bool color, bool depth) {
-    if (color && backbufferRTV_) {
-        context_->ClearRenderTargetView(backbufferRTV_.Get(), clearColor_);
+    // Query the currently bound render targets so we clear the active FBO,
+    // not just the backbuffer.  OMGetRenderTargets AddRef's each pointer.
+    ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+    ID3D11DepthStencilView* dsv = nullptr;
+    context_->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv);
+
+    if (color) {
+        for (auto* rtv : rtvs) {
+            if (rtv) {
+                context_->ClearRenderTargetView(rtv, clearColor_);
+                rtv->Release();
+            }
+        }
+    } else {
+        for (auto* rtv : rtvs) {
+            if (rtv) rtv->Release();
+        }
     }
-    if (depth && depthStencilView_) {
-        context_->ClearDepthStencilView(depthStencilView_.Get(),
+
+    if (depth && dsv) {
+        context_->ClearDepthStencilView(dsv,
                                          D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
                                          1.0f, 0);
     }
+    if (dsv) dsv->Release();
 }
 
 void DX11RenderDevice::setClearColor(float r, float g, float b, float a) {
@@ -82,35 +99,35 @@ void DX11RenderDevice::setClearColor(float r, float g, float b, float a) {
 void DX11RenderDevice::setDepthTest(bool enabled) {
     if (depthTestEnabled_ != enabled) {
         depthTestEnabled_ = enabled;
-        depthStateDirty_ = true;
+        applyDepthStencilState();
     }
 }
 
 void DX11RenderDevice::setDepthFunc(DepthFunc func) {
     if (depthFunc_ != func) {
         depthFunc_ = func;
-        depthStateDirty_ = true;
+        applyDepthStencilState();
     }
 }
 
 void DX11RenderDevice::setDepthWrite(bool enabled) {
     if (depthWriteEnabled_ != enabled) {
         depthWriteEnabled_ = enabled;
-        depthStateDirty_ = true;
+        applyDepthStencilState();
     }
 }
 
 void DX11RenderDevice::setBlendMode(BlendMode mode) {
     if (blendMode_ != mode) {
         blendMode_ = mode;
-        blendStateDirty_ = true;
+        applyBlendState();
     }
 }
 
 void DX11RenderDevice::setCullMode(CullMode mode) {
     if (cullMode_ != mode) {
         cullMode_ = mode;
-        rasterStateDirty_ = true;
+        applyRasterizerState();
     }
 }
 
@@ -119,23 +136,19 @@ void DX11RenderDevice::setPolygonOffset(bool enabled, float factor, float units)
         polyOffsetEnabled_ = enabled;
         polyOffsetFactor_ = factor;
         polyOffsetUnits_ = units;
-        rasterStateDirty_ = true;
+        applyRasterizerState();
     }
 }
 
 void DX11RenderDevice::present() {
-    // Flush any dirty state before presenting
-    flushState();
-
     if (swapChain_) {
         swapChain_->Present(1, 0);  // VSync on
     }
 }
 
 void DX11RenderDevice::flushState() {
-    if (depthStateDirty_) applyDepthStencilState();
-    if (rasterStateDirty_) applyRasterizerState();
-    if (blendStateDirty_) applyBlendState();
+    // State changes are now applied immediately in setXxx() methods.
+    // This method is kept for API compatibility (called by Batch2D).
 }
 
 // ============================================================================
@@ -315,7 +328,6 @@ void DX11RenderDevice::applyDepthStencilState() {
     ComPtr<ID3D11DepthStencilState> state;
     device_->CreateDepthStencilState(&desc, &state);
     if (state) context_->OMSetDepthStencilState(state.Get(), 0);
-    depthStateDirty_ = false;
 }
 
 void DX11RenderDevice::applyRasterizerState() {
@@ -343,7 +355,6 @@ void DX11RenderDevice::applyRasterizerState() {
     ComPtr<ID3D11RasterizerState> state;
     device_->CreateRasterizerState(&desc, &state);
     if (state) context_->RSSetState(state.Get());
-    rasterStateDirty_ = false;
 }
 
 void DX11RenderDevice::applyBlendState() {
@@ -390,7 +401,6 @@ void DX11RenderDevice::applyBlendState() {
     ComPtr<ID3D11BlendState> state;
     device_->CreateBlendState(&desc, &state);
     if (state) context_->OMSetBlendState(state.Get(), nullptr, 0xFFFFFFFF);
-    blendStateDirty_ = false;
 }
 
 } // namespace rf
