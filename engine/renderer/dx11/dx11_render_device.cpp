@@ -125,13 +125,17 @@ void DX11RenderDevice::setPolygonOffset(bool enabled, float factor, float units)
 
 void DX11RenderDevice::present() {
     // Flush any dirty state before presenting
-    if (depthStateDirty_) applyDepthStencilState();
-    if (rasterStateDirty_) applyRasterizerState();
-    if (blendStateDirty_) applyBlendState();
+    flushState();
 
     if (swapChain_) {
         swapChain_->Present(1, 0);  // VSync on
     }
+}
+
+void DX11RenderDevice::flushState() {
+    if (depthStateDirty_) applyDepthStencilState();
+    if (rasterStateDirty_) applyRasterizerState();
+    if (blendStateDirty_) applyBlendState();
 }
 
 // ============================================================================

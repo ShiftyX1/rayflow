@@ -15,6 +15,7 @@
 #include "engine/renderer/dx11/dx11_render_device.hpp"
 #include "engine/renderer/dx11/dx11_shader.hpp"
 #include "engine/renderer/dx11/dx11_texture.hpp"
+#include <stb_truetype.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dxgi.h>
@@ -23,6 +24,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <fstream>
 
 namespace rf {
 
@@ -178,8 +180,6 @@ void Batch2D::begin(int screenWidth, int screenHeight) {
     ensureInitialised();
     if (!available_) return;
 
-    TraceLog(LOG_INFO, "[Batch2D::begin] %dx%d backend=%d", screenWidth, screenHeight, (int)backend_);
-
     projection_ = glm::ortho(0.0f, static_cast<float>(screenWidth),
                               static_cast<float>(screenHeight), 0.0f,
                               -1.0f, 1.0f);
@@ -200,45 +200,10 @@ void Batch2D::begin(int screenWidth, int screenHeight) {
     }
 #if RAYFLOW_HAS_DX11
     else if (backend_ == Backend::DirectX11) {
-        auto* d3dDev = dxDevice_->device();
-        auto* ctx    = dxDevice_->context();
-
-        // Disable depth test
-        {
-            D3D11_DEPTH_STENCIL_DESC dsd{};
-            dsd.DepthEnable    = FALSE;
-            dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
-            dsd.StencilEnable  = FALSE;
-            Microsoft::WRL::ComPtr<ID3D11DepthStencilState> dss;
-            d3dDev->CreateDepthStencilState(&dsd, &dss);
-            if (dss) ctx->OMSetDepthStencilState(dss.Get(), 0);
-        }
-        // Alpha blend
-        {
-            D3D11_BLEND_DESC bd{};
-            bd.RenderTarget[0].BlendEnable    = TRUE;
-            bd.RenderTarget[0].SrcBlend       = D3D11_BLEND_SRC_ALPHA;
-            bd.RenderTarget[0].DestBlend      = D3D11_BLEND_INV_SRC_ALPHA;
-            bd.RenderTarget[0].BlendOp        = D3D11_BLEND_OP_ADD;
-            bd.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ONE;
-            bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
-            bd.RenderTarget[0].BlendOpAlpha   = D3D11_BLEND_OP_ADD;
-            bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-            Microsoft::WRL::ComPtr<ID3D11BlendState> bs;
-            d3dDev->CreateBlendState(&bd, &bs);
-            if (bs) ctx->OMSetBlendState(bs.Get(), nullptr, 0xFFFFFFFF);
-        }
-        // No backface culling for 2D
-        {
-            D3D11_RASTERIZER_DESC rd{};
-            rd.FillMode = D3D11_FILL_SOLID;
-            rd.CullMode = D3D11_CULL_NONE;
-            rd.FrontCounterClockwise = TRUE;
-            rd.DepthClipEnable = TRUE;
-            Microsoft::WRL::ComPtr<ID3D11RasterizerState> rs;
-            d3dDev->CreateRasterizerState(&rd, &rs);
-            if (rs) ctx->RSSetState(rs.Get());
-        }
+        dxDevice_->setDepthTest(false);
+        dxDevice_->setCullMode(CullMode::None);
+        dxDevice_->setBlendMode(BlendMode::Alpha);
+        dxDevice_->flushState();
     }
 #endif
 }
@@ -255,40 +220,10 @@ void Batch2D::end() {
     }
 #if RAYFLOW_HAS_DX11
     else if (backend_ == Backend::DirectX11) {
-        auto* d3dDev = dxDevice_->device();
-        auto* ctx    = dxDevice_->context();
-
-        // Restore depth test
-        {
-            D3D11_DEPTH_STENCIL_DESC dsd{};
-            dsd.DepthEnable    = TRUE;
-            dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-            dsd.DepthFunc      = D3D11_COMPARISON_LESS;
-            dsd.StencilEnable  = FALSE;
-            Microsoft::WRL::ComPtr<ID3D11DepthStencilState> dss;
-            d3dDev->CreateDepthStencilState(&dsd, &dss);
-            if (dss) ctx->OMSetDepthStencilState(dss.Get(), 0);
-        }
-        // Restore no blend
-        {
-            D3D11_BLEND_DESC bd{};
-            bd.RenderTarget[0].BlendEnable = FALSE;
-            bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-            Microsoft::WRL::ComPtr<ID3D11BlendState> bs;
-            d3dDev->CreateBlendState(&bd, &bs);
-            if (bs) ctx->OMSetBlendState(bs.Get(), nullptr, 0xFFFFFFFF);
-        }
-        // Restore backface culling
-        {
-            D3D11_RASTERIZER_DESC rd{};
-            rd.FillMode = D3D11_FILL_SOLID;
-            rd.CullMode = D3D11_CULL_BACK;
-            rd.FrontCounterClockwise = TRUE;
-            rd.DepthClipEnable = TRUE;
-            Microsoft::WRL::ComPtr<ID3D11RasterizerState> rs;
-            d3dDev->CreateRasterizerState(&rd, &rs);
-            if (rs) ctx->RSSetState(rs.Get());
-        }
+        dxDevice_->setDepthTest(true);
+        dxDevice_->setCullMode(CullMode::Back);
+        dxDevice_->setBlendMode(BlendMode::None);
+        dxDevice_->flushState();
     }
 #endif
 }
@@ -773,10 +708,17 @@ void Batch2D::drawText(const GLFont* font, const std::string& text,
                        float x, float y, float size, const Color& color)
 {
     if (!available_) return;
-    if (backend_ != Backend::OpenGL) return; // GLFont uses GL calls internally
+
+#if RAYFLOW_HAS_DX11
+    if (backend_ == Backend::DirectX11) {
+        drawTextDX11(text, x, y, size, color);
+        return;
+    }
+#endif
+
+    if (backend_ != Backend::OpenGL) return;
 
     if (!font || !font->isValid()) {
-        // Fallback to default font
         if (auto* def = GLFont::defaultFont()) {
             font = def;
         } else {
@@ -793,13 +735,27 @@ void Batch2D::drawText(const std::string& text, float x, float y,
                        float size, const Color& color)
 {
     if (!available_) return;
+
+#if RAYFLOW_HAS_DX11
+    if (backend_ == Backend::DirectX11) {
+        drawTextDX11(text, x, y, size, color);
+        return;
+    }
+#endif
+
     if (backend_ != Backend::OpenGL) return;
     drawText(GLFont::defaultFont(), text, x, y, size, color);
 }
 
 float Batch2D::measureText(const GLFont* font, const std::string& text, float size) {
     if (!available_) return 0.0f;
-    if (backend_ != Backend::OpenGL) return 0.0f; // GLFont requires GL context
+
+#if RAYFLOW_HAS_DX11
+    if (backend_ == Backend::DirectX11)
+        return measureTextDX11(text, size);
+#endif
+
+    if (backend_ != Backend::OpenGL) return 0.0f;
     if (!font || !font->isValid()) {
         font = GLFont::defaultFont();
         if (!font) return 0.0f;
@@ -809,6 +765,12 @@ float Batch2D::measureText(const GLFont* font, const std::string& text, float si
 
 float Batch2D::measureText(const std::string& text, float size) {
     if (!available_) return 0.0f;
+
+#if RAYFLOW_HAS_DX11
+    if (backend_ == Backend::DirectX11)
+        return measureTextDX11(text, size);
+#endif
+
     if (backend_ != Backend::OpenGL) return 0.0f;
     return measureText(GLFont::defaultFont(), text, size);
 }
@@ -957,10 +919,6 @@ void Batch2D::flushDX11() {
     int count = static_cast<int>(vertices_.size());
     if (count > kMaxVertices) count = kMaxVertices;
 
-    TraceLog(LOG_INFO, "[Batch2D::flushDX11] vertices=%d tex=%p proj[0][0]=%.4f proj[1][1]=%.4f",
-             count, (void*)currentTexture_,
-             projection_[0][0], projection_[1][1]);
-
     // Upload vertex data
     D3D11_MAPPED_SUBRESOURCE mapped{};
     HRESULT hr = ctx->Map(dxVertexBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
@@ -991,20 +949,185 @@ void Batch2D::flushDX11() {
 
     // Draw
     ctx->Draw(static_cast<UINT>(count), 0);
-    TraceLog(LOG_INFO, "[Batch2D::flushDX11] Draw(%d) done", count);
 
     vertices_.clear();
+}
+
+// ============================================================================
+// DX11 font atlas (baked via stb_truetype, rendered through Batch2D pipeline)
+// ============================================================================
+
+bool Batch2D::ensureDX11Font() {
+    if (dxFontLoaded_) return (dxFontAtlas_ != nullptr);
+
+    dxFontLoaded_ = true; // prevent repeated attempts
+
+    // Load TTF from system fonts (same list as GLFont::defaultFont)
+    const char* systemFonts[] = {
+        "C:\\Windows\\Fonts\\consola.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "C:\\Windows\\Fonts\\segoeui.ttf",
+    };
+
+    std::vector<std::uint8_t> ttfData;
+    for (const char* path : systemFonts) {
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        if (!file.is_open()) continue;
+        auto sz = file.tellg();
+        file.seekg(0);
+        ttfData.resize(static_cast<size_t>(sz));
+        file.read(reinterpret_cast<char*>(ttfData.data()), sz);
+        TraceLog(LOG_INFO, "[Batch2D] DX11 font loaded: %s", path);
+        break;
+    }
+
+    if (ttfData.empty()) {
+        TraceLog(LOG_WARNING, "[Batch2D] DX11: No system font found");
+        return false;
+    }
+
+    // Init stb_truetype
+    stbtt_fontinfo fontInfo;
+    if (!stbtt_InitFont(&fontInfo, ttfData.data(),
+                        stbtt_GetFontOffsetForIndex(ttfData.data(), 0))) {
+        TraceLog(LOG_WARNING, "[Batch2D] DX11: stbtt_InitFont failed");
+        return false;
+    }
+
+    constexpr float kBakeSize = 20.0f;
+    dxFontBakedSize_ = kBakeSize;
+
+    float scale = stbtt_ScaleForPixelHeight(&fontInfo, kBakeSize);
+
+    int iAscent, iDescent, iLineGap;
+    stbtt_GetFontVMetrics(&fontInfo, &iAscent, &iDescent, &iLineGap);
+    dxFontAscent_ = iAscent * scale;
+
+    // Pack the atlas
+    int atlasW = 512, atlasH = 512;
+    std::vector<std::uint8_t> bitmap;
+    stbtt_pack_context packCtx;
+    stbtt_packedchar packedChars[kCharCount];
+
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        bitmap.assign(atlasW * atlasH, 0);
+        if (!stbtt_PackBegin(&packCtx, bitmap.data(), atlasW, atlasH, 0, 1, nullptr)) {
+            TraceLog(LOG_WARNING, "[Batch2D] DX11: stbtt_PackBegin failed");
+            return false;
+        }
+        stbtt_PackSetOversampling(&packCtx, 2, 2);
+        int result = stbtt_PackFontRange(&packCtx, ttfData.data(), 0, kBakeSize,
+                                         kFirstChar, kCharCount, packedChars);
+        stbtt_PackEnd(&packCtx);
+        if (result != 0) break;
+        if (atlasW <= atlasH) atlasW *= 2; else atlasH *= 2;
+    }
+
+    // Fill glyph info
+    float invW = 1.0f / static_cast<float>(atlasW);
+    float invH = 1.0f / static_cast<float>(atlasH);
+    for (int i = 0; i < kCharCount; ++i) {
+        const auto& pc = packedChars[i];
+        auto& g = dxGlyphs_[i];
+        g.x0 = pc.xoff;  g.y0 = pc.yoff;
+        g.x1 = pc.xoff2; g.y1 = pc.yoff2;
+        g.s0 = pc.x0 * invW; g.t0 = pc.y0 * invH;
+        g.s1 = pc.x1 * invW; g.t1 = pc.y1 * invH;
+        g.xAdvance = pc.xadvance;
+    }
+
+    // Convert R8 bitmap → RGBA with (255,255,255,fontAlpha)
+    // DX11Texture::loadFromMemory with channels=1 sets alpha=255 (not source value),
+    // so we must prepare RGBA ourselves with the glyph value in the alpha channel.
+    // This way: tex * color = (1*r, 1*g, 1*b, fontAlpha*a) — correct alpha blending.
+    std::vector<std::uint8_t> rgba(atlasW * atlasH * 4);
+    for (int i = 0; i < atlasW * atlasH; ++i) {
+        rgba[i * 4 + 0] = 255;
+        rgba[i * 4 + 1] = 255;
+        rgba[i * 4 + 2] = 255;
+        rgba[i * 4 + 3] = bitmap[i];
+    }
+
+    // Upload as DX11Texture (channels=4 so no conversion)
+    auto* tex = new DX11Texture(dxDevice_);
+    if (!tex->loadFromMemory(rgba.data(), atlasW, atlasH, 4)) {
+        TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to upload font atlas");
+        delete tex;
+        return false;
+    }
+
+    dxFontAtlas_ = tex;
+    TraceLog(LOG_INFO, "[Batch2D] DX11 font atlas created: %dx%d", atlasW, atlasH);
+    return true;
+}
+
+void Batch2D::drawTextDX11(const std::string& text, float x, float y,
+                           float size, const Color& color) {
+    if (text.empty() || !ensureDX11Font()) return;
+
+    float scale = size / dxFontBakedSize_;
+    auto n = color.normalized();
+
+    // Bind the font atlas texture
+    setTexture(dxFontAtlas_->nativeHandle());
+
+    float cursorX = x;
+    float cursorY = y + dxFontAscent_ * scale; // baseline offset
+
+    for (char ch : text) {
+        int ci = static_cast<int>(ch) - kFirstChar;
+        if (ci < 0 || ci >= kCharCount) {
+            cursorX += dxGlyphs_[0].xAdvance * scale;
+            continue;
+        }
+
+        const auto& g = dxGlyphs_[ci];
+
+        float qx0 = cursorX + g.x0 * scale;
+        float qy0 = cursorY + g.y0 * scale;
+        float qx1 = cursorX + g.x1 * scale;
+        float qy1 = cursorY + g.y1 * scale;
+
+        pushQuad(
+            qx0, qy0, g.s0, g.t0,
+            qx1, qy0, g.s1, g.t0,
+            qx1, qy1, g.s1, g.t1,
+            qx0, qy1, g.s0, g.t1,
+            n.r, n.g, n.b, n.a
+        );
+
+        cursorX += g.xAdvance * scale;
+    }
+}
+
+float Batch2D::measureTextDX11(const std::string& text, float size) const {
+    if (text.empty() || !dxFontLoaded_ || !dxFontAtlas_) return 0.0f;
+
+    float scale = size / dxFontBakedSize_;
+    float width = 0.0f;
+
+    for (char ch : text) {
+        int ci = static_cast<int>(ch) - kFirstChar;
+        if (ci < 0 || ci >= kCharCount) {
+            width += dxGlyphs_[0].xAdvance * scale;
+            continue;
+        }
+        width += dxGlyphs_[ci].xAdvance * scale;
+    }
+    return width;
 }
 
 void Batch2D::destroyDX11() {
     delete dxShader_;       dxShader_ = nullptr;
     delete dxWhiteTexture_; dxWhiteTexture_ = nullptr;
+    delete dxFontAtlas_;    dxFontAtlas_ = nullptr;
 
     if (dxVertexBuffer_) { dxVertexBuffer_->Release(); dxVertexBuffer_ = nullptr; }
     if (dxSampler_)      { dxSampler_->Release();      dxSampler_ = nullptr; }
     if (dxInputLayout_)  { dxInputLayout_->Release();   dxInputLayout_ = nullptr; }
 
     dxDevice_ = nullptr;
+    dxFontLoaded_ = false;
 }
 
 #endif // RAYFLOW_HAS_DX11

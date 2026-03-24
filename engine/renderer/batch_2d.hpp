@@ -189,12 +189,31 @@ private:
     void flushDX11();
     void destroyDX11();
 
+    // DX11 font atlas (baked via stb_truetype, rendered through Batch2D pipeline)
+    struct DX11FontGlyph {
+        float x0, y0, x1, y1;   // quad corners relative to cursor
+        float s0, t0, s1, t1;   // UV in atlas [0..1]
+        float xAdvance;
+    };
+    bool ensureDX11Font();
+    void drawTextDX11(const std::string& text, float x, float y, float size, const Color& color);
+    float measureTextDX11(const std::string& text, float size) const;
+
     DX11RenderDevice*               dxDevice_{nullptr};
     DX11Shader*                     dxShader_{nullptr};   // owned, destroyed in destroyDX11()
     ID3D11Buffer*                   dxVertexBuffer_{nullptr};
     ID3D11SamplerState*             dxSampler_{nullptr};
     ID3D11InputLayout*              dxInputLayout_{nullptr};
     ITexture*                       dxWhiteTexture_{nullptr}; // owned, destroyed in destroyDX11()
+
+    // DX11 font
+    ITexture*                       dxFontAtlas_{nullptr};   // owned
+    bool                            dxFontLoaded_{false};
+    float                           dxFontBakedSize_{0.0f};
+    float                           dxFontAscent_{0.0f};
+    static constexpr int kFirstChar = 32;
+    static constexpr int kCharCount = 95; // ASCII 32..126
+    DX11FontGlyph                   dxGlyphs_[kCharCount]{};
 #endif
 };
 

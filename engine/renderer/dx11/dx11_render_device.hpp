@@ -57,6 +57,11 @@ public:
     /// Bind the default (backbuffer) render target.
     void bindDefaultRenderTarget();
 
+    /// Immediately apply all dirty GPU states (depth, rasterizer, blend).
+    /// Normally deferred until present(), but needed by Batch2D to ensure correct
+    /// state before draw calls.
+    void flushState();
+
 private:
     bool createSwapChain(HWND hwnd, int width, int height);
     bool createBackbufferViews();
