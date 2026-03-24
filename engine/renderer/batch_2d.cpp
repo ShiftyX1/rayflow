@@ -1,12 +1,25 @@
 #include "batch_2d.hpp"
 
 #include "engine/renderer/gpu/gpu_texture.hpp"
+#include "engine/renderer/gpu/render_device.hpp"
 #include "engine/client/core/window.hpp"
+#include "engine/client/core/resources.hpp"
 #include "gl_font.hpp"
+#include "gl_shader.hpp"
 #include "engine/core/logging.hpp"
 
 #include <glad/gl.h>
 #include <glm/gtc/matrix_transform.hpp>
+
+#if RAYFLOW_HAS_DX11
+#include "engine/renderer/dx11/dx11_render_device.hpp"
+#include "engine/renderer/dx11/dx11_shader.hpp"
+#include "engine/renderer/dx11/dx11_texture.hpp"
+#include <d3d11.h>
+#include <d3dcompiler.h>
+#include <dxgi.h>
+#include <wrl/client.h>
+#endif
 
 #include <cmath>
 #include <cstring>
@@ -60,10 +73,18 @@ Batch2D& Batch2D::instance() {
 
 Batch2D::~Batch2D() {
     if (!available_) return;
-    if (vao_) glDeleteVertexArrays(1, &vao_);
-    if (vbo_) glDeleteBuffers(1, &vbo_);
-    if (whiteTexture_) glDeleteTextures(1, &whiteTexture_);
-    shader_.destroy();
+
+    if (backend_ == Backend::OpenGL) {
+        if (glVao_) glDeleteVertexArrays(1, &glVao_);
+        if (glVbo_) glDeleteBuffers(1, &glVbo_);
+        if (glWhiteTex_) glDeleteTextures(1, &glWhiteTex_);
+        if (glShader_) { glShader_->destroy(); delete glShader_; }
+    }
+#if RAYFLOW_HAS_DX11
+    else if (backend_ == Backend::DirectX11) {
+        destroyDX11();
+    }
+#endif
 }
 
 // ============================================================================
@@ -73,26 +94,39 @@ Batch2D::~Batch2D() {
 void Batch2D::ensureInitialised() {
     if (initialised_) return;
 
-    // Batch2D is currently OpenGL-only; skip init on other backends
-    if (Window::instance().backend() != Backend::OpenGL) {
+    backend_ = Window::instance().backend();
+
+#if RAYFLOW_HAS_DX11
+    if (backend_ == Backend::DirectX11) {
+        ensureInitialisedDX11();
+        return;
+    }
+#endif
+
+    if (backend_ != Backend::OpenGL) {
         initialised_ = true;
         available_ = false;
-        TraceLog(LOG_INFO, "[Batch2D] Skipped (non-GL backend)");
+        TraceLog(LOG_INFO, "[Batch2D] Skipped (unsupported backend)");
         return;
     }
 
+    // --- OpenGL path ---
+
     // Compile shader
-    if (!shader_.loadFromSource(kBatch2DVertSrc, kBatch2DFragSrc)) {
+    glShader_ = new GLShader();
+    if (!glShader_->loadFromSource(kBatch2DVertSrc, kBatch2DFragSrc)) {
         TraceLog(LOG_ERROR, "[Batch2D] Failed to compile batch shader");
+        delete glShader_;
+        glShader_ = nullptr;
         return;
     }
 
     // Create VAO/VBO
-    glGenVertexArrays(1, &vao_);
-    glGenBuffers(1, &vbo_);
+    glGenVertexArrays(1, &glVao_);
+    glGenBuffers(1, &glVbo_);
 
-    glBindVertexArray(vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+    glBindVertexArray(glVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, glVbo_);
 
     // Pre-allocate VBO
     glBufferData(GL_ARRAY_BUFFER,
@@ -120,18 +154,20 @@ void Batch2D::ensureInitialised() {
 
     // Create 1x1 white texture
     std::uint8_t white[] = {255, 255, 255, 255};
-    glGenTextures(1, &whiteTexture_);
-    glBindTexture(GL_TEXTURE_2D, whiteTexture_);
+    glGenTextures(1, &glWhiteTex_);
+    glBindTexture(GL_TEXTURE_2D, glWhiteTex_);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    whiteTexture_ = static_cast<std::uintptr_t>(glWhiteTex_);
+
     vertices_.reserve(4096);
 
     initialised_ = true;
     available_ = true;
-    TraceLog(LOG_INFO, "[Batch2D] Initialised (max %d vertices)", kMaxVertices);
+    TraceLog(LOG_INFO, "[Batch2D] Initialised OpenGL (max %d vertices)", kMaxVertices);
 }
 
 // ============================================================================
@@ -142,22 +178,69 @@ void Batch2D::begin(int screenWidth, int screenHeight) {
     ensureInitialised();
     if (!available_) return;
 
+    TraceLog(LOG_INFO, "[Batch2D::begin] %dx%d backend=%d", screenWidth, screenHeight, (int)backend_);
+
     projection_ = glm::ortho(0.0f, static_cast<float>(screenWidth),
                               static_cast<float>(screenHeight), 0.0f,
                               -1.0f, 1.0f);
-
-    // Also set projection for GLFont text rendering
-    GLFont::setProjection(static_cast<float>(screenWidth),
-                          static_cast<float>(screenHeight));
 
     currentTexture_ = whiteTexture_;
     vertices_.clear();
     inFrame_ = true;
 
-    // Setup GL state for 2D
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    if (backend_ == Backend::OpenGL) {
+        // Also set projection for GLFont text rendering
+        GLFont::setProjection(static_cast<float>(screenWidth),
+                              static_cast<float>(screenHeight));
+
+        // Setup GL state for 2D
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+#if RAYFLOW_HAS_DX11
+    else if (backend_ == Backend::DirectX11) {
+        auto* d3dDev = dxDevice_->device();
+        auto* ctx    = dxDevice_->context();
+
+        // Disable depth test
+        {
+            D3D11_DEPTH_STENCIL_DESC dsd{};
+            dsd.DepthEnable    = FALSE;
+            dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+            dsd.StencilEnable  = FALSE;
+            Microsoft::WRL::ComPtr<ID3D11DepthStencilState> dss;
+            d3dDev->CreateDepthStencilState(&dsd, &dss);
+            if (dss) ctx->OMSetDepthStencilState(dss.Get(), 0);
+        }
+        // Alpha blend
+        {
+            D3D11_BLEND_DESC bd{};
+            bd.RenderTarget[0].BlendEnable    = TRUE;
+            bd.RenderTarget[0].SrcBlend       = D3D11_BLEND_SRC_ALPHA;
+            bd.RenderTarget[0].DestBlend      = D3D11_BLEND_INV_SRC_ALPHA;
+            bd.RenderTarget[0].BlendOp        = D3D11_BLEND_OP_ADD;
+            bd.RenderTarget[0].SrcBlendAlpha  = D3D11_BLEND_ONE;
+            bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+            bd.RenderTarget[0].BlendOpAlpha   = D3D11_BLEND_OP_ADD;
+            bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            Microsoft::WRL::ComPtr<ID3D11BlendState> bs;
+            d3dDev->CreateBlendState(&bd, &bs);
+            if (bs) ctx->OMSetBlendState(bs.Get(), nullptr, 0xFFFFFFFF);
+        }
+        // No backface culling for 2D
+        {
+            D3D11_RASTERIZER_DESC rd{};
+            rd.FillMode = D3D11_FILL_SOLID;
+            rd.CullMode = D3D11_CULL_NONE;
+            rd.FrontCounterClockwise = TRUE;
+            rd.DepthClipEnable = TRUE;
+            Microsoft::WRL::ComPtr<ID3D11RasterizerState> rs;
+            d3dDev->CreateRasterizerState(&rd, &rs);
+            if (rs) ctx->RSSetState(rs.Get());
+        }
+    }
+#endif
 }
 
 void Batch2D::end() {
@@ -166,8 +249,48 @@ void Batch2D::end() {
     flush();
     inFrame_ = false;
 
-    // Restore common state
-    glEnable(GL_DEPTH_TEST);
+    if (backend_ == Backend::OpenGL) {
+        // Restore common state
+        glEnable(GL_DEPTH_TEST);
+    }
+#if RAYFLOW_HAS_DX11
+    else if (backend_ == Backend::DirectX11) {
+        auto* d3dDev = dxDevice_->device();
+        auto* ctx    = dxDevice_->context();
+
+        // Restore depth test
+        {
+            D3D11_DEPTH_STENCIL_DESC dsd{};
+            dsd.DepthEnable    = TRUE;
+            dsd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+            dsd.DepthFunc      = D3D11_COMPARISON_LESS;
+            dsd.StencilEnable  = FALSE;
+            Microsoft::WRL::ComPtr<ID3D11DepthStencilState> dss;
+            d3dDev->CreateDepthStencilState(&dsd, &dss);
+            if (dss) ctx->OMSetDepthStencilState(dss.Get(), 0);
+        }
+        // Restore no blend
+        {
+            D3D11_BLEND_DESC bd{};
+            bd.RenderTarget[0].BlendEnable = FALSE;
+            bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+            Microsoft::WRL::ComPtr<ID3D11BlendState> bs;
+            d3dDev->CreateBlendState(&bd, &bs);
+            if (bs) ctx->OMSetBlendState(bs.Get(), nullptr, 0xFFFFFFFF);
+        }
+        // Restore backface culling
+        {
+            D3D11_RASTERIZER_DESC rd{};
+            rd.FillMode = D3D11_FILL_SOLID;
+            rd.CullMode = D3D11_CULL_BACK;
+            rd.FrontCounterClockwise = TRUE;
+            rd.DepthClipEnable = TRUE;
+            Microsoft::WRL::ComPtr<ID3D11RasterizerState> rs;
+            d3dDev->CreateRasterizerState(&rd, &rs);
+            if (rs) ctx->RSSetState(rs.Get());
+        }
+    }
+#endif
 }
 
 // ============================================================================
@@ -177,15 +300,23 @@ void Batch2D::end() {
 void Batch2D::flush() {
     if (!available_ || vertices_.empty()) return;
 
-    shader_.bind();
-    shader_.setMat4("uProjection", projection_);
-    shader_.setInt("uTexture", 0);
+#if RAYFLOW_HAS_DX11
+    if (backend_ == Backend::DirectX11) {
+        flushDX11();
+        return;
+    }
+#endif
+
+    // --- OpenGL path ---
+    glShader_->bind();
+    glShader_->setMat4("uProjection", projection_);
+    glShader_->setInt("uTexture", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, currentTexture_);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(currentTexture_));
 
-    glBindVertexArray(vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+    glBindVertexArray(glVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, glVbo_);
 
     int count = static_cast<int>(vertices_.size());
     if (count > kMaxVertices) count = kMaxVertices;
@@ -197,17 +328,17 @@ void Batch2D::flush() {
     glDrawArrays(GL_TRIANGLES, 0, count);
 
     glBindVertexArray(0);
-    shader_.unbind();
+    glShader_->unbind();
 
     vertices_.clear();
 }
 
-void Batch2D::setTexture(GLuint texId) {
+void Batch2D::setTexture(std::uintptr_t texHandle) {
     if (!available_) return;
-    if (texId == 0) texId = whiteTexture_;
-    if (texId != currentTexture_) {
+    if (texHandle == 0) texHandle = whiteTexture_;
+    if (texHandle != currentTexture_) {
         flush();
-        currentTexture_ = texId;
+        currentTexture_ = texHandle;
     }
 }
 
@@ -440,7 +571,7 @@ void Batch2D::drawTexture(const ITexture* texture,
 {
     if (!texture || !texture->isValid()) return;
 
-    setTexture(static_cast<GLuint>(texture->nativeHandle()));
+    setTexture(texture->nativeHandle());
 
     float tw = static_cast<float>(texture->width());
     float th = static_cast<float>(texture->height());
@@ -513,14 +644,14 @@ void Batch2D::drawTexture(const ITexture* texture,
 // drawTextureRaw
 // ============================================================================
 
-void Batch2D::drawTextureRaw(GLuint texId, int texW, int texH,
+void Batch2D::drawTextureRaw(std::uintptr_t nativeHandle, int texW, int texH,
                              Rect src, Rect dst,
                              Vec2 origin, float rotation,
                              const Color& tint)
 {
-    if (texId == 0) return;
+    if (nativeHandle == 0) return;
 
-    setTexture(texId);
+    setTexture(nativeHandle);
 
     float tw = static_cast<float>(texW);
     float th = static_cast<float>(texH);
@@ -642,6 +773,8 @@ void Batch2D::drawText(const GLFont* font, const std::string& text,
                        float x, float y, float size, const Color& color)
 {
     if (!available_) return;
+    if (backend_ != Backend::OpenGL) return; // GLFont uses GL calls internally
+
     if (!font || !font->isValid()) {
         // Fallback to default font
         if (auto* def = GLFont::defaultFont()) {
@@ -654,20 +787,19 @@ void Batch2D::drawText(const GLFont* font, const std::string& text,
     // Text drawing flushes the batch (different shader), then resumes
     flush();
     font->drawText(text, x, y, size, color);
-
-    // Re-bind batch state
-    // (next draw* call will rebind via setTexture)
 }
 
 void Batch2D::drawText(const std::string& text, float x, float y,
                        float size, const Color& color)
 {
     if (!available_) return;
+    if (backend_ != Backend::OpenGL) return;
     drawText(GLFont::defaultFont(), text, x, y, size, color);
 }
 
 float Batch2D::measureText(const GLFont* font, const std::string& text, float size) {
     if (!available_) return 0.0f;
+    if (backend_ != Backend::OpenGL) return 0.0f; // GLFont requires GL context
     if (!font || !font->isValid()) {
         font = GLFont::defaultFont();
         if (!font) return 0.0f;
@@ -677,7 +809,204 @@ float Batch2D::measureText(const GLFont* font, const std::string& text, float si
 
 float Batch2D::measureText(const std::string& text, float size) {
     if (!available_) return 0.0f;
+    if (backend_ != Backend::OpenGL) return 0.0f;
     return measureText(GLFont::defaultFont(), text, size);
 }
+
+// ============================================================================
+// DirectX 11 backend implementation
+// ============================================================================
+
+#if RAYFLOW_HAS_DX11
+
+void Batch2D::ensureInitialisedDX11() {
+    dxDevice_ = static_cast<DX11RenderDevice*>(resources::render_device());
+    if (!dxDevice_) {
+        TraceLog(LOG_ERROR, "[Batch2D] DX11: No render device available");
+        initialised_ = true;
+        available_ = false;
+        return;
+    }
+
+    auto* d3dDevice  = dxDevice_->device();
+    auto* d3dContext = dxDevice_->context();
+
+    // --- Compile shader ---
+    dxShader_ = new DX11Shader(dxDevice_);
+    if (!dxShader_->loadFromFiles("shaders/batch2d.vs", "shaders/batch2d.fs")) {
+        TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to compile batch shader");
+        delete dxShader_; dxShader_ = nullptr;
+        initialised_ = true;
+        available_ = false;
+        return;
+    }
+
+    // --- Create custom input layout for Batch2D vertex format ---
+    // The default DX11Shader input layout is for meshes (pos3+uv2+uv2+normal3+color_ubyte4).
+    // Batch2D uses a different interleaved format: pos2(float)+uv2(float)+color4(float).
+    // We need to create a custom layout. To do this, we need the VS bytecode.
+    // Since DX11Shader already created one internally, we'll create our own
+    // and store it separately.
+    // For now, the shader's auto-generated layout won't match. We'll compile
+    // the VS again just to get the bytecode for CreateInputLayout.
+    {
+        // Load the VS source to get bytecode for input layout creation
+        std::string vsSrc = resources::load_text("shaders/hlsl/batch2d.vs.hlsl");
+        Microsoft::WRL::ComPtr<ID3DBlob> vsBlob;
+        Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
+        HRESULT hr = D3DCompile(
+            vsSrc.data(), vsSrc.size(),
+            "batch2d.vs.hlsl", nullptr, nullptr,
+            "VSMain", "vs_5_0",
+            D3DCOMPILE_ENABLE_STRICTNESS, 0,
+            &vsBlob, &errorBlob);
+
+        if (FAILED(hr)) {
+            TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to compile VS for input layout: %s",
+                     errorBlob ? static_cast<const char*>(errorBlob->GetBufferPointer()) : "unknown");
+            delete dxShader_; dxShader_ = nullptr;
+            initialised_ = true;
+            available_ = false;
+            return;
+        }
+
+        D3D11_INPUT_ELEMENT_DESC layoutDesc[] = {
+            { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, x), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, u), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+            { "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex, r), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        };
+
+        hr = d3dDevice->CreateInputLayout(
+            layoutDesc, _countof(layoutDesc),
+            vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(),
+            &dxInputLayout_);
+
+        if (FAILED(hr)) {
+            TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to create input layout (HRESULT 0x%08X)", hr);
+            delete dxShader_; dxShader_ = nullptr;
+            initialised_ = true;
+            available_ = false;
+            return;
+        }
+    }
+
+    // --- Create dynamic vertex buffer ---
+    {
+        D3D11_BUFFER_DESC desc{};
+        desc.ByteWidth      = kMaxVertices * sizeof(Vertex);
+        desc.Usage           = D3D11_USAGE_DYNAMIC;
+        desc.BindFlags       = D3D11_BIND_VERTEX_BUFFER;
+        desc.CPUAccessFlags  = D3D11_CPU_ACCESS_WRITE;
+
+        HRESULT hr = d3dDevice->CreateBuffer(&desc, nullptr, &dxVertexBuffer_);
+        if (FAILED(hr)) {
+            TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to create vertex buffer (HRESULT 0x%08X)", hr);
+            delete dxShader_; dxShader_ = nullptr;
+            initialised_ = true;
+            available_ = false;
+            return;
+        }
+    }
+
+    // --- Create 1x1 white texture ---
+    {
+        dxWhiteTexture_ = new DX11Texture(dxDevice_);
+        std::uint8_t white[] = {255, 255, 255, 255};
+        if (!dxWhiteTexture_->loadFromMemory(white, 1, 1, 4)) {
+            TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to create white texture");
+            delete dxShader_; dxShader_ = nullptr;
+            initialised_ = true;
+            available_ = false;
+            return;
+        }
+        whiteTexture_ = dxWhiteTexture_->nativeHandle();
+    }
+
+    // --- Create sampler state ---
+    {
+        D3D11_SAMPLER_DESC sd{};
+        sd.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        sd.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sd.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sd.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        sd.MaxLOD         = D3D11_FLOAT32_MAX;
+
+        HRESULT hr = d3dDevice->CreateSamplerState(&sd, &dxSampler_);
+        if (FAILED(hr)) {
+            TraceLog(LOG_ERROR, "[Batch2D] DX11: Failed to create sampler state (HRESULT 0x%08X)", hr);
+            delete dxShader_; dxShader_ = nullptr;
+            initialised_ = true;
+            available_ = false;
+            return;
+        }
+    }
+
+    vertices_.reserve(4096);
+
+    initialised_ = true;
+    available_ = true;
+    TraceLog(LOG_INFO, "[Batch2D] Initialised DirectX 11 (max %d vertices)", kMaxVertices);
+}
+
+void Batch2D::flushDX11() {
+    if (vertices_.empty()) return;
+
+    auto* ctx = dxDevice_->context();
+
+    int count = static_cast<int>(vertices_.size());
+    if (count > kMaxVertices) count = kMaxVertices;
+
+    TraceLog(LOG_INFO, "[Batch2D::flushDX11] vertices=%d tex=%p proj[0][0]=%.4f proj[1][1]=%.4f",
+             count, (void*)currentTexture_,
+             projection_[0][0], projection_[1][1]);
+
+    // Upload vertex data
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = ctx->Map(dxVertexBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) {
+        vertices_.clear();
+        return;
+    }
+    std::memcpy(mapped.pData, vertices_.data(), count * sizeof(Vertex));
+    ctx->Unmap(dxVertexBuffer_, 0);
+
+    // Set projection uniform before bind() — bind() flushes constant buffers
+    dxShader_->setMat4("uProjection", projection_);
+    dxShader_->bind();
+
+    // Bind input layout
+    ctx->IASetInputLayout(dxInputLayout_);
+
+    // Bind vertex buffer
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    ctx->IASetVertexBuffers(0, 1, &dxVertexBuffer_, &stride, &offset);
+    ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    // Bind texture and sampler
+    auto* srv = reinterpret_cast<ID3D11ShaderResourceView*>(currentTexture_);
+    ctx->PSSetShaderResources(0, 1, &srv);
+    ctx->PSSetSamplers(0, 1, &dxSampler_);
+
+    // Draw
+    ctx->Draw(static_cast<UINT>(count), 0);
+    TraceLog(LOG_INFO, "[Batch2D::flushDX11] Draw(%d) done", count);
+
+    vertices_.clear();
+}
+
+void Batch2D::destroyDX11() {
+    delete dxShader_;       dxShader_ = nullptr;
+    delete dxWhiteTexture_; dxWhiteTexture_ = nullptr;
+
+    if (dxVertexBuffer_) { dxVertexBuffer_->Release(); dxVertexBuffer_ = nullptr; }
+    if (dxSampler_)      { dxSampler_->Release();      dxSampler_ = nullptr; }
+    if (dxInputLayout_)  { dxInputLayout_->Release();   dxInputLayout_ = nullptr; }
+
+    dxDevice_ = nullptr;
+}
+
+#endif // RAYFLOW_HAS_DX11
 
 } // namespace rf

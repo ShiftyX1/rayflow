@@ -19,16 +19,35 @@
 
 #include "engine/core/export.hpp"
 #include "engine/core/math_types.hpp"
-#include "gl_shader.hpp"
+#include "engine/renderer/gpu/gpu_types.hpp"
 
-#include <glad/gl.h>
-
+#include <cstdint>
+#include <string>
 #include <vector>
+
+// Forward-declare GL types so the header stays backend-agnostic.
+typedef unsigned int GLuint;
+
+// Forward-declare D3D11 COM types in the global namespace (they live in ::<name>).
+#if RAYFLOW_HAS_DX11
+struct ID3D11Buffer;
+struct ID3D11SamplerState;
+struct ID3D11ShaderResourceView;
+struct ID3D11InputLayout;
+#endif
 
 namespace rf {
 
 class ITexture;
+class IShader;
 class GLFont;
+class GLShader;
+class RenderDevice;
+
+#if RAYFLOW_HAS_DX11
+class DX11RenderDevice;
+class DX11Shader;
+#endif
 
 class RAYFLOW_CLIENT_API Batch2D {
 public:
@@ -81,11 +100,12 @@ public:
                      Vec2 origin = {0,0}, float rotation = 0.0f,
                      const Color& tint = Color::White());
 
-    /// Draw a textured quad from a raw OpenGL texture ID.
-    /// @param texId    OpenGL texture name.
-    /// @param texW     Texture width in pixels.
-    /// @param texH     Texture height in pixels.
-    void drawTextureRaw(GLuint texId, int texW, int texH,
+    /// Draw a textured quad from a raw native texture handle.
+    /// On OpenGL this is a GLuint texture name; on DX11 an ID3D11ShaderResourceView*.
+    /// @param nativeHandle  Backend-specific texture handle.
+    /// @param texW          Texture width in pixels.
+    /// @param texH          Texture height in pixels.
+    void drawTextureRaw(std::uintptr_t nativeHandle, int texW, int texH,
                         Rect src, Rect dst,
                         Vec2 origin = {0,0}, float rotation = 0.0f,
                         const Color& tint = Color::White());
@@ -134,7 +154,7 @@ private:
 
     void ensureInitialised();
     void flush();
-    void setTexture(GLuint texId);
+    void setTexture(std::uintptr_t texHandle);
     void pushQuad(float x0, float y0, float u0, float v0,
                   float x1, float y1, float u1, float v1,
                   float x2, float y2, float u2, float v2,
@@ -147,19 +167,35 @@ private:
 
     static constexpr int kMaxVertices = 65536;
 
-    bool available_{false};  // false when backend is not OpenGL
+    Backend backend_{Backend::OpenGL};
+    bool available_{false};
     bool initialised_{false};
     bool inFrame_{false};
 
-    GLuint vao_{0};
-    GLuint vbo_{0};
-    GLShader shader_;
-    GLuint whiteTexture_{0}; // 1x1 white pixel for untextured quads
     Mat4 projection_{1.0f};
-
-    // Current batch state
-    GLuint currentTexture_{0};
+    std::uintptr_t whiteTexture_{0}; // 1x1 white pixel (native handle)
+    std::uintptr_t currentTexture_{0};
     std::vector<Vertex> vertices_;
+
+    // ----- OpenGL state -----
+    GLuint glVao_{0};
+    GLuint glVbo_{0};
+    GLShader* glShader_{nullptr};  // owned, heap-allocated to avoid including gl_shader.hpp
+    GLuint glWhiteTex_{0};
+
+#if RAYFLOW_HAS_DX11
+    // ----- DirectX 11 state -----
+    void ensureInitialisedDX11();
+    void flushDX11();
+    void destroyDX11();
+
+    DX11RenderDevice*               dxDevice_{nullptr};
+    DX11Shader*                     dxShader_{nullptr};   // owned, destroyed in destroyDX11()
+    ID3D11Buffer*                   dxVertexBuffer_{nullptr};
+    ID3D11SamplerState*             dxSampler_{nullptr};
+    ID3D11InputLayout*              dxInputLayout_{nullptr};
+    ITexture*                       dxWhiteTexture_{nullptr}; // owned, destroyed in destroyDX11()
+#endif
 };
 
 } // namespace rf
