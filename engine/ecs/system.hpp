@@ -8,7 +8,7 @@ namespace ecs {
 
 class RAYFLOW_CORE_API System {
 public:
-    virtual ~System() = default;
+    virtual ~System();
     virtual void update(entt::registry& registry, float delta_time) = 0;
 };
 

@@ -32,7 +32,8 @@ struct NameTag;
 struct Lifetime;
 struct Active;
 
-// components/rendering.hpp
+#ifdef RAYFLOW_DEPRECATED_SYSTEMS
+// components/rendering.hpp (deprecated 2D)
 struct Sprite;
 struct AnimatedSprite;
 struct AnimationSet;
@@ -47,7 +48,7 @@ struct HealthBar;
 struct WorldLabel;
 struct RenderLayer;
 
-// components/common.hpp
+// components/common.hpp (deprecated 2D)
 struct Health;
 struct DamageMultiplier;
 struct Invulnerable;
@@ -67,7 +68,13 @@ struct EnemyTag;
 struct ProjectileTag;
 struct DeadTag;
 struct Team;
+#endif
 }
+
+// ---------------------------------------------------------------------------
+// entt::basic_registry (needed by any DLL that passes entt::registry across boundaries)
+// ---------------------------------------------------------------------------
+template struct entt::type_index<entt::registry, void>;
 
 // ---------------------------------------------------------------------------
 // components.hpp
@@ -90,8 +97,9 @@ template struct entt::type_index<ecs::NameTag, void>;
 template struct entt::type_index<ecs::Lifetime, void>;
 template struct entt::type_index<ecs::Active, void>;
 
+#ifdef RAYFLOW_DEPRECATED_SYSTEMS
 // ---------------------------------------------------------------------------
-// components/rendering.hpp  (forward-declared above)
+// components/rendering.hpp  (deprecated 2D)
 // ---------------------------------------------------------------------------
 template struct entt::type_index<ecs::Sprite, void>;
 template struct entt::type_index<ecs::AnimatedSprite, void>;
@@ -108,7 +116,7 @@ template struct entt::type_index<ecs::WorldLabel, void>;
 template struct entt::type_index<ecs::RenderLayer, void>;
 
 // ---------------------------------------------------------------------------
-// components/common.hpp
+// components/common.hpp  (deprecated 2D)
 // ---------------------------------------------------------------------------
 template struct entt::type_index<ecs::Health, void>;
 template struct entt::type_index<ecs::DamageMultiplier, void>;
@@ -129,3 +137,4 @@ template struct entt::type_index<ecs::EnemyTag, void>;
 template struct entt::type_index<ecs::ProjectileTag, void>;
 template struct entt::type_index<ecs::DeadTag, void>;
 template struct entt::type_index<ecs::Team, void>;
+#endif

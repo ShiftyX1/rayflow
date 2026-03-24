@@ -95,17 +95,13 @@ add_library(engine_core SHARED
     modules/voxel/shared/block_state.hpp
     modules/voxel/shared/block_shape.hpp
     
+    # ECS base class (out-of-line destructor for DLL export)
+    ecs/system.hpp
+    ecs/system.cpp
+
     # Universal ECS components (headless)
     ecs/components/common.hpp
     
-    # Universal ECS systems (headless) - 2D physics, collision, AI
-    ecs/systems/physics2d_system.hpp
-    ecs/systems/physics2d_system.cpp
-    ecs/systems/collision2d_system.hpp
-    ecs/systems/collision2d_system.cpp
-    ecs/systems/ai_system.hpp
-    ecs/systems/ai_system.cpp
-
     # Explicit EnTT type_index instantiations for cross-DLL ECS
     ecs/ecs_type_registry.cpp
 )
@@ -150,14 +146,8 @@ add_library(engine_client SHARED
     # ECS (universal - moved from client/ecs/)
     ecs/components.cpp
     
-    # Universal 2D rendering components and systems
+    # 2D rendering components (header-only, kept for type definitions)
     ecs/components/rendering.hpp
-    ecs/systems/sprite_system.hpp
-    ecs/systems/sprite_system.cpp
-    ecs/systems/particle_system.hpp
-    ecs/systems/particle_system.cpp
-    ecs/systems/camera2d_system.hpp
-    ecs/systems/camera2d_system.cpp
     
     # Renderer (universal - moved from client/renderer/)
     renderer/gpu/render_device.cpp
@@ -357,14 +347,27 @@ add_library(engine_lib ALIAS engine_core)
 # Engine should NOT depend on game-specific code
 
 # =============================================================================
-# Tools
+# Deprecated 2D Systems (disabled by default)
 # =============================================================================
-
-# Asset packer tool (no raylib dependency)
-if(RAYFLOW_BUILD_PACK_ASSETS)
-    add_executable(rayflow_pack_assets
-        tools/pack_assets.cpp
+option(RAYFLOW_BUILD_DEPRECATED_SYSTEMS "Build deprecated 2D ECS systems (sprite, particle, camera2d, physics2d, collision2d, ai)" OFF)
+if(RAYFLOW_BUILD_DEPRECATED_SYSTEMS)
+    message(WARNING "[Engine] Building DEPRECATED 2D systems — these will be removed in a future release")
+    target_sources(engine_core PRIVATE
+        ecs/systems/physics2d_system.hpp
+        ecs/systems/physics2d_system.cpp
+        ecs/systems/collision2d_system.hpp
+        ecs/systems/collision2d_system.cpp
+        ecs/systems/ai_system.hpp
+        ecs/systems/ai_system.cpp
     )
-    target_include_directories(rayflow_pack_assets PRIVATE ${CMAKE_SOURCE_DIR})
-    target_link_libraries(rayflow_pack_assets PRIVATE engine_core)
+    target_sources(engine_client PRIVATE
+        ecs/systems/sprite_system.hpp
+        ecs/systems/sprite_system.cpp
+        ecs/systems/particle_system.hpp
+        ecs/systems/particle_system.cpp
+        ecs/systems/camera2d_system.hpp
+        ecs/systems/camera2d_system.cpp
+    )
+    target_compile_definitions(engine_core PRIVATE RAYFLOW_DEPRECATED_SYSTEMS=1)
+    target_compile_definitions(engine_client PRIVATE RAYFLOW_DEPRECATED_SYSTEMS=1)
 endif()
