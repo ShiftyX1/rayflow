@@ -31,15 +31,15 @@ static void print_usage(const char* prog) {
 
 static void print_banner() {
     std::printf("\n");
-    std::printf("╔════════════════════════════════════════════╗\n");
-    std::printf("║     ____           ___       __            ║\n");
-    std::printf("║    / __ )___  ____/ / |     / /___ ___     ║\n");
-    std::printf("║   / __  / _ \\/ __  /| | /| / / __ `/ _ \\   ║\n");
-    std::printf("║  / /_/ /  __/ /_/ / | |/ |/ / /_/ /  __/   ║\n");
-    std::printf("║ /_____/\\___/\\__,_/  |__/|__/\\__,_/\\___/    ║\n");
-    std::printf("║                                            ║\n");
-    std::printf("║         BedWars Client (Engine v2)         ║\n");
-    std::printf("╚════════════════════════════════════════════╝\n");
+    // std::printf("╔════════════════════════════════════════════╗\n");
+    // std::printf("║     ____           ___       __            ║\n");
+    // std::printf("║    / __ )___  ____/ / |     / /___ ___     ║\n");
+    // std::printf("║   / __  / _ \\/ __  /| | /| / / __ `/ _ \\   ║\n");
+    // std::printf("║  / /_/ /  __/ /_/ / | |/ |/ / /_/ /  __/   ║\n");
+    // std::printf("║ /_____/\\___/\\__,_/  |__/|__/\\__,_/\\___/    ║\n");
+    // std::printf("║                                            ║\n");
+    // std::printf("║         BedWars Client (Engine v2)         ║\n");
+    // std::printf("╚════════════════════════════════════════════╝\n");
     std::printf("\n");
 }
 

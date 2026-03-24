@@ -14,10 +14,6 @@ DX11RenderDevice::~DX11RenderDevice() {
     if (initialized_) shutdown();
 }
 
-// ============================================================================
-// Resource creation
-// ============================================================================
-
 std::unique_ptr<IShader> DX11RenderDevice::createShader() {
     return std::make_unique<DX11Shader>(this);
 }
@@ -33,10 +29,6 @@ std::unique_ptr<IMesh> DX11RenderDevice::createMesh() {
 std::unique_ptr<IFramebuffer> DX11RenderDevice::createFramebuffer() {
     return std::make_unique<DX11Framebuffer>(this);
 }
-
-// ============================================================================
-// Global GPU state
-// ============================================================================
 
 void DX11RenderDevice::setViewport(int x, int y, int width, int height) {
     viewportX_ = x;
@@ -157,10 +149,6 @@ void DX11RenderDevice::flushActiveShaderConstants() const {
     }
 }
 
-// ============================================================================
-// Initialization
-// ============================================================================
-
 bool DX11RenderDevice::init(void* nativeWindowHandle, int width, int height) {
     HWND hwnd = static_cast<HWND>(nativeWindowHandle);
 
@@ -231,10 +219,6 @@ void DX11RenderDevice::bindDefaultRenderTarget() {
     ID3D11RenderTargetView* rtv = backbufferRTV_.Get();
     context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
 }
-
-// ============================================================================
-// Internal helpers
-// ============================================================================
 
 bool DX11RenderDevice::createSwapChain(HWND hwnd, int width, int height) {
     DXGI_SWAP_CHAIN_DESC sd = {};

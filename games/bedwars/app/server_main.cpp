@@ -35,8 +35,7 @@ void print_banner() {
  |____/ \___|\__,_|  \_/\_/\_/ \__,_|_|  |___/
                                               
 )" << '\n';
-    std::cout << "  BedWars Server " << BEDWARS_VERSION << " (Engine Architecture)\n";
-    std::cout << "  ================================================\n\n";
+    std::cout << "  BedWars Server " << BEDWARS_VERSION << "\n\n";
 }
 
 void print_usage(const char* progname) {

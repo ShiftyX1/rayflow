@@ -3,6 +3,7 @@
 // =============================================================================
 // Block Types and Properties - Shared voxel definitions
 // Block IDs and properties shared between client/server. Append-only enum.
+// TODO: THIS whole file is mess, because I don't understand why is game-specific logic is here, need to refactor this maybe?
 // =============================================================================
 
 #include <cstddef>
