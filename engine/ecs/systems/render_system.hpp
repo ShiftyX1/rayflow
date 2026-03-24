@@ -37,9 +37,6 @@ public:
     rf::IMesh& defaultCube() { return *defaultCube_; }
     
 private:
-    void render_crosshair(int screen_width, int screen_height);
-    void render_player_info(entt::registry& registry);
-    
     voxel::World* world_{nullptr};
 
     std::unique_ptr<rf::IShader> solidShader_;

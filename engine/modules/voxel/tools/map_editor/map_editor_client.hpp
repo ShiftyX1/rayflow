@@ -9,7 +9,7 @@
 // Uses:
 //   - HDR RenderPipeline (shadow + tone mapping)
 //   - ImGui for all editor UI
-//   - ECS for player/camera (InputSystem, PlayerSystem)
+//   - ECS for player/camera (FpsInputSystem, BedwarsPlayerSystem)
 //   - Engine transport (IClientServices::send) for protocol
 //   - Embedded BedWarsServer via local transport (started from main)
 // =============================================================================
@@ -36,8 +36,8 @@
 
 // Forward declarations
 namespace ecs {
-class InputSystem;
-class PlayerSystem;
+class FpsInputSystem;
+class BedwarsPlayerSystem;
 class RenderSystem;
 }
 
@@ -238,8 +238,8 @@ private:
     // ECS
     entt::registry registry_;
     entt::entity playerEntity_{entt::null};
-    std::unique_ptr<ecs::InputSystem> inputSystem_;
-    std::unique_ptr<ecs::PlayerSystem> playerSystem_;
+    std::unique_ptr<ecs::FpsInputSystem> inputSystem_;
+    std::unique_ptr<ecs::BedwarsPlayerSystem> playerSystem_;
     std::unique_ptr<ecs::RenderSystem> renderSystem_;
 
     // Cursor / input mode

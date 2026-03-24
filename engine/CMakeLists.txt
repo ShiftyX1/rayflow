@@ -147,8 +147,6 @@ add_library(engine_client SHARED
     
     # ECS (universal - moved from client/ecs/)
     ecs/components.cpp
-    ecs/systems/input_system.cpp
-    ecs/systems/player_system.cpp
     
     # Universal 2D rendering components and systems
     ecs/components/rendering.hpp
@@ -303,7 +301,6 @@ add_library(engine_voxel SHARED
     modules/voxel/client/texture_atlas.cpp
     
     # Voxel-dependent ECS systems (use voxel::World directly)
-    ecs/systems/physics_system.cpp
     ecs/systems/render_system.cpp
 )
 

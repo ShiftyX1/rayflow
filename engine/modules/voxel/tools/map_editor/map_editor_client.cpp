@@ -10,8 +10,8 @@
 #include "engine/modules/voxel/client/block_model_loader.hpp"
 #include "engine/modules/voxel/shared/block_state.hpp"
 #include "engine/ecs/components.hpp"
-#include "engine/ecs/systems/input_system.hpp"
-#include "engine/ecs/systems/player_system.hpp"
+#include "games/bedwars/client/ecs/systems/fps_input_system.hpp"
+#include "games/bedwars/client/ecs/systems/bedwars_player_system.hpp"
 #include "engine/ecs/systems/render_system.hpp"
 #include "engine/renderer/skybox.hpp"
 #include "engine/renderer/camera.hpp"
@@ -204,8 +204,8 @@ void MapEditorClient::on_init(engine::IClientServices& engine) {
     engine_->log(engine::LogLevel::Info, "MapEditorClient initialized");
 
     // Initialize ECS
-    inputSystem_ = std::make_unique<ecs::InputSystem>();
-    playerSystem_ = std::make_unique<ecs::PlayerSystem>();
+    inputSystem_ = std::make_unique<ecs::FpsInputSystem>();
+    playerSystem_ = std::make_unique<ecs::BedwarsPlayerSystem>();
     renderSystem_ = std::make_unique<ecs::RenderSystem>();
     playerSystem_->set_client_replica_mode(true);
 
@@ -407,7 +407,7 @@ void MapEditorClient::process_block_interaction() {
     auto* world = engine_->world();
     if (!world) return;
 
-    ecs::Camera3D ecsCamera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    ecs::Camera3D ecsCamera = ecs::BedwarsPlayerSystem::get_camera(registry_, playerEntity_);
     rf::Vec3 camDir = glm::normalize(ecsCamera.target - ecsCamera.position);
 
     RaycastHit hit = raycast_voxels(ecsCamera.position, camDir,
@@ -464,7 +464,7 @@ void MapEditorClient::render_3d_scene() {
     int sh = win.height();
 
     // Get camera from ECS
-    ecs::Camera3D ecsCamera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    ecs::Camera3D ecsCamera = ecs::BedwarsPlayerSystem::get_camera(registry_, playerEntity_);
 
     // Convert to rf::Camera
     rf::Camera camera;
@@ -556,7 +556,7 @@ void MapEditorClient::render_block_highlight(const rf::Camera& camera) {
     auto* world = engine_->world();
     if (!world) return;
 
-    ecs::Camera3D ecsCamera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    ecs::Camera3D ecsCamera = ecs::BedwarsPlayerSystem::get_camera(registry_, playerEntity_);
     rf::Vec3 camDir = glm::normalize(ecsCamera.target - ecsCamera.position);
     RaycastHit hit = raycast_voxels(ecsCamera.position, camDir,
                                      voxel::BlockInteraction::MAX_REACH_DISTANCE);
@@ -668,7 +668,7 @@ void MapEditorClient::enter_editor_mode() {
     // Initialize ECS player
     registry_.clear();
     const rf::Vec3 spawnPos{50.0f, 80.0f, 50.0f};
-    playerEntity_ = ecs::PlayerSystem::create_player(registry_, spawnPos);
+    playerEntity_ = ecs::BedwarsPlayerSystem::create_player(registry_, spawnPos);
     playerSystem_->set_world(engine_->world());
     renderSystem_->set_world(engine_->world());
 

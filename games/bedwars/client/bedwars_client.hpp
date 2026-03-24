@@ -30,10 +30,10 @@ class ClientScriptEngine;
 #include <unordered_map>
 #include <vector>
 
-// Forward declarations for ECS systems
+// Forward declarations for ECS systems (game-specific, in client/ecs/systems/)
 namespace ecs {
-    class InputSystem;
-    class PlayerSystem;
+    class FpsInputSystem;
+    class BedwarsPlayerSystem;
 }
 
 namespace bedwars {
@@ -236,11 +236,11 @@ private:
     // Items in world
     std::unordered_map<std::uint32_t, ClientItemState> items_;
     
-    // ECS (same as rayflow)
+    // ECS (game-specific systems)
     entt::registry registry_;
     entt::entity playerEntity_{entt::null};
-    std::unique_ptr<ecs::InputSystem> inputSystem_;
-    std::unique_ptr<ecs::PlayerSystem> playerSystem_;
+    std::unique_ptr<ecs::FpsInputSystem> inputSystem_;
+    std::unique_ptr<ecs::BedwarsPlayerSystem> playerSystem_;
     
     // UI input capture
     bool uiCapturesInput_{false};

@@ -74,6 +74,14 @@ add_library(bedwars_client_lib STATIC
     client/bedwars_client.cpp
     client/scripting/client_script_engine.hpp
     client/scripting/client_script_engine.cpp
+
+    # Game-specific ECS systems (migrated from engine)
+    client/ecs/systems/bedwars_player_system.hpp
+    client/ecs/systems/bedwars_player_system.cpp
+    client/ecs/systems/voxel_physics_system.hpp
+    client/ecs/systems/voxel_physics_system.cpp
+    client/ecs/systems/fps_input_system.hpp
+    client/ecs/systems/fps_input_system.cpp
 )
 
 target_include_directories(bedwars_client_lib PUBLIC 

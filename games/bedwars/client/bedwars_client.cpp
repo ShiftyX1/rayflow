@@ -6,8 +6,8 @@
 #include "engine/modules/voxel/client/world.hpp"
 #include "engine/modules/voxel/client/block_interaction.hpp"
 #include "engine/ecs/components.hpp"
-#include "engine/ecs/systems/input_system.hpp"
-#include "engine/ecs/systems/player_system.hpp"
+#include "ecs/systems/fps_input_system.hpp"
+#include "ecs/systems/bedwars_player_system.hpp"
 #include "engine/renderer/skybox.hpp"
 #include "engine/renderer/camera.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
@@ -64,14 +64,14 @@ void BedWarsClient::on_init(engine::IClientServices& engine) {
         clientScriptEngine_.reset();
     }
     
-    // Initialize ECS systems (same as rayflow)
-    inputSystem_ = std::make_unique<ecs::InputSystem>();
-    playerSystem_ = std::make_unique<ecs::PlayerSystem>();
+    // Initialize ECS systems (game-specific)
+    inputSystem_ = std::make_unique<ecs::FpsInputSystem>();
+    playerSystem_ = std::make_unique<ecs::BedwarsPlayerSystem>();
     playerSystem_->set_client_replica_mode(true);  // Server-authoritative
     
     // Create player entity with all required components
     rf::Vec3 spawnPos = {0.0f, 80.0f, 0.0f};
-    playerEntity_ = ecs::PlayerSystem::create_player(registry_, spawnPos);
+    playerEntity_ = ecs::BedwarsPlayerSystem::create_player(registry_, spawnPos);
     
     // Start in main menu with cursor enabled
     gameScreen_ = ui::GameScreen::MainMenu;
@@ -201,7 +201,7 @@ void BedWarsClient::on_update(float dt) {
                 // Update block interaction
                 auto* blockInteraction = engine_->block_interaction();
                 if (blockInteraction && !uiCapturesInput_) {
-                    ecs::Camera3D camera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+                    ecs::Camera3D camera = ecs::BedwarsPlayerSystem::get_camera(registry_, playerEntity_);
                     rf::Vec3 camDiff = camera.target - camera.position;
                     float camLen = std::sqrt(camDiff.x*camDiff.x + camDiff.y*camDiff.y + camDiff.z*camDiff.z);
                     rf::Vec3 camDir = (camLen > 0.0001f) ? camDiff / camLen : rf::Vec3{0,0,1};
@@ -272,7 +272,7 @@ void BedWarsClient::on_render() {
     }
     
     // Get camera from ECS
-    ecs::Camera3D ecsCamera = ecs::PlayerSystem::get_camera(registry_, playerEntity_);
+    ecs::Camera3D ecsCamera = ecs::BedwarsPlayerSystem::get_camera(registry_, playerEntity_);
     
     // Convert to rf::Camera for OpenGL rendering
     rf::Camera camera;
