@@ -32,6 +32,7 @@ namespace ui {
 namespace engine::console {
     class ConsoleLogSink;
     class ConsoleLuaState;
+    class ConVarRegistry;
 }
 
 namespace renderer {
@@ -127,6 +128,7 @@ private:
     // Developer console subsystems
     std::unique_ptr<engine::console::ConsoleLogSink> consoleSink_;
     std::unique_ptr<engine::console::ConsoleLuaState> consoleLua_;
+    std::unique_ptr<engine::console::ConVarRegistry> convarRegistry_;
 
     // Render device (owned by engine)
     std::unique_ptr<rf::RenderDevice> renderDevice_;

@@ -118,7 +118,7 @@ void draw_console(engine::console::ConsoleLogSink& sink,
     constexpr ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_MenuBar;
 
-    if (!ImGui::Begin("Developer Console", open, flags)) {
+    if (!ImGui::Begin("Console", open, flags)) {
         ImGui::End();
         return;
     }

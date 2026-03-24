@@ -52,6 +52,14 @@ struct SandboxConfig {
         return cfg;
     }
     
+    static SandboxConfig default_for_console() {
+        SandboxConfig cfg;
+        cfg.maxMemoryMB = 64;  // 64 MB — same as game scripts (soft limits)
+        cfg.maxInstructionsPerCall = 20000000;  // 20M per call
+        cfg.maxExecutionTimeSec = 5.0;  // 5 seconds max
+        return cfg;
+    }
+    
     ScriptLimits to_script_limits() const {
         ScriptLimits limits;
         limits.maxMemoryBytes = maxMemoryMB * 1024 * 1024;

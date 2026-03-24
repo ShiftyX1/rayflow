@@ -105,11 +105,13 @@ add_library(engine_core SHARED
     # Explicit EnTT type_index instantiations for cross-DLL ECS
     ecs/ecs_type_registry.cpp
 
-    # Developer console (log sink + Lua state)
+    # Developer console (log sink + Lua state + ConVar registry)
     core/console/console_log_sink.hpp
     core/console/console_log_sink.cpp
     core/console/console_lua_state.hpp
     core/console/console_lua_state.cpp
+    core/console/convar_registry.hpp
+    core/console/convar_registry.cpp
 )
 
 target_include_directories(engine_core PUBLIC 

@@ -61,7 +61,7 @@ struct Vec3 {
 void register_math_api(sol::state& lua) {
     // ---- vec2 usertype ----
     lua.new_usertype<Vec2>("vec2",
-        sol::constructors<Vec2(), Vec2(float, float)>(),
+        sol::call_constructor, sol::constructors<Vec2(), Vec2(float, float)>(),
         "x", &Vec2::x,
         "y", &Vec2::y,
         sol::meta_function::addition, &Vec2::operator+,
@@ -76,7 +76,7 @@ void register_math_api(sol::state& lua) {
 
     // ---- vec3 usertype ----
     lua.new_usertype<Vec3>("vec3",
-        sol::constructors<Vec3(), Vec3(float, float, float)>(),
+        sol::call_constructor, sol::constructors<Vec3(), Vec3(float, float, float)>(),
         "x", &Vec3::x,
         "y", &Vec3::y,
         "z", &Vec3::z,
