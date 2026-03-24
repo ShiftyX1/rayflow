@@ -798,7 +798,7 @@ void UIDocument::render_health_bar(const Node& node, const UIViewModel& vm) {
             tex = half;
         }
 
-        const rf::Rect src{0.0f, 0.0f, static_cast<float>(heartW), static_cast<float>(heartH)};
+        const rf::Rect src{0.0f, 0.0f, static_cast<float>(tex->width()), static_cast<float>(tex->height())};
         const rf::Rect dst{static_cast<float>(x), static_cast<float>(y), static_cast<float>(heartW), static_cast<float>(heartH)};
         rf::Batch2D::instance().drawTexture(tex, src, dst);
     }
