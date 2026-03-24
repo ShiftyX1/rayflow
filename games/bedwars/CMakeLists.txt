@@ -152,6 +152,31 @@ set_target_properties(bedwars_pack_assets PROPERTIES
 )
 
 # =============================================================================
+# Map Editor Tool
+# =============================================================================
+if(RAYFLOW_BUILD_MAP_EDITOR)
+    add_executable(map_builder
+        tools/map_editor/map_editor_main.cpp
+        tools/map_editor/map_editor_client.cpp
+        tools/map_editor/editor_imgui_ui.cpp
+    )
+
+    target_include_directories(map_builder PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/engine
+    )
+
+    target_link_libraries(map_builder PRIVATE
+        bedwars_client_lib
+        bedwars_server_lib
+        engine_app
+    )
+
+    rayflow_link_platform(map_builder)
+    rayflow_configure_executable(map_builder)
+endif()
+
+# =============================================================================
 # Copy Assets to Build Directory
 # =============================================================================
 

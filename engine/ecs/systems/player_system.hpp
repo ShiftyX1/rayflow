@@ -34,7 +34,6 @@ private:
     void handle_movement(entt::registry& registry, float delta_time);
     void handle_jumping(entt::registry& registry);
     void handle_creative_mode(entt::registry& registry);
-    void handle_tool_selection(entt::registry& registry);
     
     voxel::World* world_{nullptr};
     bool clientReplicaMode_{false};

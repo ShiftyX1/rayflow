@@ -1,0 +1,3 @@
+engine/renderer/glad/include/KHR/khrplatform.h linguist-generated=true
+engine/renderer/glad/include/glad/glad.h linguist-generated=true
+engine/renderer/glad/src/gl.c linguist-generated=true

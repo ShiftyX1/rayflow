@@ -14,8 +14,6 @@ namespace ecs {
 constexpr float DEG_TO_RAD = 0.017453292519943295f;
 
 void PlayerSystem::update(entt::registry& registry, float delta_time) {
-    handle_tool_selection(registry);
-
     if (clientReplicaMode_) {
         return;
     }
@@ -51,10 +49,7 @@ entt::entity PlayerSystem::create_player(entt::registry& registry, const rf::Vec
     camera.fov = 60.0f;
     
     registry.emplace<InputState>(entity);
-    
-    registry.emplace<ToolHolder>(entity);
-    registry.emplace<BlockBreaker>(entity);
-    
+
     return entity;
 }
 
@@ -152,42 +147,6 @@ void PlayerSystem::handle_creative_mode(entt::registry& registry) {
             auto& player = view.get<PlayerController>(entity);
             player.in_creative_mode = !player.in_creative_mode;
             TraceLog(LOG_INFO, "Creative mode: %s", player.in_creative_mode ? "ON" : "OFF");
-        }
-    }
-}
-
-void PlayerSystem::handle_tool_selection(entt::registry& registry) {
-    auto view = registry.view<ToolHolder>();
-
-    const auto& controls = core::Config::instance().controls();
-    
-    for (auto entity : view) {
-        auto& tool = view.get<ToolHolder>(entity);
-        
-        if (rf::Input::instance().isKeyPressed(controls.tool_1)) {
-            tool.tool_type = ToolHolder::ToolType::None;
-            tool.tool_level = ToolHolder::ToolLevel::Hand;
-            TraceLog(LOG_INFO, "Selected: Hand");
-        }
-        if (rf::Input::instance().isKeyPressed(controls.tool_2)) {
-            tool.tool_type = ToolHolder::ToolType::Pickaxe;
-            tool.tool_level = ToolHolder::ToolLevel::Wood;
-            TraceLog(LOG_INFO, "Selected: Wooden Pickaxe");
-        }
-        if (rf::Input::instance().isKeyPressed(controls.tool_3)) {
-            tool.tool_type = ToolHolder::ToolType::Pickaxe;
-            tool.tool_level = ToolHolder::ToolLevel::Stone;
-            TraceLog(LOG_INFO, "Selected: Stone Pickaxe");
-        }
-        if (rf::Input::instance().isKeyPressed(controls.tool_4)) {
-            tool.tool_type = ToolHolder::ToolType::Pickaxe;
-            tool.tool_level = ToolHolder::ToolLevel::Iron;
-            TraceLog(LOG_INFO, "Selected: Iron Pickaxe");
-        }
-        if (rf::Input::instance().isKeyPressed(controls.tool_5)) {
-            tool.tool_type = ToolHolder::ToolType::Pickaxe;
-            tool.tool_level = ToolHolder::ToolLevel::Diamond;
-            TraceLog(LOG_INFO, "Selected: Diamond Pickaxe");
         }
     }
 }
