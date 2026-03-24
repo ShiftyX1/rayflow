@@ -2,7 +2,6 @@
 
 #include "engine/core/export.hpp"
 #include "world.hpp"
-#include "engine/ecs/components.hpp"
 #include "engine/core/player_constants.hpp"
 #include "engine/core/math_types.hpp"
 #include "engine/renderer/gpu/gpu_texture.hpp"
@@ -53,7 +52,7 @@ public:
     void destroy();
     
     void update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir, 
-                const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time);
+                float mining_speed, int harvest_level, bool is_breaking, bool is_placing, float delta_time);
     
     /// Render wireframe outline around the targeted block.
     void render_highlight(const rf::Camera& camera) const;
@@ -74,7 +73,7 @@ public:
 private:
     BlockRaycastResult raycast(const World& world, const rf::Vec3& origin, 
                                 const rf::Vec3& direction, float max_distance) const;
-    float calculate_break_time(BlockType block_type, const ecs::ToolHolder& tool) const;
+    float calculate_break_time(BlockType block_type, float mining_speed, int harvest_level) const;
     
     BlockRaycastResult target_;
     float break_progress_{0.0f};

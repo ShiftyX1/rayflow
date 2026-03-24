@@ -25,8 +25,8 @@ struct GravityAffected;
 struct RigidBody;
 struct MeshComponent;
 struct ModelComponent;
-struct ToolHolder;
-struct BlockBreaker;
+struct ToolHolder;      // defined in games/bedwars — only forward-decl needed for type_index
+struct BlockBreaker;    // defined in games/bedwars — only forward-decl needed for type_index
 struct InputState;
 struct NameTag;
 struct Lifetime;

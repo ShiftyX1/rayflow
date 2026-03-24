@@ -27,6 +27,9 @@ public:
     bool init(const std::string& atlas_path);
     void destroy();
     
+    /// Register a single block type.  Call after init(), before first use.
+    void register_block(BlockType type, const BlockInfo& info);
+
     const BlockInfo& get_block_info(BlockType type) const;
     rf::Rect get_texture_rect(BlockType type, int face) const;
 
@@ -44,8 +47,6 @@ private:
     
     BlockRegistry(const BlockRegistry&) = delete;
     BlockRegistry& operator=(const BlockRegistry&) = delete;
-    
-    void register_blocks();
     
     std::array<BlockInfo, static_cast<size_t>(BlockType::Count)> blocks_{};
     std::unique_ptr<rf::ITexture> atlas_texture_;

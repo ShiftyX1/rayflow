@@ -2,6 +2,7 @@
 #include "editor_imgui_ui.hpp"
 
 #include "games/bedwars/shared/protocol/serialization.hpp"
+#include "games/bedwars/shared/blocks/bedwars_blocks.hpp"
 
 // Engine subsystems accessed through IClientServices
 #include "engine/modules/voxel/client/world.hpp"
@@ -202,6 +203,10 @@ MapEditorClient::~MapEditorClient() = default;
 void MapEditorClient::on_init(engine::IClientServices& engine) {
     engine_ = &engine;
     engine_->log(engine::LogLevel::Info, "MapEditorClient initialized");
+
+    // Register bedwars block definitions
+    bedwars::register_block_shared_data();
+    bedwars::register_block_client_data();
 
     // Initialize ECS
     inputSystem_ = std::make_unique<ecs::FpsInputSystem>();

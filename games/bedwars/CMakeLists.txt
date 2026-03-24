@@ -21,6 +21,10 @@ add_library(bedwars_shared STATIC
     shared/game/team_types.hpp
     shared/game/generator_types.hpp
     shared/constants.hpp
+
+    # Block shared data registration
+    shared/blocks/bedwars_blocks.hpp
+    shared/blocks/bedwars_blocks.cpp
 )
 
 target_include_directories(bedwars_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -75,6 +79,10 @@ add_library(bedwars_client_lib STATIC
     client/scripting/client_script_engine.hpp
     client/scripting/client_script_engine.cpp
 
+    # Game-specific ECS components (migrated from engine)
+    client/ecs/components/bedwars_components.hpp
+    client/ecs/components/bedwars_components.cpp
+
     # Game-specific ECS systems (migrated from engine)
     client/ecs/systems/bedwars_player_system.hpp
     client/ecs/systems/bedwars_player_system.cpp
@@ -82,6 +90,9 @@ add_library(bedwars_client_lib STATIC
     client/ecs/systems/voxel_physics_system.cpp
     client/ecs/systems/fps_input_system.hpp
     client/ecs/systems/fps_input_system.cpp
+
+    # Client-only block rendering data registration
+    client/blocks/bedwars_client_blocks.cpp
 )
 
 target_include_directories(bedwars_client_lib PUBLIC 

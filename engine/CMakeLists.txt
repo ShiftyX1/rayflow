@@ -90,6 +90,8 @@ add_library(engine_core SHARED
     
     # Shared voxel types (needed by maps)
     modules/voxel/shared/block.hpp
+    modules/voxel/shared/block_data.hpp
+    modules/voxel/shared/block_data.cpp
     modules/voxel/shared/block_state.hpp
     modules/voxel/shared/block_shape.hpp
     

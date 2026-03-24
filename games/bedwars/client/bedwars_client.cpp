@@ -6,6 +6,8 @@
 #include "engine/modules/voxel/client/world.hpp"
 #include "engine/modules/voxel/client/block_interaction.hpp"
 #include "engine/ecs/components.hpp"
+#include "ecs/components/bedwars_components.hpp"
+#include "../shared/blocks/bedwars_blocks.hpp"
 #include "ecs/systems/fps_input_system.hpp"
 #include "ecs/systems/bedwars_player_system.hpp"
 #include "engine/renderer/skybox.hpp"
@@ -49,6 +51,10 @@ BedWarsClient::~BedWarsClient() = default;
 
 void BedWarsClient::on_init(engine::IClientServices& engine) {
     engine_ = &engine;
+    
+    // Register bedwars block definitions (shared + client rendering data)
+    bedwars::register_block_shared_data();
+    bedwars::register_block_client_data();
     
     engine_->log(engine::LogLevel::Info, "BedWarsClient initialized");
     
@@ -209,7 +215,8 @@ void BedWarsClient::on_update(float dt) {
                     auto& input = registry_.get<ecs::InputState>(playerEntity_);
                     auto& tool = registry_.get<ecs::ToolHolder>(playerEntity_);
                     
-                    blockInteraction->update(*world, camera.position, camDir, tool, 
+                    blockInteraction->update(*world, camera.position, camDir,
+                                            tool.get_mining_speed(), tool.get_harvest_level(),
                                             input.primary_action, input.secondary_action, dt);
                     
                     // Check for pending block operations

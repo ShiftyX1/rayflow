@@ -6,6 +6,7 @@
 
 #include "engine/ecs/system.hpp"
 #include "engine/ecs/components.hpp"
+#include "../components/bedwars_components.hpp"
 #include "engine/core/math_types.hpp"
 
 namespace voxel {

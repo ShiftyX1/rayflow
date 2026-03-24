@@ -40,10 +40,8 @@ bool BlockRegistry::init(const std::string& atlas_path) {
         TraceLog(LOG_WARNING, "[voxel] foliagecolor.png not found; foliage recolor will use fallback");
     }
     
-    register_blocks();
-    
     initialized_ = true;
-    TraceLog(LOG_INFO, "Block registry initialized with %d block types", static_cast<int>(BlockType::Count));
+    TraceLog(LOG_INFO, "Block registry initialized (game must call register_block() to populate)");
     
     return true;
 }
@@ -92,122 +90,8 @@ rf::Color BlockRegistry::sample_foliage_color(float temperature, float humidity)
     return sample_colormap_(*foliage_colormap_, temperature, humidity, fallback);
 }
 
-void BlockRegistry::register_blocks() {
-    blocks_[static_cast<size_t>(BlockType::Air)] = {
-        "Air", false, true, 0.0f, 0, {0, 0, 0, 0, 0, 0}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Stone)] = {
-        "Stone", true, false, 1.5f, 1, {1, 1, 1, 1, 1, 1}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Dirt)] = {
-        "Dirt", true, false, 0.5f, 0, {2, 2, 2, 2, 2, 2}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Grass)] = {
-        "Grass", true, false, 0.6f, 0, {3, 3, 0, 2, 3, 3}  // top=grass, bottom=dirt, sides=grass_side
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Sand)] = {
-        "Sand", true, false, 0.5f, 0, {18, 18, 18, 18, 18, 18}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Water)] = {
-        "Water", false, true, 100.0f, 0, {205, 205, 205, 205, 205, 205}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Wood)] = {
-        "Wood", true, false, 2.0f, 0, {20, 20, 21, 21, 20, 20}  // sides=bark, top/bottom=rings
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Leaves)] = {
-        "Leaves", true, true, 0.2f, 0, {52, 52, 52, 52, 52, 52}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Bedrock)] = {
-        "Bedrock", true, false, -1.0f, 255, {17, 17, 17, 17, 17, 17}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Gravel)] = {
-        "Gravel", true, false, 0.6f, 0, {19, 19, 19, 19, 19, 19}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Coal)] = {
-        "Coal Ore", true, false, 3.0f, 1, {34, 34, 34, 34, 34, 34}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Iron)] = {
-        "Iron Ore", true, false, 3.0f, 2, {33, 33, 33, 33, 33, 33}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Gold)] = {
-        "Gold Ore", true, false, 3.0f, 3, {32, 32, 32, 32, 32, 32}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Diamond)] = {
-        "Diamond Ore", true, false, 3.0f, 3, {50, 50, 50, 50, 50, 50}
-    };
-
-    blocks_[static_cast<size_t>(BlockType::Light)] = {
-        "Light", false, true, 0.0f, 0, {0, 0, 0, 0, 0, 0}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::StoneSlab)] = {
-        "Stone Slab", true, false, 1.5f, 1, {1, 1, 1, 1, 1, 1}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::StoneSlabTop)] = {
-        "Stone Slab Top", true, false, 1.5f, 1, {1, 1, 1, 1, 1, 1}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::WoodSlab)] = {
-        "Wood Slab", true, false, 2.0f, 0, {4, 4, 4, 4, 4, 4}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::WoodSlabTop)] = {
-        "Wood Slab Top", true, false, 2.0f, 0, {4, 4, 4, 4, 4, 4}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::OakFence)] = {
-        "Oak Fence", true, false, 2.0f, 0, {4, 4, 4, 4, 4, 4}
-    };
-    
-    // Vegetation blocks (cross-shaped, transparent, no collision)
-    // Using same texture index for all faces since cross models use special rendering
-    // Texture indices: tallgrass=39, flower_rose=12, flower_dandelion=13, flower_blue_orchid=175 (need to check atlas)
-    blocks_[static_cast<size_t>(BlockType::TallGrass)] = {
-        "Tall Grass", false, true, 0.0f, 0, {39, 39, 39, 39, 39, 39}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Poppy)] = {
-        "Poppy", false, true, 0.0f, 0, {12, 12, 12, 12, 12, 12}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::Dandelion)] = {
-        "Dandelion", false, true, 0.0f, 0, {13, 13, 13, 13, 13, 13}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::DeadBush)] = {
-        "Dead Bush", false, true, 0.0f, 0, {55, 55, 55, 55, 55, 55}
-    };
-    
-    // Team blocks (BW-1): solid colored blocks for BedWars team spawn points
-    blocks_[static_cast<size_t>(BlockType::TeamRed)] = {
-        "Team Red", true, false, 50.0f, 0, {240, 240, 240, 240, 240, 240}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::TeamBlue)] = {
-        "Team Blue", true, false, 50.0f, 0, {241, 241, 241, 241, 241, 241}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::TeamGreen)] = {
-        "Team Green", true, false, 50.0f, 0, {242, 242, 242, 242, 242, 242}
-    };
-    
-    blocks_[static_cast<size_t>(BlockType::TeamYellow)] = {
-        "Team Yellow", true, false, 50.0f, 0, {243, 243, 243, 243, 243, 243}
-    };
+void BlockRegistry::register_block(BlockType type, const BlockInfo& info) {
+    blocks_[static_cast<size_t>(type)] = info;
 }
 
 const BlockInfo& BlockRegistry::get_block_info(BlockType type) const {

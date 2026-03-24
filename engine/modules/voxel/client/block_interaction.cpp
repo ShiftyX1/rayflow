@@ -102,7 +102,7 @@ void BlockInteraction::on_action_rejected() {
 }
 
 void BlockInteraction::update(World& world, const rf::Vec3& camera_pos, const rf::Vec3& camera_dir,
-                               const ecs::ToolHolder& tool, bool is_breaking, bool is_placing, float delta_time) {
+                               float mining_speed, int harvest_level, bool is_breaking, bool is_placing, float delta_time) {
     target_ = raycast(world, camera_pos, camera_dir, MAX_REACH_DISTANCE);
 
     // Clear pending requests if the world already reflects the server result.
@@ -137,7 +137,7 @@ void BlockInteraction::update(World& world, const rf::Vec3& camera_pos, const rf
             break_progress_ = 0.0f;
         }
         
-        float break_time = calculate_break_time(target_.block_type, tool);
+        float break_time = calculate_break_time(target_.block_type, mining_speed, harvest_level);
         if (break_time > 0.0f) {
             break_progress_ += delta_time / break_time;
             
@@ -272,7 +272,7 @@ BlockRaycastResult BlockInteraction::raycast(const World& world, const rf::Vec3&
     return result;
 }
 
-float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::ToolHolder& tool) const {
+float BlockInteraction::calculate_break_time(BlockType block_type, float mining_speed, int harvest_level) const {
     const auto& info = BlockRegistry::instance().get_block_info(block_type);
     
     if (info.hardness < 0) {
@@ -280,13 +280,13 @@ float BlockInteraction::calculate_break_time(BlockType block_type, const ecs::To
     }
     
     float base_time = info.hardness;
-    float mining_speed = tool.get_mining_speed();
+    float speed = mining_speed;
     
-    if (tool.get_harvest_level() < info.required_tool_level) {
-        mining_speed = 1.0f;
+    if (harvest_level < info.required_tool_level) {
+        speed = 1.0f;
     }
     
-    return base_time / mining_speed;
+    return base_time / speed;
 }
 
 // ============================================================================

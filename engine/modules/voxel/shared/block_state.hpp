@@ -233,7 +233,7 @@ constexpr bool can_slabs_merge(BlockType existing, SlabType existingState,
 /**
  * @brief Check if a block type can be connected to by a fence/wall.
  */
-constexpr bool can_fence_connect_to(BlockType type) {
+inline bool can_fence_connect_to(BlockType type) {
     // Fences connect to:
     // 1. Other fences
     if (is_fence(type)) return true;

@@ -1,6 +1,7 @@
 #include "bedwars_server.hpp"
 #include "physics_utils.hpp"
 #include "../shared/protocol/serialization.hpp"
+#include "../shared/blocks/bedwars_blocks.hpp"
 
 // Terrain (now in bedwars)
 #include "voxel/terrain.hpp"
@@ -135,6 +136,10 @@ BedWarsServer::~BedWarsServer() = default;
 
 void BedWarsServer::on_init(engine::IEngineServices& engine) {
     engine_ = &engine;
+
+    // Register bedwars block definitions (shared data only — server has no rendering)
+    bedwars::register_block_shared_data();
+
     terrain_ = std::make_unique<::bedwars::voxel::Terrain>(worldSeed_);
     
     // Editor mode: empty terrain (no procedural generation)

@@ -89,39 +89,6 @@ struct ModelComponent {
     bool          visible{true};
 };
 
-struct RAYFLOW_CLIENT_API ToolHolder {
-    enum class ToolType {
-        None,
-        Pickaxe,
-        Axe,
-        Shovel,
-        Sword
-    };
-    
-    enum class ToolLevel {
-        Hand,
-        Wood,
-        Stone,
-        Iron,
-        Diamond
-    };
-    
-    ToolType tool_type{ToolType::None};
-    ToolLevel tool_level{ToolLevel::Hand};
-    
-    float get_mining_speed() const;
-    int get_harvest_level() const;
-};
-
-struct BlockBreaker {
-    bool is_breaking{false};
-    float break_progress{0.0f};
-    int target_block_x{0};
-    int target_block_y{0};
-    int target_block_z{0};
-    bool has_target{false};
-};
-
 struct InputState {
     rf::Vec2 move_input{0.0f, 0.0f};
     rf::Vec2 look_input{0.0f, 0.0f};
