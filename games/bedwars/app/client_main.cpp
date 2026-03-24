@@ -2,6 +2,10 @@
 // Usage: bedwars_client [--connect host:port] [--name PlayerName]
 // Without --connect, starts in singleplayer mode with embedded server.
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "../client/bedwars_client.hpp"
 #include "../server/bedwars_server.hpp"
 
@@ -28,6 +32,9 @@ static void print_usage(const char* prog) {
     std::printf("  --height H            Window height (default: 720) (DEPRECATED use config files)\n");
     std::printf("  --help                Show this help\n");
     std::printf("  --dx11                Use DirectX 11 backend (Windows only)\n");
+#if defined(_WIN32) && !defined(NDEBUG)
+    std::printf("  --debug               Attach a console window for early diagnostic logs\n");
+#endif
 }
 
 static void print_banner() {
@@ -45,11 +52,20 @@ static void print_banner() {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+        FILE* dummy = nullptr;
+        freopen_s(&dummy, "CONOUT$", "w", stdout);
+        freopen_s(&dummy, "CONOUT$", "w", stderr);
+    }
+#endif
+
     // Default settings
     std::string playerName = "Player";
     int windowWidth = 1280;
     int windowHeight = 720;
     bool useDX11 = false;
+    bool debugConsole = false;
     
     // Parse arguments
     for (int i = 1; i < argc; ++i) {
@@ -69,8 +85,20 @@ int main(int argc, char* argv[]) {
         else if (std::strcmp(argv[i], "--dx11") == 0) {
             useDX11 = true;
         }
+        else if (std::strcmp(argv[i], "--debug") == 0) {
+            debugConsole = true;
+        }
     }
     
+#if defined(_WIN32) && !defined(NDEBUG)
+    if (debugConsole) {
+        AllocConsole();
+        FILE* dummy = nullptr;
+        freopen_s(&dummy, "CONOUT$", "w", stdout);
+        freopen_s(&dummy, "CONOUT$", "w", stderr);
+    }
+#endif
+
     print_banner();
     
     // Shared state for connection management
@@ -203,7 +231,6 @@ int main(int argc, char* argv[]) {
 }
 
 #ifdef _WIN32
-#include <windows.h>
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     return main(__argc, __argv);
 }

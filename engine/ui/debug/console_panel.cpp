@@ -21,8 +21,7 @@ namespace ui::debug {
 static char              s_inputBuf[512] = {};
 static std::vector<std::string> s_history;
 static int               s_historyIdx = -1;   // -1 = new line
-static bool              s_scrollToBottom = true;
-static bool              s_autoScroll = true;
+static bool              s_scrollToBottom = false;
 
 // Level filter (indexed by LOG_* constants 0-7)
 static bool s_levelFilter[8] = {
@@ -131,7 +130,6 @@ void draw_console(engine::console::ConsoleLogSink& sink,
         if (ImGui::SmallButton("Clear")) {
             sink.clear();
         }
-        ImGui::Checkbox("Auto-scroll", &s_autoScroll);
         ImGui::EndMenuBar();
     }
 
@@ -149,23 +147,32 @@ void draw_console(engine::console::ConsoleLogSink& sink,
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 1));
-    for (const auto& entry : s_snapshot) {
+    for (std::size_t i = 0; i < s_snapshot.size(); ++i) {
+        const auto& entry = s_snapshot[i];
         // Level filter
         if (entry.level >= 0 && entry.level < 8 && !s_levelFilter[entry.level])
             continue;
 
+        std::string line = "[" + std::string(label_for_level(entry.level)) + "] " + entry.message;
+
         ImGui::PushStyleColor(ImGuiCol_Text, color_for_level(entry.level));
-        ImGui::TextUnformatted(
-            ("[" + std::string(label_for_level(entry.level)) + "] " + entry.message).c_str());
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::Selectable(line.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
+        if (ImGui::BeginPopupContextItem("##ctx")) {
+            if (ImGui::MenuItem("Copy")) {
+                ImGui::SetClipboardText(line.c_str());
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
         ImGui::PopStyleColor();
     }
     ImGui::PopStyleVar();
 
-    // Auto-scroll
-    if (s_autoScroll && s_scrollToBottom) {
+    if (s_scrollToBottom) {
         ImGui::SetScrollHereY(1.0f);
+        s_scrollToBottom = false;
     }
-    s_scrollToBottom = s_autoScroll;
 
     ImGui::EndChild();
 
