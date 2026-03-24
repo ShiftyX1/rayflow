@@ -262,7 +262,10 @@ bool DX11Texture::loadCubemapFromPanorama(const std::string& panoramaPath, int f
     }
 
     HRESULT hr = d3dDevice->CreateTexture2D(&desc, initData, &texture_);
-    if (FAILED(hr)) return false;
+    if (FAILED(hr)) {
+        TraceLog(LOG_ERROR, "[DX11Texture] CreateTexture2D failed for cubemap (hr=0x%08X)", hr);
+        return false;
+    }
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
     srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -271,7 +274,10 @@ bool DX11Texture::loadCubemapFromPanorama(const std::string& panoramaPath, int f
     srvDesc.TextureCube.MostDetailedMip = 0;
 
     hr = d3dDevice->CreateShaderResourceView(texture_.Get(), &srvDesc, &srv_);
-    if (FAILED(hr)) return false;
+    if (FAILED(hr)) {
+        TraceLog(LOG_ERROR, "[DX11Texture] CreateSRV failed for cubemap (hr=0x%08X)", hr);
+        return false;
+    }
 
     createSamplerState();
     return true;

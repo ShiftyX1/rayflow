@@ -16,6 +16,8 @@ namespace rf {
 template <typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
 
+class DX11Shader;
+
 class DX11RenderDevice : public RenderDevice {
 public:
     DX11RenderDevice() = default;
@@ -61,6 +63,12 @@ public:
     /// Kept for API compatibility (called by Batch2D).
     void flushState();
 
+    /// Flush constant buffers of the currently active shader (if any are dirty).
+    void flushActiveShaderConstants() const;
+
+    /// Set/clear the currently bound shader (called by DX11Shader::bind/unbind).
+    void setActiveShader(const DX11Shader* shader) { activeShader_ = shader; }
+
 private:
     bool createSwapChain(HWND hwnd, int width, int height);
     bool createBackbufferViews();
@@ -93,6 +101,8 @@ private:
     int backbufferWidth_  = 0;
     int backbufferHeight_ = 0;
     bool initialized_ = false;
+
+    const DX11Shader* activeShader_ = nullptr;
 };
 
 } // namespace rf

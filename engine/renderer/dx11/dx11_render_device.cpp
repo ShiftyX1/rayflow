@@ -151,6 +151,12 @@ void DX11RenderDevice::flushState() {
     // This method is kept for API compatibility (called by Batch2D).
 }
 
+void DX11RenderDevice::flushActiveShaderConstants() const {
+    if (activeShader_) {
+        activeShader_->flushConstantBuffers();
+    }
+}
+
 // ============================================================================
 // Initialization
 // ============================================================================

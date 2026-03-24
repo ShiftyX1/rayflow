@@ -539,15 +539,15 @@ void UIDocument::render(const UIViewModel& vm) {
         return;
     }
 
-    TraceLog(LOG_INFO, "[UIDocument::render] children=%d", static_cast<int>(root_.children.size()));
+    TraceLog(LOG_DEBUG, "[UIDocument::render] children=%d", static_cast<int>(root_.children.size()));
     int idx = 0;
     for (const auto& child : root_.children) {
-        TraceLog(LOG_INFO, "[UIDocument::render] child[%d] type=%s", idx, child.type.c_str());
+        TraceLog(LOG_DEBUG, "[UIDocument::render] child[%d] type=%s", idx, child.type.c_str());
         render_node(child, vm);
-        TraceLog(LOG_INFO, "[UIDocument::render] child[%d] done", idx);
+        TraceLog(LOG_DEBUG, "[UIDocument::render] child[%d] done", idx);
         idx++;
     }
-    TraceLog(LOG_INFO, "[UIDocument::render] all done");
+    TraceLog(LOG_DEBUG, "[UIDocument::render] all done");
 }
 
 void UIDocument::render_node(const Node& node, const UIViewModel& vm) {
@@ -589,14 +589,14 @@ void UIDocument::render_node(const Node& node, const UIViewModel& vm) {
 void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
     const rf::Rect& r = node.computed_rect;
 
-    TraceLog(LOG_INFO, "[UIDocument::render_panel] shadow");
+    TraceLog(LOG_DEBUG, "[UIDocument::render_panel] shadow");
     draw_box_shadow(r, node.style);
 
     auto& batch = rf::Batch2D::instance();
 
     // Background
     if (node.style.background_color.has_value()) {
-        TraceLog(LOG_INFO, "[UIDocument::render_panel] bg");
+        TraceLog(LOG_DEBUG, "[UIDocument::render_panel] bg");
         rf::Color bgColor = apply_opacity(*node.style.background_color, node.style.opacity);
         if (node.style.border_radius > 0) {
             float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
@@ -608,7 +608,7 @@ void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
 
     // Border
     if (node.style.border_width > 0) {
-        TraceLog(LOG_INFO, "[UIDocument::render_panel] border");
+        TraceLog(LOG_DEBUG, "[UIDocument::render_panel] border");
         rf::Color borderColor = apply_opacity(node.style.border_color, node.style.opacity);
         if (node.style.border_radius > 0) {
             float roundness = static_cast<float>(node.style.border_radius) / std::min(r.w, r.h);
@@ -619,10 +619,10 @@ void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
     }
 
     // Render children
-    TraceLog(LOG_INFO, "[UIDocument::render_panel] children=%d", static_cast<int>(node.children.size()));
+    TraceLog(LOG_DEBUG, "[UIDocument::render_panel] children=%d", static_cast<int>(node.children.size()));
     int ci = 0;
     for (const auto& child : node.children) {
-        TraceLog(LOG_INFO, "[UIDocument::render_panel] child[%d] type=%s", ci, child.type.c_str());
+        TraceLog(LOG_DEBUG, "[UIDocument::render_panel] child[%d] type=%s", ci, child.type.c_str());
         render_node(child, vm);
         ci++;
     }
@@ -630,7 +630,7 @@ void UIDocument::render_panel(const Node& node, const UIViewModel& vm) {
 
 void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
     (void)vm;
-    TraceLog(LOG_INFO, "[UIDocument::render_text] '%s'", node.text.c_str());
+    TraceLog(LOG_DEBUG, "[UIDocument::render_text] '%s'", node.text.c_str());
 
     if (node.text.empty()) {
         return;
@@ -675,7 +675,7 @@ void UIDocument::render_text(const Node& node, const UIViewModel& vm) {
 
 void UIDocument::render_button(const Node& node, const UIViewModel& vm) {
     (void)vm;
-    TraceLog(LOG_INFO, "[UIDocument::render_button] '%s'", node.text.c_str());
+    TraceLog(LOG_DEBUG, "[UIDocument::render_button] '%s'", node.text.c_str());
 
     const rf::Rect& r = node.computed_rect;
 

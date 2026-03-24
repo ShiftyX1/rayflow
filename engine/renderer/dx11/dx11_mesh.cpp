@@ -1,5 +1,6 @@
 #include "dx11_mesh.hpp"
 #include "dx11_render_device.hpp"
+#include "dx11_shader.hpp"
 #include "engine/core/logging.hpp"
 
 namespace rf {
@@ -119,6 +120,9 @@ void DX11Mesh::uploadPositionOnly(const float* positions, int vertexCount) {
 void DX11Mesh::draw(PrimitiveType mode) const {
     auto* ctx = device_->context();
     if (!ctx || !valid_) return;
+
+    // Flush any dirty constant buffers so uniforms set after bind() reach the GPU
+    device_->flushActiveShaderConstants();
 
     // Set primitive topology
     D3D11_PRIMITIVE_TOPOLOGY topology;

@@ -377,7 +377,9 @@ void ClientEngine::main_loop(IGameClient& game) {
             if (renderDevice_) {
                 renderDevice_->onResize(win.width(), win.height());
             }
-            win.updateViewport();
+            if (win.backend() == rf::Backend::OpenGL) {
+                win.updateViewport();
+            }
         }
 
         if (frameNum < 3) log(LogLevel::Info, "[main_loop] frame " + std::to_string(frameNum) + " end");

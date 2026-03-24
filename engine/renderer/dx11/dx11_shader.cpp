@@ -164,7 +164,7 @@ void DX11Shader::reflectUniforms(ID3DBlob* vsBlob, ID3DBlob* psBlob) {
                 info.offset   = static_cast<int>(varDesc.StartOffset);
                 info.size     = static_cast<int>(varDesc.Size);
                 info.isVertex = isVertex;
-                uniforms_[varDesc.Name] = info;
+                uniforms_.emplace(varDesc.Name, info);
             }
 
             // Create the D3D constant buffer
@@ -201,6 +201,8 @@ void DX11Shader::bind() const {
         ID3D11Buffer* buf = psCBuffer_.Get();
         ctx->PSSetConstantBuffers(0, 1, &buf);
     }
+
+    device_->setActiveShader(this);
 }
 
 void DX11Shader::unbind() const {
@@ -208,6 +210,7 @@ void DX11Shader::unbind() const {
     if (!ctx) return;
     ctx->VSSetShader(nullptr, nullptr, 0);
     ctx->PSSetShader(nullptr, nullptr, 0);
+    device_->setActiveShader(nullptr);
 }
 
 bool DX11Shader::isValid() const { return valid_; }
@@ -262,44 +265,43 @@ int DX11Shader::getUniformLocation(const std::string& name) const {
     return it->second.offset;
 }
 
+static void writeUniformAll(const std::unordered_multimap<std::string, DX11Shader::UniformInfo>& uniforms,
+                             const std::string& name,
+                             std::vector<uint8_t>& vsCB, bool& vsDirty,
+                             std::vector<uint8_t>& psCB, bool& psDirty,
+                             const void* data, size_t dataSize) {
+    auto range = uniforms.equal_range(name);
+    for (auto it = range.first; it != range.second; ++it) {
+        writeUniform(&it->second, vsCB, vsDirty, psCB, psDirty, data, dataSize);
+    }
+}
+
 void DX11Shader::setInt(const std::string& name, int value) const {
-    auto it = uniforms_.find(name);
-    if (it == uniforms_.end()) return;
-    writeUniform(&it->second, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_, &value, sizeof(value));
+    writeUniformAll(uniforms_, name, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_, &value, sizeof(value));
 }
 
 void DX11Shader::setFloat(const std::string& name, float value) const {
-    auto it = uniforms_.find(name);
-    if (it == uniforms_.end()) return;
-    writeUniform(&it->second, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_, &value, sizeof(value));
+    writeUniformAll(uniforms_, name, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_, &value, sizeof(value));
 }
 
 void DX11Shader::setVec2(const std::string& name, const Vec2& v) const {
-    auto it = uniforms_.find(name);
-    if (it == uniforms_.end()) return;
-    writeUniform(&it->second, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
-                 glm::value_ptr(v), sizeof(Vec2));
+    writeUniformAll(uniforms_, name, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
+                    glm::value_ptr(v), sizeof(Vec2));
 }
 
 void DX11Shader::setVec3(const std::string& name, const Vec3& v) const {
-    auto it = uniforms_.find(name);
-    if (it == uniforms_.end()) return;
-    writeUniform(&it->second, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
-                 glm::value_ptr(v), sizeof(Vec3));
+    writeUniformAll(uniforms_, name, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
+                    glm::value_ptr(v), sizeof(Vec3));
 }
 
 void DX11Shader::setVec4(const std::string& name, const Vec4& v) const {
-    auto it = uniforms_.find(name);
-    if (it == uniforms_.end()) return;
-    writeUniform(&it->second, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
-                 glm::value_ptr(v), sizeof(Vec4));
+    writeUniformAll(uniforms_, name, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
+                    glm::value_ptr(v), sizeof(Vec4));
 }
 
 void DX11Shader::setMat4(const std::string& name, const Mat4& m) const {
-    auto it = uniforms_.find(name);
-    if (it == uniforms_.end()) return;
-    writeUniform(&it->second, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
-                 glm::value_ptr(m), sizeof(Mat4));
+    writeUniformAll(uniforms_, name, vsCBData_, vsCBDirty_, psCBData_, psCBDirty_,
+                    glm::value_ptr(m), sizeof(Mat4));
 }
 
 void DX11Shader::setInt(int loc, int value) const {

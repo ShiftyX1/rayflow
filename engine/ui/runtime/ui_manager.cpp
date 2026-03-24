@@ -209,12 +209,12 @@ void UIManager::queue_command_if_changed(float prev, float next) {
 
 void UIManager::render(const UIViewModel& vm) {
     auto& batch = rf::Batch2D::instance();
-    TraceLog(LOG_INFO, "[UIManager::render] begin batch");
+    TraceLog(LOG_DEBUG, "[UIManager::render] begin batch");
     batch.begin(vm.screen_width, vm.screen_height);
 
 #ifdef DEBUG_UI
     // Begin ImGui frame (before any ImGui draw calls)
-    TraceLog(LOG_INFO, "[UIManager::render] debug::new_frame");
+    TraceLog(LOG_DEBUG, "[UIManager::render] debug::new_frame");
     debug::new_frame();
 
     if (debug_mode_ == DebugMode::Interactive) {
@@ -248,17 +248,17 @@ void UIManager::render(const UIViewModel& vm) {
     }
 #endif
 
-    TraceLog(LOG_INFO, "[UIManager::render] menu rendering (screen=%d)", static_cast<int>(vm.game_screen));
+    TraceLog(LOG_DEBUG, "[UIManager::render] menu rendering (screen=%d)", static_cast<int>(vm.game_screen));
     if (vm.game_screen == GameScreen::MainMenu) {
         // Dark background fill
-        TraceLog(LOG_INFO, "[UIManager::render] drawRect bg");
+        TraceLog(LOG_DEBUG, "[UIManager::render] drawRect bg");
         batch.drawRect(0, 0, static_cast<float>(vm.screen_width), static_cast<float>(vm.screen_height), rf::Color{1, 4, 9, 255});
-        TraceLog(LOG_INFO, "[UIManager::render] drawRect bg done");
+        TraceLog(LOG_DEBUG, "[UIManager::render] drawRect bg done");
 
         if (main_menu_loaded_) {
-            TraceLog(LOG_INFO, "[UIManager::render] main_menu_.render");
+            TraceLog(LOG_DEBUG, "[UIManager::render] main_menu_.render");
             main_menu_.render(vm);
-            TraceLog(LOG_INFO, "[UIManager::render] main_menu_.render done");
+            TraceLog(LOG_DEBUG, "[UIManager::render] main_menu_.render done");
         }
     } else if (vm.game_screen == GameScreen::ConnectMenu) {
         // Dark background fill
@@ -313,15 +313,15 @@ void UIManager::render(const UIViewModel& vm) {
         }
     }
 
-    TraceLog(LOG_INFO, "[UIManager::render] batch.end");
+    TraceLog(LOG_DEBUG, "[UIManager::render] batch.end");
     batch.end();
 
 #ifdef DEBUG_UI
     // Render ImGui draw data (after all UI, before buffer swap)
-    TraceLog(LOG_INFO, "[UIManager::render] render_draw_data");
+    TraceLog(LOG_DEBUG, "[UIManager::render] render_draw_data");
     debug::render_draw_data();
 #endif
-    TraceLog(LOG_INFO, "[UIManager::render] done");
+    TraceLog(LOG_DEBUG, "[UIManager::render] done");
 }
 
 } // namespace ui

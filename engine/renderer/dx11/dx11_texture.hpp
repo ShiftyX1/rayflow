@@ -52,7 +52,7 @@ private:
     int height_ = 0;
     int channels_ = 0;
     bool isCubemap_ = false;
-    TextureFilter filter_ = TextureFilter::Linear;
+    TextureFilter filter_ = TextureFilter::NearestMipmap;
 
     bool retainPixels_ = false;
     std::vector<uint8_t> pixelData_;

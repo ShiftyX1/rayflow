@@ -89,6 +89,7 @@ void Skybox::draw(const rf::Camera& camera) {
     // Draw behind everything
     device_->setDepthFunc(rf::DepthFunc::LessEqual);
     device_->setDepthWrite(false);
+    device_->setCullMode(rf::CullMode::None);  // Camera is inside the cube
 
     shader_->bind();
     shader_->setMat4("mvp", mvp);
@@ -99,6 +100,7 @@ void Skybox::draw(const rf::Camera& camera) {
 
     shader_->unbind();
 
+    device_->setCullMode(rf::CullMode::None);
     device_->setDepthWrite(true);
     device_->setDepthFunc(rf::DepthFunc::Less);
 }
@@ -141,16 +143,16 @@ void Skybox::ensure_cubemap_loaded_() {
             TraceLog(LOG_INFO, "[Skybox] Cubemap loaded from panorama: %s", pano);
             return;
         }
+        TraceLog(LOG_WARNING, "[Skybox] Panorama load failed: %s", pano);
     }
 
-    // Try loading from 6-face cubemap
+    // Fallback: try loading as a single panorama-style image via the cubemap path
     const char* cube = cubemap_path_for_kind_(kind_);
     if (cube) {
         cubemap_ = device_->createTexture();
-        std::string faces[6] = { cube, cube, cube, cube, cube, cube };
-        if (cubemap_->loadCubemap(faces)) {
+        if (cubemap_->loadCubemapFromPanorama(cube, 512)) {
             loaded_kind_ = kind_;
-            TraceLog(LOG_INFO, "[Skybox] Cubemap loaded from cubemap: %s", cube);
+            TraceLog(LOG_INFO, "[Skybox] Cubemap loaded from cubemap image as panorama: %s", cube);
             return;
         }
     }

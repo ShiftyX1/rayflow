@@ -56,6 +56,9 @@ private:
     void reflectUniforms(ID3DBlob* vsBlob, ID3DBlob* psBlob);
     void flushConstantBuffers() const;
 
+    friend class DX11Mesh;
+    friend class DX11RenderDevice;
+
     DX11RenderDevice* device_;
 
     ComPtr<ID3D11VertexShader>  vertexShader_;
@@ -79,7 +82,7 @@ public:
         bool  isVertex;   // true = VS cbuffer, false = PS cbuffer
     };
 private:
-    std::unordered_map<std::string, UniformInfo> uniforms_;
+    std::unordered_multimap<std::string, UniformInfo> uniforms_;
 
     bool valid_ = false;
 };
