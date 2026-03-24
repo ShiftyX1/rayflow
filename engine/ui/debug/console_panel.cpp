@@ -106,6 +106,13 @@ static int input_callback(ImGuiInputTextCallbackData* data) {
 void draw_console(engine::console::ConsoleLogSink& sink,
                   engine::console::ConsoleLuaState& lua,
                   bool* open) {
+    // Scroll to bottom whenever the console is freshly opened
+    static bool s_wasOpen = false;
+    if (open && *open && !s_wasOpen) {
+        s_scrollToBottom = true;
+    }
+    s_wasOpen = open ? *open : false;
+
     ImGui::SetNextWindowSize(ImVec2(720, 400), ImGuiCond_FirstUseEver);
 
     constexpr ImGuiWindowFlags flags =
