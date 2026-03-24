@@ -21,11 +21,12 @@
 static void print_usage(const char* prog) {
     std::printf("Usage: %s [options]\n", prog);
     std::printf("Options:\n");
-    std::printf("  --connect host:port   Connect to server (without this flag, starts singleplayer)\n");
+    std::printf("  --connect host:port   Connect to server (without this flag, starts game from main menu)\n");
     std::printf("  --name NAME           Player name (default: Player)\n");
-    std::printf("  --width W             Window width (default: 1280)\n");
-    std::printf("  --height H            Window height (default: 720)\n");
+    std::printf("  --width W             Window width (default: 1280) (DEPRECATED use config files)\n");
+    std::printf("  --height H            Window height (default: 720) (DEPRECATED use config files)\n");
     std::printf("  --help                Show this help\n");
+    std::printf("  --dx11                Use DirectX 11 backend (Windows only)\n");
 }
 
 static void print_banner() {
