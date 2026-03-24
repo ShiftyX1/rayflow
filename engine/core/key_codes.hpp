@@ -14,6 +14,7 @@ namespace input {
 // --- Keyboard keys (GLFW values) ---
 constexpr int KEY_SPACE         = 32;
 constexpr int KEY_APOSTROPHE    = 39;
+constexpr int KEY_GRAVE_ACCENT  = 96;  // ` / ~ (console toggle)
 constexpr int KEY_COMMA         = 44;
 constexpr int KEY_MINUS         = 45;
 constexpr int KEY_PERIOD        = 46;

@@ -10,6 +10,8 @@
 #include "engine/renderer/skybox.hpp"
 #include "engine/renderer/gpu/render_device.hpp"
 #include "engine/ui/runtime/ui_manager.hpp"
+#include "engine/core/console/console_log_sink.hpp"
+#include "engine/core/console/console_lua_state.hpp"
 
 #include "engine/client/core/window.hpp"
 #include "engine/client/core/input.hpp"
@@ -293,13 +295,28 @@ void ClientEngine::init_subsystems() {
     } else {
         uiManager_->init();
     }
-    
+
+    // Initialize developer console
+    consoleSink_ = std::make_unique<engine::console::ConsoleLogSink>();
+    consoleLua_  = std::make_unique<engine::console::ConsoleLuaState>();
+    if (consoleLua_->init(*consoleSink_)) {
+        core::Logger::instance().set_console_sink(consoleSink_.get());
+        uiManager_->set_console(consoleSink_.get(), consoleLua_.get());
+    } else {
+        log(LogLevel::Warning, "Developer console Lua state failed to initialize");
+    }
+
     log(LogLevel::Info, "Engine subsystems initialized");
 }
 
 void ClientEngine::shutdown_subsystems() {
     log(LogLevel::Info, "Shutting down engine subsystems...");
     
+    // Detach console sink from logger before destroying it
+    core::Logger::instance().set_console_sink(nullptr);
+    consoleLua_.reset();
+    consoleSink_.reset();
+
     // Shutdown UI (UIManager shuts down Dear ImGui)
     uiManager_.reset();
     

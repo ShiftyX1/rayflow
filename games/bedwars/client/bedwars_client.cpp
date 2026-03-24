@@ -137,6 +137,7 @@ void BedWarsClient::on_update(float dt) {
     uiInput.toggle_pause = rfInput.isKeyPressed(KEY_ESCAPE);
     uiInput.toggle_debug_ui = rfInput.isKeyPressed(KEY_F1);
     uiInput.toggle_debug_overlay = rfInput.isKeyPressed(KEY_F2);
+    uiInput.toggle_console = rfInput.isKeyPressed(KEY_GRAVE_ACCENT);
     
     ui::UIFrameOutput uiOutput = engine_->ui_manager().update(uiInput, uiViewModel_);
     uiCapturesInput_ = uiOutput.capture.captured();

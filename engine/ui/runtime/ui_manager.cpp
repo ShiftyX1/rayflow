@@ -9,6 +9,9 @@
 
 #ifdef DEBUG_UI
 #include "../debug/debug_ui.hpp"
+#include "../debug/console_panel.hpp"
+#include "engine/core/console/console_log_sink.hpp"
+#include "engine/core/console/console_lua_state.hpp"
 #endif
 
 namespace ui {
@@ -31,6 +34,8 @@ void UIManager::init(void* dx11Device, void* dx11Context) {
     debug::init(rf::Window::instance().handle(), rf::Window::instance().backend(),
                 dx11Device, dx11Context);
 #endif
+
+    // (console pointers set later via set_console())
 
     // Load main menu UI
     main_menu_.set_on_click([this](const std::string& action) {
@@ -56,6 +61,12 @@ void UIManager::init(void* dx11Device, void* dx11Context) {
     // Load HUD
     hud_loaded_ = hud_.load_from_files("ui/hud.xml", "ui/hud.css");
     TraceLog(LOG_INFO, "[ui] HUD loaded: %s", hud_loaded_ ? "true" : "false");
+}
+
+void UIManager::set_console(engine::console::ConsoleLogSink* sink,
+                            engine::console::ConsoleLuaState* lua) {
+    console_sink_ = sink;
+    console_lua_  = lua;
 }
 
 void UIManager::handle_ui_click(const std::string& action) {
@@ -109,9 +120,16 @@ UIFrameOutput UIManager::update(const UIFrameInput& in, const UIViewModel& vm) {
     if (in.toggle_debug_overlay) {
         debug_mode_ = (debug_mode_ == DebugMode::Overlay) ? DebugMode::Off : DebugMode::Overlay;
     }
+    if (in.toggle_console) {
+        console_open_ = !console_open_;
+    }
 
 #ifdef DEBUG_UI
     if (debug_mode_ == DebugMode::Interactive) {
+        out.capture.wants_mouse = true;
+        out.capture.wants_keyboard = true;
+    }
+    if (console_open_) {
         out.capture.wants_mouse = true;
         out.capture.wants_keyboard = true;
     }
@@ -231,6 +249,12 @@ void UIManager::render(const UIViewModel& vm) {
         const float prev_sens = camera_sensitivity_;
         camera_sensitivity_ = result.state.camera_sensitivity;
         queue_command_if_changed(prev_sens, camera_sensitivity_);
+
+        // Developer console (overlays debug UI)
+        if (console_open_ && console_sink_ && console_lua_) {
+            debug::draw_console(*console_sink_, *console_lua_, &console_open_);
+        }
+
         batch.end();
         debug::render_draw_data();
         return;
@@ -242,6 +266,12 @@ void UIManager::render(const UIViewModel& vm) {
         state.show_net_info = true;
         state.camera_sensitivity = camera_sensitivity_;
         (void)debug::draw_overlay(state, vm);
+
+        // Developer console (overlays debug overlay)
+        if (console_open_ && console_sink_ && console_lua_) {
+            debug::draw_console(*console_sink_, *console_lua_, &console_open_);
+        }
+
         batch.end();
         debug::render_draw_data();
         return;
@@ -317,6 +347,11 @@ void UIManager::render(const UIViewModel& vm) {
     batch.end();
 
 #ifdef DEBUG_UI
+    // Developer console (overlays normal UI)
+    if (console_open_ && console_sink_ && console_lua_) {
+        debug::draw_console(*console_sink_, *console_lua_, &console_open_);
+    }
+
     // Render ImGui draw data (after all UI, before buffer swap)
     TraceLog(LOG_DEBUG, "[UIManager::render] render_draw_data");
     debug::render_draw_data();

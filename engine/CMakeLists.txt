@@ -104,6 +104,12 @@ add_library(engine_core SHARED
     
     # Explicit EnTT type_index instantiations for cross-DLL ECS
     ecs/ecs_type_registry.cpp
+
+    # Developer console (log sink + Lua state)
+    core/console/console_log_sink.hpp
+    core/console/console_log_sink.cpp
+    core/console/console_lua_state.hpp
+    core/console/console_lua_state.cpp
 )
 
 target_include_directories(engine_core PUBLIC 
@@ -235,6 +241,7 @@ endif()
 # Debug UI (Dear ImGui panels) - compiled in engine_client alongside GLFW/glad
 target_sources(engine_client PRIVATE
     ui/debug/debug_ui.cpp
+    ui/debug/console_panel.cpp
 )
 
 # Enable DEBUG_UI in Debug builds

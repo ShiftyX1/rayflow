@@ -29,6 +29,11 @@ namespace ui {
     class UIManager;
 }
 
+namespace engine::console {
+    class ConsoleLogSink;
+    class ConsoleLuaState;
+}
+
 namespace renderer {
     class Skybox;
 }
@@ -118,6 +123,10 @@ private:
     
     // UI subsystem (owned by engine)
     std::unique_ptr<ui::UIManager> uiManager_;
+
+    // Developer console subsystems
+    std::unique_ptr<engine::console::ConsoleLogSink> consoleSink_;
+    std::unique_ptr<engine::console::ConsoleLuaState> consoleLua_;
 
     // Render device (owned by engine)
     std::unique_ptr<rf::RenderDevice> renderDevice_;

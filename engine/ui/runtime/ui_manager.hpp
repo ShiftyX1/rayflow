@@ -6,6 +6,11 @@
 
 #include "xmlui/ui_document.hpp"
 
+namespace engine::console {
+class ConsoleLogSink;
+class ConsoleLuaState;
+}
+
 namespace ui {
 
 class RAYFLOW_UI_API UIManager {
@@ -14,6 +19,10 @@ public:
     ~UIManager();
 
     void init(void* dx11Device = nullptr, void* dx11Context = nullptr);
+
+    /// Attach the developer console subsystems.  Must be called after init().
+    void set_console(engine::console::ConsoleLogSink* sink,
+                     engine::console::ConsoleLuaState* lua);
 
     // Update UI state for the frame (input capture + queued commands).
     UIFrameOutput update(const UIFrameInput& in, const UIViewModel& vm);
@@ -62,6 +71,11 @@ private:
 
     // Cached view model (for layout)
     UIViewModel cached_vm_{};
+
+    // Developer console
+    bool console_open_{false};
+    engine::console::ConsoleLogSink*  console_sink_{nullptr};
+    engine::console::ConsoleLuaState* console_lua_{nullptr};
 };
 
 } // namespace ui

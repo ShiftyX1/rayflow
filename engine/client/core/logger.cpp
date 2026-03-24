@@ -2,8 +2,10 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 
 #include "engine/core/logging.hpp"
+#include "engine/core/console/console_log_sink.hpp"
 
 namespace core {
 
@@ -28,11 +30,15 @@ void Logger::init(const LoggingConfig& cfg) {
 
     if (!cfg.file.empty()) {
         file_ = std::fopen(cfg.file.c_str(), "a");
-        if (file_) {
-            SetTraceLogCallback(&Logger::trace_callback);
-            callback_installed_ = true;
-        }
     }
+
+    // Always install the callback so the console sink is reachable
+    SetTraceLogCallback(&Logger::trace_callback);
+    callback_installed_ = true;
+}
+
+void Logger::set_console_sink(engine::console::ConsoleLogSink* sink) {
+    console_sink_ = sink;
 }
 
 void Logger::shutdown() {
@@ -72,26 +78,25 @@ void Logger::trace_callback(int logLevel, const char* text, va_list args) {
         return;
     }
 
+    // Format message once into a buffer for the console sink
+    char buf[2048];
+    va_list args_copy;
+    va_copy(args_copy, args);
+    std::vsnprintf(buf, sizeof(buf), text, args_copy);
+    va_end(args_copy);
+
+    // Push to the in-game console sink (if attached)
+    if (g_logger->console_sink_) {
+        g_logger->console_sink_->push(logLevel, buf);
+    }
+
     FILE* sink = static_cast<FILE*>(g_logger->file_);
     if (sink) {
-        va_list args_copy;
-        va_copy(args_copy, args);
-
-        std::fprintf(sink, "[%.3f][%s] ", t, level_str);
-        std::vfprintf(sink, text, args);
-        std::fputc('\n', sink);
+        std::fprintf(sink, "[%.3f][%s] %s\n", t, level_str, buf);
         std::fflush(sink);
-
-        std::fprintf(stderr, "[%.3f][%s] ", t, level_str);
-        std::vfprintf(stderr, text, args_copy);
-        std::fputc('\n', stderr);
-
-        va_end(args_copy);
-    } else {
-        std::fprintf(stderr, "[%.3f][%s] ", t, level_str);
-        std::vfprintf(stderr, text, args);
-        std::fputc('\n', stderr);
     }
+
+    std::fprintf(stderr, "[%.3f][%s] %s\n", t, level_str, buf);
 }
 
 } // namespace core
